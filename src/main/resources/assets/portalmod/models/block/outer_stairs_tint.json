@@ -1,5 +1,5 @@
 {
-    "parent": "block/outer_stairs",
+    "parent": "minecraft:block/outer_stairs",
     "elements": [
         {
             "from": [ 0, 0, 0 ], "to": [ 16, 8, 16 ],

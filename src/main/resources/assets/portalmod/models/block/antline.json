@@ -1,7 +1,18 @@
 {
-  "parent": "block/block",
-  "loader": "portalmod:antline",
+  "parent": "minecraft:block/block",
   "textures": {
-    "particle": "portalmod:antline/inactive_dot"
-  }
+    "particle": "portalmod:antline/inactive_dot",
+    "line": "portalmod:antline/inactive_dot"
+  },
+  "elements": [
+    {
+      "from": [0, 0, 15.9],
+      "to": [16, 16, 15.9],
+      "faces": {
+        "north": { "uv": [0, 0, 16, 16], "texture": "#line" },
+        "south": { "uv": [16, 0, 0, 16], "texture": "#line" }
+      },
+      "shade": false
+    }
+  ]
 }

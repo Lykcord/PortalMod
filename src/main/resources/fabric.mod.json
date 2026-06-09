@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "id": "${mod_id}",
+  "version": "${version}",
+  "name": "${mod_name}",
+  "description": "${mod_description}",
+  "authors": [
+    "${mod_authors}"
+  ],
+  "contact": {
+    "homepage": "https://portalmod.net/",
+    "sources": "https://github.com/snowy-shack/PortalMod",
+    "issues": "https://github.com/snowy-shack/PortalMod/issues"
+  },
+  "license": "${mod_license}",
+  "icon": "logo.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "net.portalmod.fabric.PortalModFabric"
+    ],
+    "client": [
+      "net.portalmod.fabric.client.PortalModFabricClient"
+    ],
+    "fabric-datagen": [
+      "net.portalmod.fabric.datagen.PortalModDataGenerator"
+    ]
+  },
+  "mixins": [
+    "portalmod.fabric.mixins.json"
+  ],
+  "accessWidener": "portalmod.accesswidener",
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "minecraft": "${minecraft_version}",
+    "java": ">=25",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "sodium": "*",
+    "indium": "*",
+    "iris": "*"
+  }
+}

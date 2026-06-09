@@ -24,9 +24,21 @@
     "portalmod:fractured_blackplate_platform",
     "portalmod:vintage_blackplate_platform",
 
-    "portalmod:chamber_lights",
-    "portalmod:chamber_door",
-    "portalmod:faithplate",
-    "portalmod:cube_dropper"
+    {
+      "id": "portalmod:chamber_lights",
+      "required": false
+    },
+    {
+      "id": "portalmod:chamber_door",
+      "required": false
+    },
+    {
+      "id": "portalmod:faithplate",
+      "required": false
+    },
+    {
+      "id": "portalmod:cube_dropper",
+      "required": false
+    }
   ]
 }

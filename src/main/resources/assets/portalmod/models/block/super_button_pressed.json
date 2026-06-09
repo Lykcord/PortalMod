@@ -1,5 +1,4 @@
 {
-    "loader": "portalmod:super_button",
     "textures": { "particle": "#base" },
     "elements": [
         {

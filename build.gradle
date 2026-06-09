@@ -1,168 +1,131 @@
-buildscript {
-    repositories {
-        maven { url = "https://repo.spongepowered.org/repository/maven-public/" } // mixin
-        mavenCentral()
-    }
-    dependencies {
-        classpath 'org.spongepowered:mixingradle:0.7-SNAPSHOT' // mixin
-    }
-}
-
 plugins {
-    id 'eclipse'
-    id 'idea'
-    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
-    id "com.modrinth.minotaur" version "2.+"
-    id "io.github.themrmilchmann.curseforge-publish" version "0.6.1"
+    id 'net.fabricmc.fabric-loom' version "${loom_version}"
+    id 'maven-publish'
+    id 'com.modrinth.minotaur' version '2.+'
 }
-
-apply plugin: 'org.spongepowered.mixin'
 
 version = mod_version
-group = 'net.portalmod'
+group = mod_group_id
 
 base {
-    archivesName = 'portalmod' //+ '-test'
+    archivesName = mod_id
 }
 
-java {
-    toolchain.languageVersion = JavaLanguageVersion.of(8)
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.fabricmc.net/' }
 }
 
-//println('Java: ' + System.getProperty('java.version') + ' JVM: ' + System.getProperty('java.vm.version') + '(' + System.getProperty('java.vendor') + ') Arch: ' + System.getProperty('os.arch'))
-
-minecraft {
-    mappings channel: mapping_channel, version: mapping_version
-    copyIdeResources = true
-
-    accessTransformer = file('src/main/resources/META-INF/accesstransformer.cfg')
+loom {
+    accessWidenerPath = file('src/main/resources/portalmod.accesswidener')
 
     runs {
-        configureEach {
-            workingDirectory project.file('run')
-            property 'forge.logging.markers', 'REGISTRIES'
-            property 'forge.logging.console.level', 'debug'
-
-            mods {
-                portalmod {
-                    source sourceSets.main
-                }
-            }
-        }
-
         client {
-            taskName("runClient")
-            client true
+            client()
+            setConfigName('Fabric Client')
+            ideConfigGenerated(true)
+            runDir('run')
         }
 
         server {
-            args '--nogui'
+            server()
+            setConfigName('Fabric Server')
+            ideConfigGenerated(true)
+            runDir('run-server')
         }
 
-        data {
-            args '--mod', archivesBaseName, '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
+        datagen {
+            client()
+            setConfigName('Fabric Datagen')
+            ideConfigGenerated(true)
+            runDir('run-datagen')
+            vmArg("-Dfabric-api.datagen")
+            vmArg("-Dfabric-api.datagen.output-dir=${file('build/generated/fabric-datagen')}")
+            vmArg("-Dfabric-api.datagen.modid=${mod_id}")
         }
     }
 }
 
-mixin {
-    add sourceSets.main, "portalmod.refmap.json"
-
-    config "portalmod.mixins.json"
-}
-
-sourceSets.main.resources { srcDir 'src/generated/resources' }
-
-repositories {
-//    maven { url = 'https://repo.spongepowered.org/maven' } // mixin
+sourceSets {
+    main {
+        java {
+            setSrcDirs(['src/fabric/java'])
+        }
+        resources {
+            setSrcDirs(['src/main/resources', 'src/generated/resources'])
+            exclude 'META-INF/mods.toml'
+            exclude 'META-INF/accesstransformer.cfg'
+            exclude 'portalmod.mixins.json'
+        }
+    }
 }
 
 dependencies {
-    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
-    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    implementation "net.fabricmc:fabric-loader:${loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
 }
 
-// This block of code expands all declared replace properties in the specified resource targets.
-// A missing property will result in an error. Properties are expanded using ${} Groovy notation.
-// When "copyIdeResources" is enabled, this will also run before the game launches in IDE environments.
-// See https://docs.gradle.org/current/dsl/org.gradle.language.jvm.tasks.ProcessResources.html
-tasks.named('processResources', ProcessResources).configure {
-    var replaceProperties = [
-            minecraft_version: minecraft_version, minecraft_version_range: minecraft_version_range,
-            forge_version: forge_version, forge_version_range: forge_version_range,
-            loader_version_range: loader_version_range,
-            mod_id: mod_id, mod_name: mod_name, mod_license: mod_license, mod_version: mod_version,
-            mod_authors: mod_authors, mod_description: mod_description,
-    ]
+processResources {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
-    inputs.properties replaceProperties
+    inputs.property 'version', project.version
+    inputs.property 'minecraft_version', minecraft_version
+    inputs.property 'loader_version', loader_version
+    inputs.property 'mod_id', mod_id
+    inputs.property 'mod_name', mod_name
+    inputs.property 'mod_license', mod_license
+    inputs.property 'mod_authors', mod_authors
+    inputs.property 'mod_description', mod_description
 
-    filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
-        expand replaceProperties + [project: project]
-    }}
-
-// Example for how to get properties into the manifest for reading at runtime.
-tasks.named('jar', Jar).configure {
-    manifest {
-        attributes([
-                "Specification-Title": mod_id,
-                "Specification-Vendor": mod_authors,
-                "Specification-Version": "1", // We are version 1 of ourselves
-                "Implementation-Title": project.name,
-                "Implementation-Version": project.jar.archiveVersion,
-                "Implementation-Vendor": mod_authors,
-                "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
-        ])
+    filesMatching('fabric.mod.json') {
+        expand(
+                version: project.version,
+                minecraft_version: minecraft_version,
+                loader_version: loader_version,
+                mod_id: mod_id,
+                mod_name: mod_name,
+                mod_license: mod_license,
+                mod_authors: mod_authors,
+                mod_description: mod_description
+        )
     }
+}
 
-    // This is the preferred method to reobfuscate your jar file
-    finalizedBy 'reobfJar'
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
+    withSourcesJar()
 }
 
 tasks.withType(JavaCompile).configureEach {
-    options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
+    options.encoding = 'UTF-8'
+    options.release = 25
 }
 
-modrinth {
-    token = System.getenv("MODRINTH_TOKEN") // Remember to have the MODRINTH_TOKEN environment variable set or else this will fail - just make sure it stays private!
-    projectId = "portalmod" // This can be the project ID or the slug. Either will work!
-    versionNumber = "${mod_version}-forge-1.16.5" // You don't need to set this manually. Will fail if Modrinth has this version already
-    versionType = "release" // This is the default -- can also be `beta` or `alpha`
-    uploadFile = jar // With Loom, this MUST be set to `remapJar` instead of `jar`!
-    gameVersions = ["1.16.5"] // Must be an array, even with only one version
-    changelog = rootProject.file("CHANGELOG_LATEST.md").text
-}
-
-curseforge {
-    apiToken = System.getenv("CURSEFORGE_TOKEN")
-
-    publications {
-        register("curseForge") {
-            projectId = "517296"
-
-            artifacts.register("main") {
-                displayName = "${mod_version}-forge-1.16.5"
-
-                changelog {
-                    format = ChangelogFormat.MARKDOWN
-                    from(file("CHANGELOG_LATEST.md"))
-                }
-
-                from(tasks.named("jar"))
-            }
-        }
+jar {
+    from('LICENSE.md') {
+        rename { "${it}_${mod_id}" }
     }
 }
 
-//publishing {
-//    publications {
-//        mavenJava(MavenPublication) {
-//            artifact jar
-//        }
-//    }
-//    repositories {
-//        maven {
-//            url "file:///${project.projectDir}/mcmodsrepo"
-//        }
-//    }
-//}
+modrinth {
+    token = System.getenv('MODRINTH_TOKEN')
+    projectId = 'portalmod'
+    versionNumber = "${mod_version}-fabric-${minecraft_version}"
+    versionType = 'alpha'
+    uploadFile = tasks.named('jar')
+    gameVersions = [minecraft_version]
+    loaders = ['fabric']
+    changelog = rootProject.file('CHANGELOG_LATEST.md').exists()
+            ? rootProject.file('CHANGELOG_LATEST.md').text
+            : 'Fabric modernization build.'
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            artifactId = mod_id
+            from components.java
+        }
+    }
+}

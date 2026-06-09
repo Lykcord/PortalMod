@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "package": "net.portalmod.fabric.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": [
+    "BlockStateCollisionMixin"
+  ],
+  "client": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
