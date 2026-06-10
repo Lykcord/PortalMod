@@ -1,6 +1,9 @@
 {
   "model": {
-    "type": "minecraft:model",
-    "model": "portalmod:item/portalgun"
+    "type": "minecraft:special",
+    "base": "portalmod:item/portalgun_base",
+    "model": {
+      "type": "portalmod:portalgun"
+    }
   }
 }

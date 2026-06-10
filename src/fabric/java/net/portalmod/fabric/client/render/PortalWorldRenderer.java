@@ -48,7 +48,10 @@ import java.util.Map;
  * to portal views exactly as they do to the main view.</p>
  */
 public final class PortalWorldRenderer {
-    public static final int MAX_VIEWS = 4;
+    public static final int MAX_VIEWS = 2;
+    /** View framebuffers render at this fraction of the window size; portals cover a small
+     * part of the screen, so half resolution is rarely noticeable but quarters the fill cost. */
+    private static final int RESOLUTION_DIVISOR = 2;
     private static final double SEARCH_DISTANCE = 96.0D;
     private static final double PORTAL_FRONT_EPSILON = 0.02D;
     private static final int FOG_UBO_USAGE = 136;
@@ -79,8 +82,12 @@ public final class PortalWorldRenderer {
     private static final boolean[] slotRendered = new boolean[MAX_VIEWS * 2];
     private static final Map<Integer, Integer> viewIndexBySourceId = new HashMap<>();
     private static final List<ProjectionMatrixBuffer> projectionBuffers = new ArrayList<>();
+    private static final List<ProjectionMatrixBuffer> plainProjectionBuffers = new ArrayList<>();
     private static final List<GpuBuffer> fogBuffers = new ArrayList<>();
     private static final PortalCamera portalCamera = new PortalCamera();
+    /** Oblique and unmodified projection slices of the view pass currently being rendered. */
+    private static GpuBufferSlice currentObliqueProjection;
+    private static GpuBufferSlice currentPlainProjection;
 
     private PortalWorldRenderer() {
     }
@@ -464,22 +471,53 @@ public final class PortalWorldRenderer {
             return;
         }
 
-        // Cull and extract the world as seen by the portal camera.
-        minecraft.levelRenderer.update(portalCamera);
+        // Smart (BFS occlusion) culling starts from the camera's chunk section; when the
+        // portal camera sits inside solid terrain behind the destination wall the BFS
+        // escapes nothing and the view collapses to the few sections at the opening.
+        // Disable it only then - frustum-only culling for every pass is too expensive.
+        boolean previousSmartCull = minecraft.smartCull;
+        boolean cameraInSolid = minecraft.level
+                .getBlockState(net.minecraft.core.BlockPos.containing(position))
+                .isSolidRender();
+        minecraft.smartCull = previousSmartCull && !cameraInSolid;
+        try {
+            minecraft.levelRenderer.update(portalCamera);
+        } finally {
+            minecraft.smartCull = previousSmartCull;
+        }
         LevelRenderState levelRenderState = gameRenderer.getGameRenderState().levelRenderState;
         CameraRenderState cameraState = levelRenderState.cameraRenderState;
         float cameraEntityPartialTicks = mainCamera.getCameraEntityPartialTicks(deltaTracker);
         float worldPartialTicks = deltaTracker.getGameTimeDeltaPartialTick(false);
         portalCamera.extractRenderState(cameraState, cameraEntityPartialTicks);
         FogRenderer fogRenderer = gameRenderer.fogRenderer;
+        // Fog (color and ranges) is sampled just in front of the destination portal, not at
+        // the teleported camera, which frequently sits inside solid terrain - sampling there
+        // yields cave-black fog that blacks out the sky and the clear color.
+        Vec3 fogSamplePos = view.destination.position()
+                .add(view.destination.direction().getUnitVec3().scale(0.5D));
+        portalCamera.overridePosition(fogSamplePos);
         cameraState.fogType = portalCamera.getFluidInCamera();
-        // Fog ends at the clamped cull distance so the missing far terrain is hidden behind it.
+        // Terrain fog ends at the clamped cull distance so missing far terrain hides behind
+        // it, but the sky and clouds keep their full range - the same fog buffer feeds the
+        // sky pass, and clamping skyEnd would fog the entire skybox away.
         cameraState.fogData = fogRenderer.setupFog(portalCamera, cullDistanceChunks, deltaTracker, 0.0F, minecraft.level);
+        FogData fullFog = fogRenderer.setupFog(portalCamera, minecraft.options.getEffectiveRenderDistance(), deltaTracker, 0.0F, minecraft.level);
+        cameraState.fogData.skyEnd = fullFog.skyEnd;
+        cameraState.fogData.cloudEnd = fullFog.cloudEnd;
+        portalCamera.overridePosition(position);
         minecraft.levelRenderer.extractLevel(deltaTracker, portalCamera, worldPartialTicks);
+        // The teleported camera can sit below the void-darkness threshold; the destination
+        // view it renders is the world above, so never draw the dark disc over its sky.
+        levelRenderState.skyRenderState.shouldRenderDarkDisc = false;
 
-        // Clip everything behind the destination portal's plane via an oblique near plane.
+        // Clip everything behind the destination portal's plane via an oblique near plane. The
+        // unmodified projection is kept alongside: the sky dome is camera-centered, so half of
+        // it lies behind the clip plane - the sky pass swaps back to the plain projection.
+        currentPlainProjection = plainProjectionBuffer(passIndex).getBuffer(new Matrix4f(cameraState.projectionMatrix));
         applyObliqueNearPlane(cameraState, view.destination);
-        RenderSystem.setProjectionMatrix(projectionBuffer(passIndex).getBuffer(cameraState.projectionMatrix), ProjectionType.PERSPECTIVE);
+        currentObliqueProjection = projectionBuffer(passIndex).getBuffer(cameraState.projectionMatrix);
+        RenderSystem.setProjectionMatrix(currentObliqueProjection, ProjectionType.PERSPECTIVE);
         GpuBufferSlice terrainFog = writeFogBuffer(passIndex, cameraState.fogData);
 
         RenderTarget target = acquireTarget(minecraft, slotIndex(viewIndex, depth % 2));
@@ -497,6 +535,12 @@ public final class PortalWorldRenderer {
         currentViewSourceId = view.source.getId();
         currentViewDestinationId = view.destination.getId();
         currentViewIndex = viewIndex;
+        // Vanilla pushes the camera's view matrix onto the GLOBAL model-view stack around
+        // renderLevel; the sky renderer and Sodium's terrain pipeline read that global
+        // state instead of the matrix parameter. Without this push, portal views render
+        // with a stale main-camera matrix: garbage "zoomed wall" terrain and a black sky.
+        org.joml.Matrix4fStack modelViewStack = RenderSystem.getModelViewStack();
+        modelViewStack.pushMatrix().mul(cameraState.viewRotationMatrix);
         try {
             minecraft.levelRenderer.renderLevel(
                     gameRenderer.resourcePool,
@@ -510,6 +554,7 @@ public final class PortalWorldRenderer {
                     levelRenderState.chunkSectionsToRender
             );
         } finally {
+            modelViewStack.popMatrix();
             minecraft.mainRenderTarget = previousTarget;
             currentDepth = -1;
             currentViewSourceId = -1;
@@ -527,7 +572,15 @@ public final class PortalWorldRenderer {
      */
     private static void applyObliqueNearPlane(CameraRenderState cameraState, PortalEntity destination) {
         Vec3 worldNormal = destination.direction().getUnitVec3();
-        Vec3 planePoint = destination.position();
+        // The destination wall's front faces sit ~1mm behind the portal plane. Oblique
+        // depth precision is worst right at the clip plane and falls off with the camera's
+        // distance behind it, so from afar those faces leak through and cover the view
+        // with a magnified wall texture. Lift the plane off the wall proportionally to the
+        // camera distance; the clipped sliver in front of the portal stays invisible at
+        // the distances where it grows.
+        double cameraDistance = Math.abs(cameraState.pos.subtract(destination.position()).dot(worldNormal));
+        double lift = 0.01D + 0.012D * cameraDistance;
+        Vec3 planePoint = destination.position().add(worldNormal.scale(lift));
         Vec3 cameraPos = cameraState.pos;
 
         Matrix4f view = cameraState.viewRotationMatrix;
@@ -566,8 +619,8 @@ public final class PortalWorldRenderer {
     }
 
     private static RenderTarget acquireTarget(Minecraft minecraft, int slot) {
-        int width = minecraft.getWindow().getWidth();
-        int height = minecraft.getWindow().getHeight();
+        int width = Math.max(1, minecraft.getWindow().getWidth() / RESOLUTION_DIVISOR);
+        int height = Math.max(1, minecraft.getWindow().getHeight() / RESOLUTION_DIVISOR);
         RenderTarget target = targets[slot];
         if (target == null) {
             target = new TextureTarget("PortalMod view " + slot, width, height, true);
@@ -593,6 +646,27 @@ public final class PortalWorldRenderer {
             projectionBuffers.add(new ProjectionMatrixBuffer("portalmod_view_" + projectionBuffers.size()));
         }
         return projectionBuffers.get(passIndex);
+    }
+
+    private static ProjectionMatrixBuffer plainProjectionBuffer(int passIndex) {
+        while (plainProjectionBuffers.size() <= passIndex) {
+            plainProjectionBuffers.add(new ProjectionMatrixBuffer("portalmod_view_plain_" + plainProjectionBuffers.size()));
+        }
+        return plainProjectionBuffers.get(passIndex);
+    }
+
+    /** Binds the unmodified projection for the sky pass of the current portal view. */
+    public static void bindPlainProjection() {
+        if (currentPlainProjection != null) {
+            RenderSystem.setProjectionMatrix(currentPlainProjection, ProjectionType.PERSPECTIVE);
+        }
+    }
+
+    /** Restores the oblique projection after the sky pass of the current portal view. */
+    public static void bindObliqueProjection() {
+        if (currentObliqueProjection != null) {
+            RenderSystem.setProjectionMatrix(currentObliqueProjection, ProjectionType.PERSPECTIVE);
+        }
     }
 
     private static GpuBufferSlice writeFogBuffer(int passIndex, FogData fog) {

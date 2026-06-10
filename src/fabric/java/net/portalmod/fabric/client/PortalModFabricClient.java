@@ -8,6 +8,7 @@ import net.minecraft.client.renderer.entity.EntityRenderers;
 import net.portalmod.fabric.PortalModFabric;
 import net.portalmod.fabric.config.PortalModConfig;
 import net.portalmod.fabric.entity.PortalEntity;
+import net.portalmod.fabric.network.PlayerPortalTeleportPayload;
 import net.portalmod.fabric.network.PortalGunEventPayload;
 import net.portalmod.fabric.network.PortalPairPayload;
 import net.portalmod.fabric.client.render.PortalRenderTypes;
@@ -34,6 +35,12 @@ public final class PortalModFabricClient implements ClientModInitializer {
         PortalRenderTypes.bootstrap();
 
         PortalEntity.clientPairLookup = ClientPortalManager::hasEnd;
+        PortalEntity.clientTeleportCallback = (entity, source, position, yaw, pitch, velocity) -> {
+            if (entity instanceof net.minecraft.client.player.LocalPlayer
+                    && ClientPlayNetworking.canSend(PlayerPortalTeleportPayload.TYPE)) {
+                ClientPlayNetworking.send(new PlayerPortalTeleportPayload(source.getId(), position, yaw, pitch, velocity));
+            }
+        };
 
         ClientPlayNetworking.registerGlobalReceiver(PortalPairPayload.TYPE, (payload, context) ->
                 context.client().execute(() -> ClientPortalManager.handle(payload)));
@@ -45,6 +52,13 @@ public final class PortalModFabricClient implements ClientModInitializer {
         // throwing carried props, and the interact key (grab/drop).
         PortalGunInput.register();
         PortalGunCrosshair.register();
+
+        net.fabricmc.fabric.api.client.rendering.v1.ModelLayerRegistry.registerModelLayer(
+                net.portalmod.fabric.client.render.PortalGunModel.LAYER,
+                net.portalmod.fabric.client.render.PortalGunModel::createLayer);
+        net.minecraft.client.renderer.special.SpecialModelRenderers.ID_MAPPER.put(
+                net.minecraft.resources.Identifier.fromNamespaceAndPath(PortalModFabric.MOD_ID, "portalgun"),
+                net.portalmod.fabric.client.render.PortalGunSpecialRenderer.Unbaked.MAP_CODEC);
 
         EntityRenderers.register(PortalModEntities.PORTAL, PortalEntityRenderer::new);
 

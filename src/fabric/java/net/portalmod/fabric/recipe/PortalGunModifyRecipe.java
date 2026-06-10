@@ -1,8 +1,10 @@
 package net.portalmod.fabric.recipe;
 
 import com.mojang.serialization.MapCodec;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.DyeItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -42,17 +44,11 @@ public class PortalGunModifyRecipe extends CustomRecipe {
         ItemStack newGun = layout.gun().copy();
         PortalGunState state = newGun.getOrDefault(PortalModDataComponents.PORTAL_GUN_STATE, PortalGunState.DEFAULT);
 
-        String primaryHue = layout.left().getItem() instanceof DyeItem dye
-                ? dye.getDyeColor().getName()
-                : state.primaryHue();
-        String secondaryHue = layout.right().getItem() instanceof DyeItem dye
-                ? dye.getDyeColor().getName()
-                : state.secondaryHue();
-        String accentHue = layout.accent().getItem() instanceof DyeItem dye
-                ? dye.getDyeColor().getName()
-                : state.accentHue();
+        String primaryHue = hueOf(layout.left(), state.primaryHue());
+        String secondaryHue = hueOf(layout.right(), state.secondaryHue());
+        String accentHue = hueOf(layout.accent(), state.accentHue());
 
-        boolean singlePortal = layout.left().is(Items.CHAIN) || layout.right().is(Items.CHAIN);
+        boolean singlePortal = layout.left().is(Items.IRON_CHAIN) || layout.right().is(Items.IRON_CHAIN);
 
         state = state.withHues(primaryHue, secondaryHue, accentHue);
         state = new PortalGunState(
@@ -120,7 +116,7 @@ public class PortalGunModifyRecipe extends CustomRecipe {
                 if (stack.getItem() instanceof DyeItem) {
                     continue;
                 }
-                if (isSideSlot && stack.is(Items.CHAIN) && !hasChain) {
+                if (isSideSlot && stack.is(Items.IRON_CHAIN) && !hasChain) {
                     hasChain = true;
                     continue;
                 }
@@ -130,6 +126,15 @@ public class PortalGunModifyRecipe extends CustomRecipe {
         }
 
         return hasModifier ? new Layout(input.getItem(gunX, gunY), accent, left, right) : null;
+    }
+
+    private static String hueOf(ItemStack stack, String fallback) {
+        if (!(stack.getItem() instanceof DyeItem)) {
+            return fallback;
+        }
+
+        DyeColor color = stack.get(DataComponents.DYE);
+        return color == null ? fallback : color.getName();
     }
 
     private static ItemStack itemAt(CraftingInput input, int x, int y) {

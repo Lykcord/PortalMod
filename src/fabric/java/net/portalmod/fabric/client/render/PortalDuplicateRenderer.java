@@ -94,7 +94,11 @@ public final class PortalDuplicateRenderer {
                 .orElse(null);
     }
 
-    /** True when the entity's bounding box crosses the portal plane (portal faces are axis-aligned). */
+    /**
+     * True when the entity's bounding box crosses the portal plane within the portal's
+     * opening. The rect check matters: an entity brushing the wall beside the portal also
+     * straddles the infinite plane and would get a duplicate floating next to the far side.
+     */
     private static boolean straddlesPlane(Entity entity, PortalEntity portal) {
         Direction.Axis axis = portal.direction().getAxis();
         Vec3 portalPos = portal.position();
@@ -102,7 +106,14 @@ public final class PortalDuplicateRenderer {
         AABB boundingBox = entity.getBoundingBox();
         double min = axis.choose(boundingBox.minX, boundingBox.minY, boundingBox.minZ);
         double max = axis.choose(boundingBox.maxX, boundingBox.maxY, boundingBox.maxZ);
-        return min < planeCoordinate && max > planeCoordinate;
+        if (min >= planeCoordinate || max <= planeCoordinate) {
+            return false;
+        }
+
+        Vec3 offset = boundingBox.getCenter().subtract(portalPos);
+        double localX = offset.dot(portal.right().getUnitVec3());
+        double localY = offset.dot(portal.up().getUnitVec3());
+        return Math.abs(localX) <= 0.5D + 0.1D && Math.abs(localY) <= 1.0D + 0.15D;
     }
 
     /** Rotation part of the portal-to-portal isometry as a column-basis matrix. */

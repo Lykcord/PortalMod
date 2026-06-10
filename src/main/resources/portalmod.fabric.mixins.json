@@ -10,7 +10,10 @@
   "client": [
     "client.GameRendererPortalViewMixin",
     "client.LevelRendererDuplicateMixin",
-    "client.MinecraftPortalGunInputMixin"
+    "client.LevelRendererSkyPassMixin",
+    "client.MinecraftPortalGunInputMixin",
+    "client.ScreenEffectRendererPortalMixin",
+    "client.SkyRendererPortalMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -25,8 +25,14 @@ import org.joml.Vector4f;
 
 public final class PortalEntityRenderer extends EntityRenderer<PortalEntity, PortalRenderState> {
     private static final int FULL_BRIGHT = 0xF000F0;
-    private static final int VIEW_SEGMENTS = 24;
-    private static final float[] VIEW_RINGS = {0.35F, 0.7F, 1.0F};
+    // Screen-space UVs are computed per vertex and interpolated linearly in world space,
+    // which is not perspective correct; the mesh must be fine enough that the error per
+    // triangle stays invisible even with the camera right at the portal.
+    private static final int VIEW_SEGMENTS = 48;
+    private static final int VIEW_RING_COUNT = 10;
+    /** The view surface sits closest to the wall; the border ring composites above it. */
+    private static final double VIEW_SURFACE_OFFSET = 0.003D;
+    private static final double BORDER_OFFSET = 0.012D;
 
     public PortalEntityRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -98,11 +104,12 @@ public final class PortalEntityRenderer extends EntityRenderer<PortalEntity, Por
 
         if (seeThrough) {
             // See-through portal: ellipse mesh sampling the offscreen view with screen-space UVs,
-            // plus the ring texture composited on top as the animated border.
+            // plus the ring texture composited on top as the animated border. The view surface is
+            // opaque and depth-writing, so the ring (offset in front) always wins the depth test.
             Matrix4f viewProjection = new Matrix4f(cameraRenderState.projectionMatrix).mul(cameraRenderState.viewRotationMatrix);
             submitNodeCollector.submitCustomGeometry(
                     poseStack,
-                    RenderTypes.entityTranslucentEmissive(viewTexture),
+                    PortalRenderTypes.portalView(viewTexture),
                     (pose, consumer) -> submitViewEllipse(pose, consumer, state.face, state.up, viewProjection)
             );
             submitNodeCollector.submitCustomGeometry(
@@ -140,13 +147,13 @@ public final class PortalEntityRenderer extends EntityRenderer<PortalEntity, Por
      */
     private static void submitViewEllipse(PoseStack.Pose pose, VertexConsumer consumer, Direction face, Direction upDirection, Matrix4f viewProjection) {
         Vec3 normal = face.getUnitVec3();
-        Vec3 offset = normal.scale(0.004D);
+        Vec3 offset = normal.scale(VIEW_SURFACE_OFFSET);
         Vec3 up = upDirection.getUnitVec3();
         Vec3 right = up.cross(normal);
 
-        Vec3[][] rings = new Vec3[VIEW_RINGS.length][VIEW_SEGMENTS + 1];
-        for (int ring = 0; ring < VIEW_RINGS.length; ring++) {
-            float radius = VIEW_RINGS[ring];
+        Vec3[][] rings = new Vec3[VIEW_RING_COUNT][VIEW_SEGMENTS + 1];
+        for (int ring = 0; ring < VIEW_RING_COUNT; ring++) {
+            float radius = (ring + 1) / (float) VIEW_RING_COUNT;
             for (int segment = 0; segment <= VIEW_SEGMENTS; segment++) {
                 float angle = (float) (segment * (Math.PI * 2.0D / VIEW_SEGMENTS));
                 double x = Mth.cos(angle) * 0.5F * radius;
@@ -163,7 +170,7 @@ public final class PortalEntityRenderer extends EntityRenderer<PortalEntity, Por
             viewVertex(pose, consumer, offset, viewProjection, normal);
         }
 
-        for (int ring = 0; ring < VIEW_RINGS.length - 1; ring++) {
+        for (int ring = 0; ring < VIEW_RING_COUNT - 1; ring++) {
             for (int segment = 0; segment < VIEW_SEGMENTS; segment++) {
                 viewVertex(pose, consumer, rings[ring][segment], viewProjection, normal);
                 viewVertex(pose, consumer, rings[ring + 1][segment], viewProjection, normal);
@@ -177,9 +184,10 @@ public final class PortalEntityRenderer extends EntityRenderer<PortalEntity, Por
         Vector4f clip = new Vector4f((float) position.x(), (float) position.y(), (float) position.z(), 1.0F)
                 .mul(pose.pose())
                 .mul(viewProjection);
+        // No clamping: pre-divide clamping warps the interpolated UVs; the sampler clamps anyway.
         float w = Math.max(clip.w, 1.0E-4F);
-        float u = Mth.clamp((clip.x / w + 1.0F) * 0.5F, 0.0F, 1.0F);
-        float v = Mth.clamp((clip.y / w + 1.0F) * 0.5F, 0.0F, 1.0F);
+        float u = (clip.x / w + 1.0F) * 0.5F;
+        float v = (clip.y / w + 1.0F) * 0.5F;
         consumer.addVertex(pose, (float) position.x(), (float) position.y(), (float) position.z())
                 .setColor(255, 255, 255, 255)
                 .setUv(u, v)
@@ -193,7 +201,7 @@ public final class PortalEntityRenderer extends EntityRenderer<PortalEntity, Por
         int green = color >> 8 & 0xFF;
         int blue = color & 0xFF;
         int alpha = color >>> 24;
-        Vec3 normal = face.getUnitVec3().scale(0.006D);
+        Vec3 normal = face.getUnitVec3().scale(BORDER_OFFSET);
         Vec3 up = upDirection.getUnitVec3();
         Vec3 right = up.cross(face.getUnitVec3());
         Vec3 bottomLeft = right.scale(-0.5D).add(up.scale(-1.0D)).add(normal);

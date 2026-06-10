@@ -117,8 +117,13 @@ public final class PortalGunItem extends Item {
 
     public static void onPickCube(Player player, ItemStack gun) {
         setHolding(gun, true);
-        player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                PortalModSounds.PORTALGUN_LIFT, SoundSource.PLAYERS, 1.0F, randomSoundPitch(player));
+
+        // Sounds and the hold-loop trigger come from the server only, so client-side
+        // prediction (instant dismount) never doubles the feedback.
+        if (!player.level().isClientSide()) {
+            player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                    PortalModSounds.PORTALGUN_LIFT, SoundSource.PLAYERS, 1.0F, randomSoundPitch(player));
+        }
 
         if (player instanceof ServerPlayer serverPlayer) {
             ServerPlayNetworking.send(serverPlayer,
@@ -128,8 +133,11 @@ public final class PortalGunItem extends Item {
 
     public static void onDropCube(Player player, ItemStack gun) {
         setHolding(gun, false);
-        player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                PortalModSounds.PORTALGUN_DROP, SoundSource.PLAYERS, 1.0F, randomSoundPitch(player));
+
+        if (!player.level().isClientSide()) {
+            player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                    PortalModSounds.PORTALGUN_DROP, SoundSource.PLAYERS, 1.0F, randomSoundPitch(player));
+        }
 
         if (player instanceof ServerPlayer serverPlayer) {
             ServerPlayNetworking.send(serverPlayer,

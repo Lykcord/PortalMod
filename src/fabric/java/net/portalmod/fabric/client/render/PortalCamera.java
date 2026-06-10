@@ -67,6 +67,24 @@ public final class PortalCamera extends Camera {
         initialized = true;
     }
 
+    /**
+     * Portal views are always "detached": the camera entity (the local player) must be
+     * visible through a portal even in first person.
+     */
+    @Override
+    public boolean isDetached() {
+        return true;
+    }
+
+    /**
+     * Temporarily relocates the camera for environment sampling (fog color/ranges). The
+     * teleported camera often sits inside solid terrain where fog sampling returns cave
+     * darkness; fog must represent the destination portal's surroundings instead.
+     */
+    public void overridePosition(Vec3 position) {
+        setPosition(position);
+    }
+
     private Matrix4f createCullingProjection(float aspectRatio, float farPlane) {
         return new Matrix4f().perspective(
                 fov * (float) (Math.PI / 180.0),

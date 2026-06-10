@@ -4,6 +4,7 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.portalmod.fabric.PortalModFabric;
 import net.portalmod.fabric.command.PortalCommand;
 import net.portalmod.fabric.network.PortalModNetworking;
+import net.portalmod.fabric.portal.PortalShotScheduler;
 
 public final class PortalModRegistries {
     private PortalModRegistries() {

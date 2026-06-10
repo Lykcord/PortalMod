@@ -44,7 +44,35 @@ public final class PortalRenderTypes {
                             .createRenderSetup()
             ));
 
+    /**
+     * The see-through view surface: opaque (its content is a full world render) and
+     * depth-writing, so the translucent border ring offset in front of it always
+     * composites on top regardless of submission batching.
+     */
+    private static final RenderPipeline PORTAL_VIEW_PIPELINE = RenderPipelines.register(
+            RenderPipeline.builder(RenderPipelines.ENTITY_EMISSIVE_SNIPPET)
+                    .withLocation(Identifier.fromNamespaceAndPath(PortalModFabric.MOD_ID, "pipeline/portal_view"))
+                    .withShaderDefine("PER_FACE_LIGHTING")
+                    .withSampler("Sampler1")
+                    .withCull(false)
+                    .withDepthStencilState(new DepthStencilState(CompareOp.LESS_THAN_OR_EQUAL, true))
+                    .build()
+    );
+
+    private static final Function<Identifier, RenderType> PORTAL_VIEW = Util.memoize(texture ->
+            RenderType.create(
+                    "portalmod_portal_view",
+                    RenderSetup.builder(PORTAL_VIEW_PIPELINE)
+                            .withTexture("Sampler0", texture)
+                            .useOverlay()
+                            .createRenderSetup()
+            ));
+
     private PortalRenderTypes() {
+    }
+
+    public static RenderType portalView(Identifier texture) {
+        return PORTAL_VIEW.apply(texture);
     }
 
     /** Forces class load during client init so the pipeline is registered before precompilation. */

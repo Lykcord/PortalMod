@@ -11,9 +11,11 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.portalmod.fabric.PortalModFabric;
 import net.portalmod.fabric.component.PortalGunState;
+import net.portalmod.fabric.entity.PortalEntity;
 import net.portalmod.fabric.item.PortalGunItem;
 import net.portalmod.fabric.portal.PortalGunGrab;
 import net.portalmod.fabric.portal.PortalManager;
+import net.portalmod.fabric.portal.PortalShotScheduler;
 import net.portalmod.fabric.registry.PortalModDataComponents;
 import net.portalmod.fabric.registry.PortalModSounds;
 
@@ -28,11 +30,13 @@ public final class PortalModNetworking {
     public static void register() {
         PayloadTypeRegistry.serverboundPlay().register(PortalGunFirePayload.TYPE, PortalGunFirePayload.STREAM_CODEC);
         PayloadTypeRegistry.serverboundPlay().register(PortalGunInteractionPayload.TYPE, PortalGunInteractionPayload.STREAM_CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(PlayerPortalTeleportPayload.TYPE, PlayerPortalTeleportPayload.STREAM_CODEC);
         PayloadTypeRegistry.clientboundPlay().register(PortalPairPayload.TYPE, PortalPairPayload.STREAM_CODEC);
         PayloadTypeRegistry.clientboundPlay().register(PortalGunEventPayload.TYPE, PortalGunEventPayload.STREAM_CODEC);
 
         ServerPlayNetworking.registerGlobalReceiver(PortalGunFirePayload.TYPE, PortalModNetworking::handlePortalGunFire);
         ServerPlayNetworking.registerGlobalReceiver(PortalGunInteractionPayload.TYPE, PortalModNetworking::handlePortalGunInteraction);
+        ServerPlayNetworking.registerGlobalReceiver(PlayerPortalTeleportPayload.TYPE, PortalModNetworking::handlePlayerPortalTeleport);
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->
                 PortalManager.get(server).syncAllTo(handler.getPlayer()));
@@ -74,6 +78,39 @@ public final class PortalModNetworking {
         });
     }
 
+    /**
+     * The local player crossed a portal client-side. After validating against the source
+     * portal pair, the server adopts the position silently (snap + resetPosition, no
+     * correction packet) so the walk-through stays seamless.
+     */
+    private static void handlePlayerPortalTeleport(PlayerPortalTeleportPayload payload, ServerPlayNetworking.Context context) {
+        context.server().execute(() -> {
+            ServerPlayer player = context.player();
+
+            if (!(player.level().getEntity(payload.sourcePortalId()) instanceof PortalEntity portal) || !portal.isOpen()) {
+                return;
+            }
+
+            // The crossing must start near the source portal and land near its pair.
+            if (player.position().distanceToSqr(portal.position()) > 16.0D * 16.0D) {
+                return;
+            }
+
+            PortalManager manager = PortalManager.get(context.server());
+            var destinationRecord = manager.end(portal.gunId(), !portal.primary()).orElse(null);
+            if (destinationRecord == null
+                    || payload.position().distanceToSqr(destinationRecord.position()) > 16.0D * 16.0D) {
+                return;
+            }
+
+            player.snapTo(payload.position().x(), payload.position().y(), payload.position().z(), payload.yaw(), payload.pitch());
+            player.setOldPosAndRot(payload.position(), payload.yaw(), payload.pitch());
+            player.connection.resetPosition();
+            player.setDeltaMovement(payload.velocity());
+            player.setPortalCooldown(2);
+        });
+    }
+
     public static void fizzleGunsInInventory(ServerPlayer player) {
         List<ItemStack> stacks = new ArrayList<>();
         Player inventoryOwner = player;
@@ -108,6 +145,7 @@ public final class PortalModNetworking {
         }
 
         UUID gunId = state.gunUuid().get();
+        PortalShotScheduler.clear(gunId);
         PortalManager manager = PortalManager.get(player.level().getServer());
         boolean fizzled = false;
 
@@ -116,6 +154,12 @@ public final class PortalModNetworking {
                 manager.revoke(player.level().getServer(), gunId, primary);
                 fizzled = true;
             }
+        }
+
+        if (fizzled) {
+            // Turns the gun's portal indicator light off.
+            stack.update(PortalModDataComponents.PORTAL_GUN_STATE, PortalGunState.DEFAULT,
+                    current -> current.withLastShot(PortalGunState.NONE));
         }
 
         return fizzled;

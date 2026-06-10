@@ -36,6 +36,16 @@ public final class PortalEntity extends Entity {
      * referencing client-only classes.
      */
     public static BiPredicate<UUID, Boolean> clientPairLookup;
+    /**
+     * Client-side teleport notifier, wired by the client initializer. Invoked after a
+     * client-predicted teleport so the local player's crossing is reported to the server.
+     */
+    public static ClientTeleportCallback clientTeleportCallback;
+
+    @FunctionalInterface
+    public interface ClientTeleportCallback {
+        void onTeleport(Entity entity, PortalEntity source, Vec3 position, float yaw, float pitch, Vec3 velocity);
+    }
     private static final EntityDataAccessor<Boolean> DATA_PRIMARY = SynchedEntityData.defineId(PortalEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<String> DATA_FACE = SynchedEntityData.defineId(PortalEntity.class, EntityDataSerializers.STRING);
     private static final EntityDataAccessor<String> DATA_UP = SynchedEntityData.defineId(PortalEntity.class, EntityDataSerializers.STRING);
@@ -235,21 +245,119 @@ public final class PortalEntity extends Entity {
         super.remove(reason);
     }
 
-    public static void handleEntityMoved(Entity entity) {
-        if (entity instanceof PortalEntity || entity.isRemoved()) {
-            return;
+    /**
+     * Intercepts a movement delta before it is applied (Forge parity): when the move would
+     * carry the entity's center across an open portal plane, the entity is teleported
+     * mid-move - position, old position, rotation and velocity are all mapped through the
+     * portal isometry, and the remaining movement continues on the far side. Because the
+     * old position is mapped too, the render interpolation is continuous through the plane:
+     * crossing is a seamless walk, not a snap.
+     */
+    public static Vec3 interceptMovement(Entity entity, Vec3 delta) {
+        // No portal-cooldown check here: chained crossings (the infinite fall loop) must
+        // re-teleport every tick or even several times within one move. Immediate re-entry
+        // through the exit portal is impossible anyway - a crossing requires approaching
+        // the plane from the front, and you leave a portal moving away from it.
+        if (entity instanceof PortalEntity || entity.isRemoved() || entity.isSpectator()
+                || !entity.canInteractWithLevel() || delta.lengthSqr() < 1.0E-12D) {
+            return delta;
         }
 
-        if (entity.level() instanceof ServerLevel serverLevel) {
-            teleportEntityIfCrossingPortal(serverLevel, entity);
-        } else {
-            teleportEntityIfCrossingPortalClient(entity);
+        Level level = entity.level();
+        boolean clientSide = level.isClientSide();
+        if (clientSide) {
+            // Only entities this client simulates; everything else is synced by the server.
+            if (!entity.isLocalInstanceAuthoritative()) {
+                return delta;
+            }
+        } else if (entity instanceof Player) {
+            // Players cross client-side and report via PlayerPortalTeleportPayload.
+            return delta;
         }
+
+        Vec3 centerOffset = entity.getBoundingBox().getCenter().subtract(entity.position());
+
+        // Forge parity: one move can cross several portal planes in a row (fast falls
+        // through close portal pairs), so keep consuming crossings until none match.
+        for (int depth = 0; depth < 8; depth++) {
+            Vec3 from = entity.getBoundingBox().getCenter();
+            Vec3 to = from.add(delta);
+            AABB travelBox = entity.getBoundingBox().expandTowards(delta).inflate(0.5D);
+
+            PortalEntity crossed = null;
+            Crossing crossing = null;
+            for (PortalEntity portal : level.getEntities(PortalModEntities.PORTAL, travelBox, PortalEntity::isOpen)) {
+                Vec3 normal = portal.direction().getUnitVec3();
+                if (delta.dot(normal) > 0.0D) {
+                    continue;
+                }
+
+                Crossing candidate = findCrossing(from, to, portal.position(), normal);
+                if (candidate != null && portal.isTeleportPointWithinPortal(candidate.point())) {
+                    crossed = portal;
+                    crossing = candidate;
+                    break;
+                }
+            }
+
+            if (crossed == null) {
+                return delta;
+            }
+
+            PortalEntity pair = clientSide ? crossed.findPairClient() : crossed.findPair((ServerLevel) level);
+            if (pair == null) {
+                return delta;
+            }
+
+            delta = crossed.teleportThroughMove(entity, pair, delta, centerOffset);
+        }
+
+        return delta;
+    }
+
+    /**
+     * Performs the mid-move teleport and returns the remaining movement in destination space.
+     */
+    private Vec3 teleportThroughMove(Entity entity, PortalEntity pair, Vec3 delta, Vec3 centerOffset) {
+        Vec3 center = entity.getBoundingBox().getCenter();
+        Vec3 newPos = teleportPoint(center, pair).subtract(centerOffset);
+        Vec3 oldCenter = new Vec3(entity.xOld, entity.yOld, entity.zOld).add(centerOffset);
+        Vec3 mappedOldPos = teleportPoint(oldCenter, pair).subtract(centerOffset);
+
+        Vec3 look = teleportVector(entity.getLookAngle(), pair).normalize();
+        float yaw = (float) (Math.atan2(look.z(), look.x()) * 180.0D / Math.PI) - 90.0F;
+        float pitch = (float) (-(Math.atan2(look.y(), Math.sqrt(look.x() * look.x() + look.z() * look.z())) * 180.0D / Math.PI));
+        float yawDelta = net.minecraft.util.Mth.wrapDegrees(yaw - entity.getYRot());
+        float oldYaw = entity.yRotO + yawDelta;
+        float oldPitch = entity.getXRot() == pitch ? entity.xRotO : pitch;
+
+        entity.setPos(newPos);
+        entity.setYRot(yaw);
+        entity.setXRot(pitch);
+        // Old position/rotation mapped through the portal: interpolation stays continuous.
+        entity.setOldPosAndRot(mappedOldPos, oldYaw, oldPitch);
+
+        if (entity instanceof net.minecraft.world.entity.LivingEntity living) {
+            living.yBodyRot += yawDelta;
+            living.yBodyRotO += yawDelta;
+            living.yHeadRot += yawDelta;
+            living.yHeadRotO += yawDelta;
+        }
+
+        Vec3 velocity = teleportVector(entity.getDeltaMovement(), pair);
+        entity.setDeltaMovement(velocity);
+        entity.setPortalCooldown(2);
+
+        if (level().isClientSide() && clientTeleportCallback != null) {
+            clientTeleportCallback.onTeleport(entity, this, newPos, yaw, pitch, velocity);
+        }
+
+        return teleportVector(delta, pair);
     }
 
     private static void teleportEntityIfCrossingPortal(ServerLevel serverLevel, Entity movedEntity) {
         if (movedEntity != null) {
-            if (!canTeleport(movedEntity)) {
+            if (movedEntity instanceof Player || !canTeleport(movedEntity)) {
                 return;
             }
 
@@ -273,32 +381,16 @@ public final class PortalEntity extends Entity {
                 continue;
             }
 
+            // Players teleport client-side (PlayerPortalTeleportPayload) for seamless crossing.
             AABB area = portal.getBoundingBox().inflate(1.25D);
-            for (Entity entity : serverLevel.getEntities(portal, area, PortalEntity::canTeleport)) {
+            for (Entity entity : serverLevel.getEntities(portal, area, candidate ->
+                    !(candidate instanceof Player) && canTeleport(candidate))) {
                 Vec3 centerOffset = entity.getBoundingBox().getCenter().subtract(entity.position());
                 Vec3 oldCenter = new Vec3(entity.xOld, entity.yOld, entity.zOld).add(centerOffset);
                 Vec3 centerNow = entity.getBoundingBox().getCenter();
                 if (portal.tryTeleportEntity(entity, pair, oldCenter, centerNow, centerOffset)) {
                     break;
                 }
-            }
-        }
-    }
-
-    private static void teleportEntityIfCrossingPortalClient(Entity movedEntity) {
-        if (!canTeleport(movedEntity)) {
-            return;
-        }
-
-        Vec3 centerOffset = movedEntity.getBoundingBox().getCenter().subtract(movedEntity.position());
-        Vec3 oldCenter = new Vec3(movedEntity.xOld, movedEntity.yOld, movedEntity.zOld).add(centerOffset);
-        Vec3 centerNow = movedEntity.getBoundingBox().getCenter();
-        AABB travelBox = new AABB(oldCenter, centerNow).inflate(1.25D);
-
-        for (PortalEntity portal : movedEntity.level().getEntities(PortalModEntities.PORTAL, travelBox, PortalEntity::isOpen)) {
-            PortalEntity pair = portal.findPairClient();
-            if (pair != null && portal.tryTeleportEntityClient(movedEntity, pair, oldCenter, centerNow, centerOffset)) {
-                return;
             }
         }
     }
@@ -311,20 +403,6 @@ public final class PortalEntity extends Entity {
 
         if (crossing != null && entity.getDeltaMovement().dot(normal) <= 0.02D && isTeleportPointWithinPortal(crossing.point())) {
             teleportEntity(entity, this, pair, centerOffset, crossing.point(), centerNow.subtract(crossing.point()));
-            return true;
-        }
-
-        return false;
-    }
-
-    private boolean tryTeleportEntityClient(Entity entity, PortalEntity pair, Vec3 oldCenter, Vec3 centerNow, Vec3 centerOffset) {
-        Direction face = direction();
-        Vec3 center = position();
-        Vec3 normal = face.getUnitVec3();
-        Crossing crossing = findCrossing(oldCenter, centerNow, center, normal);
-
-        if (crossing != null && entity.getDeltaMovement().dot(normal) <= 0.02D && isTeleportPointWithinPortal(crossing.point())) {
-            teleportEntityClient(entity, this, pair, centerOffset, crossing.point(), centerNow.subtract(crossing.point()));
             return true;
         }
 
@@ -420,29 +498,30 @@ public final class PortalEntity extends Entity {
         entity.setPortalCooldown(2);
     }
 
-    private static void teleportEntityClient(Entity entity, PortalEntity source, PortalEntity destination, Vec3 centerOffset, Vec3 crossingPoint, Vec3 remainingMovement) {
-        PortalTarget target = destination.target().orElse(null);
-        if (target == null) {
-            return;
+    /**
+     * True when the entity's eye sits in the wall cavity directly behind an open portal,
+     * used to suppress suffocation and the vanilla inside-a-block screen overlay while
+     * crossing.
+     */
+    public static boolean isEyeInPortalZone(Entity entity) {
+        if (entity instanceof PortalEntity) {
+            return false;
         }
-
-        Vec3 teleportedCrossing = source.teleportPoint(crossingPoint, destination);
-        Vec3 teleportedRemaining = source.teleportVector(remainingMovement, destination);
-        Vec3 destinationCenter = teleportedCrossing
-                .add(teleportedRemaining)
-                .add(destination.direction().getUnitVec3().scale(0.28D));
-        Vec3 destinationPos = destinationCenter.subtract(centerOffset);
-        Vec3 velocity = source.teleportVector(entity.getDeltaMovement(), destination);
-        Vec3 look = source.teleportVector(entity.getLookAngle(), destination).normalize();
-        float yaw = (float) (Math.atan2(look.z(), look.x()) * 180.0D / Math.PI) - 90.0F;
-        float pitch = (float) (-(Math.atan2(look.y(), Math.sqrt(look.x() * look.x() + look.z() * look.z())) * 180.0D / Math.PI));
-
-        entity.teleportTo(destinationPos.x(), destinationPos.y(), destinationPos.z());
-        entity.setYRot(yaw);
-        entity.setXRot(pitch);
-        entity.setOldPosAndRot(destinationPos, yaw, pitch);
-        entity.setDeltaMovement(velocity);
-        entity.setPortalCooldown(2);
+        Vec3 eye = entity.getEyePosition();
+        AABB search = new AABB(eye, eye).inflate(2.5D);
+        for (PortalEntity portal : entity.level().getEntities(PortalModEntities.PORTAL, search, PortalEntity::isOpen)) {
+            Vec3 offset = eye.subtract(portal.position());
+            double normalDistance = offset.dot(portal.direction().getUnitVec3());
+            double localX = offset.dot(portal.right().getUnitVec3());
+            double localY = offset.dot(portal.up().getUnitVec3());
+            if (normalDistance <= 0.6D
+                    && normalDistance >= -1.5D
+                    && Math.abs(localX) <= WIDTH * 0.5D + 0.4D
+                    && Math.abs(localY) <= HEIGHT * 0.5D + 0.4D) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -553,17 +632,17 @@ public final class PortalEntity extends Entity {
     }
 
     private boolean isPointWithinPortal(Vec3 point) {
-        Vec3 offset = point.subtract(position());
-        double localX = offset.dot(right().getUnitVec3());
-        double localY = offset.dot(up().getUnitVec3());
-        return Math.abs(localX) <= WIDTH * 0.5D + 0.35D && Math.abs(localY) <= HEIGHT * 0.5D + 0.35D;
+        // Identical to the teleport acceptance region: if the collision skip were any
+        // wider, there would be a band where you can push into the wall but never
+        // teleport - it reads as the portal "resisting" the walk-through.
+        return isTeleportPointWithinPortal(point);
     }
 
     private boolean isTeleportPointWithinPortal(Vec3 point) {
         Vec3 offset = point.subtract(position());
         double localX = offset.dot(right().getUnitVec3());
         double localY = offset.dot(up().getUnitVec3());
-        return Math.abs(localX) <= WIDTH * 0.5D + 0.03D && Math.abs(localY) <= HEIGHT * 0.5D + 0.03D;
+        return Math.abs(localX) <= WIDTH * 0.5D + 0.05D && Math.abs(localY) <= HEIGHT * 0.5D + 0.05D;
     }
 
     public boolean isBlockBehindPortal(BlockPos pos) {
@@ -572,10 +651,12 @@ public final class PortalEntity extends Entity {
         double normalDistance = offset.dot(direction().getUnitVec3());
         double localX = offset.dot(right().getUnitVec3());
         double localY = offset.dot(up().getUnitVec3());
+        // Only blocks actually overlapped by the portal opening lose their collision; a wider
+        // margin would let entities clip into the wall beside the portal.
         return normalDistance <= 0.35D
                 && normalDistance >= -1.15D
-                && Math.abs(localX) <= WIDTH * 0.5D + 0.55D
-                && Math.abs(localY) <= HEIGHT * 0.5D + 0.55D;
+                && Math.abs(localX) <= WIDTH * 0.5D + 0.45D
+                && Math.abs(localY) <= HEIGHT * 0.5D + 0.45D;
     }
 
     private boolean survives() {
@@ -634,11 +715,10 @@ public final class PortalEntity extends Entity {
             return false;
         }
 
-        AABB entityBox = entity.getBoundingBox();
-        return isPointWithinPortal(entityBox.getCenter())
-                || isPointWithinPortal(entity.getEyePosition())
-                || isPointWithinPortal(new Vec3(entityBox.minX, entityBox.getCenter().y(), entityBox.minZ))
-                || isPointWithinPortal(new Vec3(entityBox.maxX, entityBox.getCenter().y(), entityBox.maxZ));
+        // Center/eye only: testing box corners let entities brushing the wall beside the
+        // portal open its collision and slip in sideways.
+        return isPointWithinPortal(entity.getBoundingBox().getCenter())
+                || isPointWithinPortal(entity.getEyePosition());
     }
 
     private void recalculateBoundingBox() {
