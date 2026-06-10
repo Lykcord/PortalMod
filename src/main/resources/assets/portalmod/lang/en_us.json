@@ -352,6 +352,7 @@
   "debug.portalmod.reload_shaders.error":   "Error - Could not reload PortalMod shaders",
 
   "key.category.portalmod":           "PortalMod",
+  "key.category.portalmod.main":      "PortalMod",
   "key.portalmod.portalgun_interact": "Portal Gun Interaction",
 
   "advancements.portalmod.root.title":                      "PortalMod",

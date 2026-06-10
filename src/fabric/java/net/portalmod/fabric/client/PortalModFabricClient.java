@@ -1,16 +1,17 @@
 package net.portalmod.fabric.client;
 
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.renderer.entity.EntityRenderers;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
 import net.portalmod.fabric.PortalModFabric;
 import net.portalmod.fabric.config.PortalModConfig;
-import net.portalmod.fabric.item.PortalGunItem;
-import net.portalmod.fabric.network.PortalGunFirePayload;
+import net.portalmod.fabric.entity.PortalEntity;
+import net.portalmod.fabric.network.PortalGunEventPayload;
+import net.portalmod.fabric.network.PortalPairPayload;
+import net.portalmod.fabric.client.render.PortalRenderTypes;
+import net.portalmod.fabric.client.render.PortalWorldRenderer;
 import net.portalmod.fabric.registry.PortalModEntities;
 import net.portalmod.fabric.render.PortalRendererCompatibility;
 
@@ -21,27 +22,36 @@ public final class PortalModFabricClient implements ClientModInitializer {
         PortalModConfig config = PortalModConfig.get();
 
         PortalModFabric.LOGGER.info(
-                "Portal renderer mode: recursion={}, sodium={}, indium={}, iris={}",
+                "Portal renderer mode: truePortals={}, recursion={}, sodium={}, indium={}, iris={}",
+                config.portalRenderer().truePortals(),
                 config.portalRenderer().recursionLimit(),
                 compatibility.sodiumLoaded(),
                 compatibility.indiumLoaded(),
                 compatibility.irisLoaded()
         );
 
-        AttackBlockCallback.EVENT.register((player, level, hand, pos, direction) -> {
-            if (!(player.getItemInHand(hand).getItem() instanceof PortalGunItem portalGun)) {
-                return InteractionResult.PASS;
-            }
+        PortalWorldRenderer.setEnabled(config.portalRenderer().truePortals());
+        PortalRenderTypes.bootstrap();
 
-            boolean primary = false;
-            if (level.isClientSide() && ClientPlayNetworking.canSend(PortalGunFirePayload.TYPE)) {
-                portalGun.fire(level, player, hand, primary);
-                ClientPlayNetworking.send(new PortalGunFirePayload(hand == InteractionHand.MAIN_HAND, primary));
-            }
+        PortalEntity.clientPairLookup = ClientPortalManager::hasEnd;
 
-            return InteractionResult.FAIL;
-        });
+        ClientPlayNetworking.registerGlobalReceiver(PortalPairPayload.TYPE, (payload, context) ->
+                context.client().execute(() -> ClientPortalManager.handle(payload)));
+        ClientPlayNetworking.registerGlobalReceiver(PortalGunEventPayload.TYPE, (payload, context) ->
+                context.client().execute(() -> PortalGunClientEvents.handle(payload)));
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> ClientPortalManager.clear());
+
+        // Attack input is rerouted by MinecraftPortalGunInputMixin; this handles hold-to-fire,
+        // throwing carried props, and the interact key (grab/drop).
+        PortalGunInput.register();
+        PortalGunCrosshair.register();
 
         EntityRenderers.register(PortalModEntities.PORTAL, PortalEntityRenderer::new);
+
+        if (config.portalRenderer().compatibilityGuards() && compatibility.irisLoaded()) {
+            // Iris shader packs replace the level render path; degrade to flat portals for now.
+            PortalWorldRenderer.setEnabled(false);
+            PortalModFabric.LOGGER.info("Iris detected - see-through portal views disabled, using flat portals.");
+        }
     }
 }

@@ -3,9 +3,15 @@
   "package": "net.portalmod.fabric.mixin",
   "compatibilityLevel": "JAVA_25",
   "mixins": [
-    "BlockStateCollisionMixin"
+    "BlockStateCollisionMixin",
+    "EntityPortalMoveMixin",
+    "EntityTrackerMixin"
   ],
-  "client": [],
+  "client": [
+    "client.GameRendererPortalViewMixin",
+    "client.LevelRendererDuplicateMixin",
+    "client.MinecraftPortalGunInputMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   }

@@ -1,7 +1,8 @@
 {
   "pack": {
     "description": "PortalMod resources",
-    "pack_format": 70
+    "pack_format": 70,
+    "supported_formats": [70, 81]
   },
   "language": {
     "pm_ap": {

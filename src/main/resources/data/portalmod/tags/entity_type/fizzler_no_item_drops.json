@@ -1,0 +1,5 @@
+{
+  "values": [
+    { "id": "portalmod:turret", "required": false }
+  ]
+}

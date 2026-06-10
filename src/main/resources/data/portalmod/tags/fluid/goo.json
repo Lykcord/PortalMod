@@ -1,0 +1,6 @@
+{
+  "values": [
+    { "id": "portalmod:goo_fluid", "required": false },
+    { "id": "portalmod:goo_flowing", "required": false }
+  ]
+}

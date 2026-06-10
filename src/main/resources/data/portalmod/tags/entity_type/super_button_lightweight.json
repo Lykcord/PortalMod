@@ -10,6 +10,6 @@
     "minecraft:parrot",
     "minecraft:vex",
 
-    "portalmod:turret"
+    { "id": "portalmod:turret", "required": false }
   ]
 }

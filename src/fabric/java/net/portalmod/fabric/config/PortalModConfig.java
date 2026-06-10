@@ -11,7 +11,7 @@ import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-public record PortalModConfig(PortalRenderer portalRenderer) {
+public record PortalModConfig(PortalRenderer portalRenderer, Client client) {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static PortalModConfig current = defaults();
 
@@ -40,7 +40,7 @@ public record PortalModConfig(PortalRenderer portalRenderer) {
     }
 
     public static PortalModConfig defaults() {
-        return new PortalModConfig(new PortalRenderer(true, 2, true));
+        return new PortalModConfig(new PortalRenderer(true, 2, true), new Client(false));
     }
 
     private static void save(Path path, PortalModConfig config) throws IOException {
@@ -52,7 +52,8 @@ public record PortalModConfig(PortalRenderer portalRenderer) {
 
     private PortalModConfig normalized() {
         PortalRenderer renderer = portalRenderer == null ? defaults().portalRenderer : portalRenderer.normalized();
-        return new PortalModConfig(renderer);
+        Client normalizedClient = client == null ? defaults().client : client;
+        return new PortalModConfig(renderer, normalizedClient);
     }
 
     public record PortalRenderer(boolean truePortals, int recursionLimit, boolean compatibilityGuards) {
@@ -60,5 +61,13 @@ public record PortalModConfig(PortalRenderer portalRenderer) {
             int boundedRecursion = Math.clamp(recursionLimit, 0, 8);
             return new PortalRenderer(truePortals, boundedRecursion, compatibilityGuards);
         }
+    }
+
+    /**
+     * Client-only options. classicCrosshair switches the gun crosshair from
+     * portal-state mode (halves fill when portals are placed) to the classic
+     * surface-portalability mode.
+     */
+    public record Client(boolean classicCrosshair) {
     }
 }

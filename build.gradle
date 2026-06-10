@@ -14,6 +14,15 @@ base {
 repositories {
     mavenCentral()
     maven { url = 'https://maven.fabricmc.net/' }
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'Modrinth'
+                url = 'https://api.modrinth.com/maven'
+            }
+        }
+        filter { includeGroup 'maven.modrinth' }
+    }
 }
 
 loom {
@@ -64,6 +73,11 @@ dependencies {
     minecraft "com.mojang:minecraft:${minecraft_version}"
     implementation "net.fabricmc:fabric-loader:${loader_version}"
     implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
+
+    // Dev-runtime only: Sodium in the run config from Milestone 2 onward so portal-view
+    // compatibility is tested continuously rather than retrofitted (Indium is obsolete on
+    // modern Sodium, which implements FRAPI natively).
+    localRuntime "maven.modrinth:sodium:mc26.1.2-0.8.12-fabric"
 }
 
 processResources {

@@ -12,12 +12,12 @@
     "minecraft:detector_rail",
     "minecraft:powered_rail",
 
-    "portalmod:antline",
+    { "id": "portalmod:antline", "required": false },
     "minecraft:redstone_wire",
     "minecraft:redstone_torch",
 
     "minecraft:cobweb",
-    "minecraft:grass",
+    "minecraft:short_grass",
     "minecraft:fern",
     "minecraft:tall_grass",
     "minecraft:large_fern",

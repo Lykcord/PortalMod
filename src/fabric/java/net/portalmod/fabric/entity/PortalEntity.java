@@ -14,14 +14,28 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.ClipContext;
 import net.portalmod.fabric.component.PortalTarget;
+import net.portalmod.fabric.portal.PortalManager;
+import net.portalmod.fabric.portal.PortalRecord;
 import net.portalmod.fabric.registry.PortalModEntities;
+import net.portalmod.fabric.registry.PortalModTags;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.BiPredicate;
 
 public final class PortalEntity extends Entity {
+    /**
+     * Client-side pair lookup, wired by the client initializer to ClientPortalManager.
+     * Lets common code ask "does this gun have a portal on the given side?" without
+     * referencing client-only classes.
+     */
+    public static BiPredicate<UUID, Boolean> clientPairLookup;
     private static final EntityDataAccessor<Boolean> DATA_PRIMARY = SynchedEntityData.defineId(PortalEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<String> DATA_FACE = SynchedEntityData.defineId(PortalEntity.class, EntityDataSerializers.STRING);
     private static final EntityDataAccessor<String> DATA_UP = SynchedEntityData.defineId(PortalEntity.class, EntityDataSerializers.STRING);
@@ -38,6 +52,7 @@ public final class PortalEntity extends Entity {
     private UUID gunId = new UUID(0L, 0L);
     private boolean primary = true;
     private PortalTarget target;
+    private int age;
 
     public PortalEntity(EntityType<? extends PortalEntity> type, Level level) {
         super(type, level);
@@ -83,6 +98,10 @@ public final class PortalEntity extends Entity {
         return entityData.get(DATA_HUE);
     }
 
+    public int portalAge() {
+        return age;
+    }
+
     public Direction direction() {
         return direction(target().orElse(null), entityData.get(DATA_FACE));
     }
@@ -102,10 +121,17 @@ public final class PortalEntity extends Entity {
     }
 
     public boolean isOpen() {
-        if (!(level() instanceof ServerLevel serverLevel)) {
-            return true;
+        if (level() instanceof ServerLevel serverLevel) {
+            return PortalManager.get(serverLevel.getServer()).end(gunId(), !primary()).isPresent();
         }
-        return findPair(serverLevel) != null;
+
+        if (clientPairLookup != null) {
+            return clientPairLookup.test(gunId(), !primary());
+        }
+
+        AABB search = getBoundingBox().inflate(128.0D);
+        return level().getEntities(PortalModEntities.PORTAL, search, portal ->
+                !portal.isRemoved() && portal.gunId().equals(gunId()) && portal.primary() != primary()).stream().findAny().isPresent();
     }
 
     public Optional<PortalTarget> target() {
@@ -141,6 +167,7 @@ public final class PortalEntity extends Entity {
     @Override
     public void tick() {
         super.tick();
+        age++;
 
         recalculateBoundingBox();
 
@@ -148,39 +175,201 @@ public final class PortalEntity extends Entity {
             return;
         }
 
-        Optional<PortalTarget> current = target();
-        if (current.isEmpty()) {
+        PortalManager manager = PortalManager.get(serverLevel.getServer());
+        if (manager.isRevoked(getUUID())) {
+            manager.clearRevoked(getUUID());
+            discard();
             return;
         }
 
-        PortalEntity pair = findPair(serverLevel);
-        if (pair == null || pair.target().isEmpty()) {
+        Optional<PortalRecord> registered = manager.end(gunId(), primary());
+        if (registered.isPresent() && !registered.get().entityUuid().equals(getUUID())) {
+            // A newer portal was placed for this gun side while this entity was unloaded.
+            discard();
             return;
         }
 
-        Direction face = direction();
-        Vec3 center = position();
-        Vec3 normal = face.getUnitVec3();
-        AABB area = getBoundingBox().inflate(0.35D);
+        if (registered.isEmpty()) {
+            manager.ensureRegistered(serverLevel.getServer(), this);
+        }
 
-        for (Entity entity : serverLevel.getEntities(this, area, entity -> canTeleport(entity))) {
-            Vec3 oldCenter = new Vec3((entity.getBoundingBox().minX + entity.getBoundingBox().maxX) * 0.5D - entity.getDeltaMovement().x(),
-                    (entity.getBoundingBox().minY + entity.getBoundingBox().maxY) * 0.5D - entity.getDeltaMovement().y(),
-                    (entity.getBoundingBox().minZ + entity.getBoundingBox().maxZ) * 0.5D - entity.getDeltaMovement().z());
-            Vec3 centerNow = entity.getBoundingBox().getCenter();
-            double oldPlane = oldCenter.subtract(center).dot(normal);
-            double newPlane = centerNow.subtract(center).dot(normal);
+        if (!survives()) {
+            discard();
+            return;
+        }
 
-            if (oldPlane > -0.25D && newPlane <= 0.08D && entity.getDeltaMovement().dot(normal) <= 0.0D && isPointWithinPortal(centerNow)) {
-                teleportEntity(entity, this, pair);
+        keepDestinationLoaded(serverLevel, manager);
+        teleportEntityIfCrossingPortal(serverLevel, null);
+    }
+
+    /**
+     * Keeps the destination portal's chunks ticking while this end is open so entities can
+     * pass through even when no player is near the far side.
+     */
+    private void keepDestinationLoaded(ServerLevel level, PortalManager manager) {
+        if ((age % 40) != 0) {
+            return;
+        }
+
+        manager.end(gunId(), !primary()).ifPresent(record -> {
+            ServerLevel destinationLevel = manager.level(level.getServer(), record);
+            if (destinationLevel == null) {
+                return;
+            }
+
+            BlockPos destinationPos = BlockPos.containing(record.position());
+            destinationLevel.getChunkSource().addTicketWithRadius(
+                    net.minecraft.server.level.TicketType.PORTAL,
+                    new net.minecraft.world.level.ChunkPos(destinationPos.getX() >> 4, destinationPos.getZ() >> 4),
+                    1
+            );
+        });
+    }
+
+    @Override
+    public void remove(RemovalReason reason) {
+        if (reason.shouldDestroy() && !level().isClientSide() && level() instanceof ServerLevel serverLevel) {
+            PortalManager.get(serverLevel.getServer()).remove(serverLevel.getServer(), gunId(), primary(), getUUID());
+        }
+
+        super.remove(reason);
+    }
+
+    public static void handleEntityMoved(Entity entity) {
+        if (entity instanceof PortalEntity || entity.isRemoved()) {
+            return;
+        }
+
+        if (entity.level() instanceof ServerLevel serverLevel) {
+            teleportEntityIfCrossingPortal(serverLevel, entity);
+        } else {
+            teleportEntityIfCrossingPortalClient(entity);
+        }
+    }
+
+    private static void teleportEntityIfCrossingPortal(ServerLevel serverLevel, Entity movedEntity) {
+        if (movedEntity != null) {
+            if (!canTeleport(movedEntity)) {
+                return;
+            }
+
+            Vec3 centerOffset = movedEntity.getBoundingBox().getCenter().subtract(movedEntity.position());
+            Vec3 oldCenter = new Vec3(movedEntity.xOld, movedEntity.yOld, movedEntity.zOld).add(centerOffset);
+            Vec3 centerNow = movedEntity.getBoundingBox().getCenter();
+            AABB travelBox = new AABB(oldCenter, centerNow).inflate(1.25D);
+
+            for (PortalEntity portal : serverLevel.getEntities(PortalModEntities.PORTAL, travelBox, PortalEntity::isOpen)) {
+                PortalEntity pair = portal.findPair(serverLevel);
+                if (pair != null && portal.tryTeleportEntity(movedEntity, pair, oldCenter, centerNow, centerOffset)) {
+                    return;
+                }
+            }
+            return;
+        }
+
+        for (PortalEntity portal : serverLevel.getEntities(PortalModEntities.PORTAL, portal -> !portal.isRemoved() && portal.isOpen())) {
+            PortalEntity pair = portal.findPair(serverLevel);
+            if (pair == null || pair.target().isEmpty()) {
+                continue;
+            }
+
+            AABB area = portal.getBoundingBox().inflate(1.25D);
+            for (Entity entity : serverLevel.getEntities(portal, area, PortalEntity::canTeleport)) {
+                Vec3 centerOffset = entity.getBoundingBox().getCenter().subtract(entity.position());
+                Vec3 oldCenter = new Vec3(entity.xOld, entity.yOld, entity.zOld).add(centerOffset);
+                Vec3 centerNow = entity.getBoundingBox().getCenter();
+                if (portal.tryTeleportEntity(entity, pair, oldCenter, centerNow, centerOffset)) {
+                    break;
+                }
             }
         }
     }
 
+    private static void teleportEntityIfCrossingPortalClient(Entity movedEntity) {
+        if (!canTeleport(movedEntity)) {
+            return;
+        }
+
+        Vec3 centerOffset = movedEntity.getBoundingBox().getCenter().subtract(movedEntity.position());
+        Vec3 oldCenter = new Vec3(movedEntity.xOld, movedEntity.yOld, movedEntity.zOld).add(centerOffset);
+        Vec3 centerNow = movedEntity.getBoundingBox().getCenter();
+        AABB travelBox = new AABB(oldCenter, centerNow).inflate(1.25D);
+
+        for (PortalEntity portal : movedEntity.level().getEntities(PortalModEntities.PORTAL, travelBox, PortalEntity::isOpen)) {
+            PortalEntity pair = portal.findPairClient();
+            if (pair != null && portal.tryTeleportEntityClient(movedEntity, pair, oldCenter, centerNow, centerOffset)) {
+                return;
+            }
+        }
+    }
+
+    private boolean tryTeleportEntity(Entity entity, PortalEntity pair, Vec3 oldCenter, Vec3 centerNow, Vec3 centerOffset) {
+        Direction face = direction();
+        Vec3 center = position();
+        Vec3 normal = face.getUnitVec3();
+        Crossing crossing = findCrossing(oldCenter, centerNow, center, normal);
+
+        if (crossing != null && entity.getDeltaMovement().dot(normal) <= 0.02D && isTeleportPointWithinPortal(crossing.point())) {
+            teleportEntity(entity, this, pair, centerOffset, crossing.point(), centerNow.subtract(crossing.point()));
+            return true;
+        }
+
+        return false;
+    }
+
+    private boolean tryTeleportEntityClient(Entity entity, PortalEntity pair, Vec3 oldCenter, Vec3 centerNow, Vec3 centerOffset) {
+        Direction face = direction();
+        Vec3 center = position();
+        Vec3 normal = face.getUnitVec3();
+        Crossing crossing = findCrossing(oldCenter, centerNow, center, normal);
+
+        if (crossing != null && entity.getDeltaMovement().dot(normal) <= 0.02D && isTeleportPointWithinPortal(crossing.point())) {
+            teleportEntityClient(entity, this, pair, centerOffset, crossing.point(), centerNow.subtract(crossing.point()));
+            return true;
+        }
+
+        return false;
+    }
+
     private PortalEntity findPair(ServerLevel level) {
+        PortalManager manager = PortalManager.get(level.getServer());
+        PortalRecord record = manager.end(gunId(), !primary()).orElse(null);
+        if (record != null) {
+            PortalEntity resolved = manager.resolve(level.getServer(), record);
+            if (resolved != null) {
+                return resolved;
+            }
+
+            // Destination entity not loaded yet: request its chunk and fall through to a scan.
+            ServerLevel destinationLevel = manager.level(level.getServer(), record);
+            if (destinationLevel != null) {
+                BlockPos destinationPos = BlockPos.containing(record.position());
+                destinationLevel.getChunkSource().addTicketWithRadius(
+                        net.minecraft.server.level.TicketType.PORTAL,
+                        new net.minecraft.world.level.ChunkPos(destinationPos.getX() >> 4, destinationPos.getZ() >> 4),
+                        1
+                );
+            }
+        }
+
         UUID id = gunId();
         boolean otherSide = !primary();
-        return level.getEntities(PortalModEntities.PORTAL, portal ->
+        for (ServerLevel serverLevel : level.getServer().getAllLevels()) {
+            PortalEntity pair = serverLevel.getEntities(PortalModEntities.PORTAL, portal ->
+                    !portal.isRemoved() && portal.gunId().equals(id) && portal.primary() == otherSide).stream().findFirst().orElse(null);
+            if (pair != null) {
+                return pair;
+            }
+        }
+
+        return null;
+    }
+
+    private PortalEntity findPairClient() {
+        UUID id = gunId();
+        boolean otherSide = !primary();
+        AABB search = getBoundingBox().inflate(128.0D);
+        return level().getEntities(PortalModEntities.PORTAL, search, portal ->
                 !portal.isRemoved() && portal.gunId().equals(id) && portal.primary() == otherSide).stream().findFirst().orElse(null);
     }
 
@@ -188,23 +377,153 @@ public final class PortalEntity extends Entity {
         return !(entity instanceof PortalEntity) && entity.canInteractWithLevel() && !entity.isOnPortalCooldown();
     }
 
-    private static void teleportEntity(Entity entity, PortalEntity source, PortalEntity destination) {
+    private static Crossing findCrossing(Vec3 oldCenter, Vec3 newCenter, Vec3 portalCenter, Vec3 normal) {
+        double oldPlane = oldCenter.subtract(portalCenter).dot(normal);
+        double newPlane = newCenter.subtract(portalCenter).dot(normal);
+        if (oldPlane < -0.001D || newPlane > 0.001D) {
+            return null;
+        }
+
+        double denominator = oldPlane - newPlane;
+        if (Math.abs(denominator) < 1.0E-7D) {
+            return null;
+        }
+
+        double progress = oldPlane / denominator;
+        if (progress < 0.0D || progress > 1.0D) {
+            return null;
+        }
+
+        return new Crossing(oldCenter.lerp(newCenter, progress), progress);
+    }
+
+    private static void teleportEntity(Entity entity, PortalEntity source, PortalEntity destination, Vec3 centerOffset, Vec3 crossingPoint, Vec3 remainingMovement) {
         PortalTarget target = destination.target().orElse(null);
         if (target == null || !(destination.level() instanceof ServerLevel serverLevel)) {
             return;
         }
 
-        Vec3 centerDelta = entity.getBoundingBox().getCenter().subtract(entity.position());
-        Vec3 teleportedCenter = source.teleportPoint(entity.getBoundingBox().getCenter(), destination);
-        Vec3 destinationPos = teleportedCenter.subtract(centerDelta).add(destination.direction().getUnitVec3().scale(0.08D));
+        Vec3 teleportedCrossing = source.teleportPoint(crossingPoint, destination);
+        Vec3 teleportedRemaining = source.teleportVector(remainingMovement, destination);
+        Vec3 destinationCenter = teleportedCrossing
+                .add(teleportedRemaining)
+                .add(destination.direction().getUnitVec3().scale(0.28D));
+        Vec3 destinationPos = destinationCenter.subtract(centerOffset);
         Vec3 velocity = source.teleportVector(entity.getDeltaMovement(), destination);
         Vec3 look = source.teleportVector(entity.getLookAngle(), destination).normalize();
         float yaw = (float) (Math.atan2(look.z(), look.x()) * 180.0D / Math.PI) - 90.0F;
         float pitch = (float) (-(Math.atan2(look.y(), Math.sqrt(look.x() * look.x() + look.z() * look.z())) * 180.0D / Math.PI));
 
         entity.teleportTo(serverLevel, destinationPos.x(), destinationPos.y(), destinationPos.z(), java.util.Set.of(), yaw, pitch, true);
+        entity.setOldPosAndRot(destinationPos, yaw, pitch);
         entity.setDeltaMovement(velocity);
-        entity.setPortalCooldown(12);
+        entity.setPortalCooldown(2);
+    }
+
+    private static void teleportEntityClient(Entity entity, PortalEntity source, PortalEntity destination, Vec3 centerOffset, Vec3 crossingPoint, Vec3 remainingMovement) {
+        PortalTarget target = destination.target().orElse(null);
+        if (target == null) {
+            return;
+        }
+
+        Vec3 teleportedCrossing = source.teleportPoint(crossingPoint, destination);
+        Vec3 teleportedRemaining = source.teleportVector(remainingMovement, destination);
+        Vec3 destinationCenter = teleportedCrossing
+                .add(teleportedRemaining)
+                .add(destination.direction().getUnitVec3().scale(0.28D));
+        Vec3 destinationPos = destinationCenter.subtract(centerOffset);
+        Vec3 velocity = source.teleportVector(entity.getDeltaMovement(), destination);
+        Vec3 look = source.teleportVector(entity.getLookAngle(), destination).normalize();
+        float yaw = (float) (Math.atan2(look.z(), look.x()) * 180.0D / Math.PI) - 90.0F;
+        float pitch = (float) (-(Math.atan2(look.y(), Math.sqrt(look.x() * look.x() + look.z() * look.z())) * 180.0D / Math.PI));
+
+        entity.teleportTo(destinationPos.x(), destinationPos.y(), destinationPos.z());
+        entity.setYRot(yaw);
+        entity.setXRot(pitch);
+        entity.setOldPosAndRot(destinationPos, yaw, pitch);
+        entity.setDeltaMovement(velocity);
+        entity.setPortalCooldown(2);
+    }
+
+    /**
+     * Portal funneling, ported from the Forge mod: entities falling fast toward a floor
+     * portal are gently pulled toward its center so they pass through cleanly.
+     */
+    public static Vec3 applyFunneling(Entity entity, Vec3 delta) {
+        final double funnelHeight = 32.0D;
+
+        if (entity instanceof PortalEntity || entity.isSpectator() || entity.isOnPortalCooldown()) {
+            return delta;
+        }
+
+        boolean fastEnough = delta.y() < -0.5D;
+        boolean fallingMore = Math.abs(delta.y()) > Math.abs(delta.x()) && Math.abs(delta.y()) > Math.abs(delta.z());
+        if (!fastEnough || !fallingMore) {
+            return delta;
+        }
+
+        if (entity instanceof Player player) {
+            double downDot = player.getViewVector(1.0F).dot(new Vec3(0.0D, -1.0D, 0.0D));
+            boolean steering = Math.abs(player.getDeltaMovement().x()) + Math.abs(player.getDeltaMovement().z()) > 0.45D;
+            if (downDot < 0.5D || steering) {
+                return delta;
+            }
+        }
+
+        Vec3 entityPos = entity.position();
+        AABB travelBox = entity.getBoundingBox()
+                .expandTowards(delta)
+                .expandTowards(0.0D, -funnelHeight, 0.0D)
+                .inflate(3.0D, 0.0D, 3.0D);
+
+        List<? extends PortalEntity> portals = entity.level().getEntities(PortalModEntities.PORTAL, travelBox, portal ->
+                portal.isOpen() && portal.direction() == Direction.UP && portal.position().y() < entityPos.y());
+
+        if (portals.isEmpty()) {
+            return delta;
+        }
+
+        PortalEntity portal = portals.stream().reduce((first, second) -> {
+            double hDistance1 = horizontalDistanceSqr(first.position(), entityPos);
+            double hDistance2 = horizontalDistanceSqr(second.position(), entityPos);
+            if (hDistance1 == hDistance2) {
+                return (second.position().y() - entityPos.y()) < (first.position().y() - entityPos.y()) ? second : first;
+            }
+            return hDistance2 < hDistance1 ? second : first;
+        }).orElseThrow();
+
+        ClipContext clipContext = new ClipContext(
+                entity.getEyePosition(1.0F),
+                portal.position(),
+                ClipContext.Block.COLLIDER,
+                ClipContext.Fluid.ANY,
+                entity
+        );
+        if (entity.level().clip(clipContext).getType() != HitResult.Type.MISS) {
+            return delta;
+        }
+
+        Vec3 relative = entityPos.subtract(portal.position());
+        Vec3 flatRelative = new Vec3(relative.x(), 0.0D, relative.z());
+        double coneRadius = relative.y() * 0.2D;
+        boolean inCone = relative.y() < funnelHeight && relative.y() > 0.0D && flatRelative.length() < coneRadius;
+        if (!inCone) {
+            return delta;
+        }
+
+        double currentHeight = relative.y();
+        double startHeight = Math.min(currentHeight + entity.fallDistance, funnelHeight);
+        double progress = 1.0D - currentHeight / startHeight;
+        double distanceFactor = 1.0D - Math.exp(-2.0D * progress);
+        Vec3 funnelAcceleration = flatRelative.scale(-distanceFactor);
+
+        return delta.add(funnelAcceleration);
+    }
+
+    private static double horizontalDistanceSqr(Vec3 a, Vec3 b) {
+        double dx = a.x() - b.x();
+        double dz = a.z() - b.z();
+        return dx * dx + dz * dz;
     }
 
     public Vec3 teleportPoint(Vec3 point, PortalEntity destination) {
@@ -240,6 +559,13 @@ public final class PortalEntity extends Entity {
         return Math.abs(localX) <= WIDTH * 0.5D + 0.35D && Math.abs(localY) <= HEIGHT * 0.5D + 0.35D;
     }
 
+    private boolean isTeleportPointWithinPortal(Vec3 point) {
+        Vec3 offset = point.subtract(position());
+        double localX = offset.dot(right().getUnitVec3());
+        double localY = offset.dot(up().getUnitVec3());
+        return Math.abs(localX) <= WIDTH * 0.5D + 0.03D && Math.abs(localY) <= HEIGHT * 0.5D + 0.03D;
+    }
+
     public boolean isBlockBehindPortal(BlockPos pos) {
         Vec3 blockCenter = Vec3.atCenterOf(pos);
         Vec3 offset = blockCenter.subtract(position());
@@ -252,6 +578,33 @@ public final class PortalEntity extends Entity {
                 && Math.abs(localY) <= HEIGHT * 0.5D + 0.55D;
     }
 
+    private boolean survives() {
+        Optional<PortalTarget> current = target();
+        if (current.isEmpty()) {
+            return false;
+        }
+
+        Direction face = direction();
+        Direction up = up();
+        Direction right = right();
+        Vec3 center = position().add(face.getUnitVec3().scale(-0.01D));
+        BlockPos[] support = new BlockPos[] {
+                BlockPos.containing(center.add(right.getUnitVec3().scale(-0.49D)).add(up.getUnitVec3().scale(-0.99D))),
+                BlockPos.containing(center.add(right.getUnitVec3().scale(0.49D)).add(up.getUnitVec3().scale(-0.99D))),
+                BlockPos.containing(center.add(right.getUnitVec3().scale(-0.49D)).add(up.getUnitVec3().scale(0.99D))),
+                BlockPos.containing(center.add(right.getUnitVec3().scale(0.49D)).add(up.getUnitVec3().scale(0.99D)))
+        };
+
+        for (BlockPos pos : support) {
+            net.minecraft.world.level.block.state.BlockState state = level().getBlockState(pos);
+            if (!net.portalmod.fabric.portal.PortalPlacementService.isPortalable(level(), state)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public static boolean shouldSkipCollision(BlockGetter blockGetter, BlockPos pos, net.minecraft.world.phys.shapes.CollisionContext context) {
         if (!(blockGetter instanceof Level level) || !(context instanceof net.minecraft.world.phys.shapes.EntityCollisionContext entityContext)) {
             return false;
@@ -262,15 +615,30 @@ public final class PortalEntity extends Entity {
             return false;
         }
 
-        AABB travelBox = entity.getBoundingBox().expandTowards(entity.getDeltaMovement()).inflate(0.25D);
+        AABB travelBox = entity.getBoundingBox().expandTowards(entity.getDeltaMovement()).inflate(0.35D);
         AABB searchBox = travelBox.inflate(2.0D);
         return level.getEntities(PortalModEntities.PORTAL, searchBox, portal ->
-                portal.isOpen()
-                        && portal.getBoundingBox().inflate(0.5D).intersects(travelBox)
-                        && portal.isPointWithinPortal(entity.getBoundingBox().getCenter())
-                        && portal.isBlockBehindPortal(pos)
-                        && entity.getDeltaMovement().dot(portal.direction().getUnitVec3()) <= 0.05D
+                portal.shouldSkipCollisionFor(entity, pos, travelBox)
         ).stream().findAny().isPresent();
+    }
+
+    private boolean shouldSkipCollisionFor(Entity entity, BlockPos pos, AABB travelBox) {
+        if (!isOpen() || !getBoundingBox().inflate(0.75D).intersects(travelBox) || !isBlockBehindPortal(pos)) {
+            return false;
+        }
+
+        Vec3 normal = direction().getUnitVec3();
+        boolean movingIntoPortal = entity.getDeltaMovement().dot(normal) <= 0.05D;
+        boolean exitingPortal = entity.isOnPortalCooldown() && entity.getDeltaMovement().dot(normal) >= -0.15D;
+        if (!movingIntoPortal && !exitingPortal) {
+            return false;
+        }
+
+        AABB entityBox = entity.getBoundingBox();
+        return isPointWithinPortal(entityBox.getCenter())
+                || isPointWithinPortal(entity.getEyePosition())
+                || isPointWithinPortal(new Vec3(entityBox.minX, entityBox.getCenter().y(), entityBox.minZ))
+                || isPointWithinPortal(new Vec3(entityBox.maxX, entityBox.getCenter().y(), entityBox.maxZ));
     }
 
     private void recalculateBoundingBox() {
@@ -295,6 +663,9 @@ public final class PortalEntity extends Entity {
         }
     }
 
+    private record Crossing(Vec3 point, double progress) {
+    }
+
     private static Direction direction(PortalTarget target) {
         return direction(target, "north");
     }
@@ -308,6 +679,7 @@ public final class PortalEntity extends Entity {
     protected void readAdditionalSaveData(ValueInput input) {
         gunId = new UUID(input.getLongOr("gun_most", 0L), input.getLongOr("gun_least", 0L));
         primary = input.getBooleanOr("primary", true);
+        age = input.getIntOr("age", 0);
         Direction up = Direction.byName(input.getStringOr("up", "up"));
         String hue = input.getStringOr("hue", primary ? "blue" : "orange");
         target = new PortalTarget(
@@ -329,6 +701,7 @@ public final class PortalEntity extends Entity {
         output.putLong("gun_most", id.getMostSignificantBits());
         output.putLong("gun_least", id.getLeastSignificantBits());
         output.putBoolean("primary", primary());
+        output.putInt("age", age);
 
         Optional<PortalTarget> currentTarget = target();
         if (currentTarget.isPresent()) {

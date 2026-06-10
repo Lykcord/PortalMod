@@ -1,0 +1,6 @@
+{
+  "values": [
+    { "id": "portalmod:repulsion_gel", "required": false },
+    { "id": "portalmod:propulsion_gel", "required": false }
+  ]
+}
