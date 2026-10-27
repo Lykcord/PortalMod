@@ -1,0 +1,25 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "condition": {
+        "type": "minecraft:survives_explosion"
+      },
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "condition": {
+            "type": "minecraft:match_block",
+            "blocks": "portalmod:cube_dropper",
+            "state": {
+              "corner": "up_left",
+              "half": "upper"
+            }
+          },
+          "name": "portalmod:cube_dropper"
+        }
+      ],
+      "rolls": 1
+    }
+  ]
+}

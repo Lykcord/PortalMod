@@ -1,0 +1,13 @@
+{
+  "values": [
+    "#portalmod:lunecast",
+    "#portalmod:blackplate",
+    "#portalmod:iron_frames",
+    "portalmod:platform_beam",
+    "portalmod:rusty_platform_beam",
+    "portalmod:wire_mesh",
+    "portalmod:wire_mesh_block",
+    "portalmod:chamber_lights",
+    "portalmod:goo_bucket"
+  ]
+}

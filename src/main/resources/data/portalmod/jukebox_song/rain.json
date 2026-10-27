@@ -1,0 +1,6 @@
+{
+  "comparator_output": 1,
+  "description": { "translate": "item.portalmod.music_disc_rain.desc" },
+  "length_in_seconds": 184.649,
+  "sound_event": "portalmod:disc.rain"
+}

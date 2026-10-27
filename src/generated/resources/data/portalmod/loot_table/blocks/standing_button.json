@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "condition": {
+        "type": "minecraft:survives_explosion"
+      },
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "condition": {
+            "type": "minecraft:match_block",
+            "blocks": "portalmod:standing_button",
+            "state": {
+              "half": "lower"
+            }
+          },
+          "name": "portalmod:standing_button"
+        }
+      ],
+      "rolls": 1
+    }
+  ]
+}

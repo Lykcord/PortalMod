@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "condition": {
+        "type": "minecraft:survives_explosion"
+      },
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "condition": {
+            "type": "minecraft:match_block",
+            "blocks": "portalmod:chamber_lights",
+            "state": {
+              "half": "lower"
+            }
+          },
+          "name": "portalmod:chamber_lights"
+        }
+      ],
+      "rolls": 1
+    }
+  ]
+}

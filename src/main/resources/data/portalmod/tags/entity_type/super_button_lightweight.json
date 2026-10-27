@@ -1,0 +1,15 @@
+{
+  "values": [
+    "minecraft:bat",
+    "minecraft:bee",
+    "minecraft:cat",
+    "minecraft:chicken",
+    "minecraft:cod",
+    "minecraft:endermite",
+    "minecraft:ghast",
+    "minecraft:parrot",
+    "minecraft:vex",
+
+    "portalmod:turret"
+  ]
+}

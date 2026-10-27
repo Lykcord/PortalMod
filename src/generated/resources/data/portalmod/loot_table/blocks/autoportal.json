@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "condition": {
+        "type": "minecraft:survives_explosion"
+      },
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "condition": {
+            "type": "minecraft:match_block",
+            "blocks": "portalmod:autoportal",
+            "state": {
+              "corner": "up_left"
+            }
+          },
+          "name": "portalmod:autoportal"
+        }
+      ],
+      "rolls": 1
+    }
+  ]
+}

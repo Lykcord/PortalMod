@@ -1,0 +1,25 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "condition": {
+        "type": "minecraft:survives_explosion"
+      },
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "condition": {
+            "type": "minecraft:match_block",
+            "blocks": "portalmod:chamber_door",
+            "state": {
+              "half": "lower",
+              "side": "left"
+            }
+          },
+          "name": "portalmod:chamber_door"
+        }
+      ],
+      "rolls": 1
+    }
+  ]
+}

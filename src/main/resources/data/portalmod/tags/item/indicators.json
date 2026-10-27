@@ -1,0 +1,8 @@
+{
+  "values": [
+    "portalmod:antline_indicator",
+    "portalmod:antline_timer",
+    "portalmod:antline_decoder",
+    "portalmod:antline_encoder"
+  ]
+}
