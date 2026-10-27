@@ -1,3 +1,8 @@
+# Version 1.3.1+26.3-fabric.9
+
+- Fixed `/kill` being rejected by the shared damage filter for turrets, cubes, and Gabe.
+- Added command regressions for protected test elements and carried turrets while retaining ordinary damage protection.
+
 # Version 1.3.1+26.3-fabric.8
 
 - Restored the Forest Cake and End radio advancements for normal block interactions on 26.3.

@@ -79,6 +79,36 @@ import java.util.List;
 import java.util.UUID;
 
 public class PortalServerTest {
+    @GameTest
+    public void killCommandRemovesProtectedTestElements(GameTestHelper test) {
+        var level = test.getLevel();
+        var server = level.getServer();
+        for (var type :
+                List.of(
+                        EntityInit.TURRET.get(),
+                        EntityInit.STORAGE_CUBE.get(),
+                        EntityInit.COMPANION_CUBE.get(),
+                        EntityInit.VINTAGE_CUBE.get(),
+                        EntityInit.GABE.get())) {
+            var entity = test.spawn(type, 3, 3, 3);
+            entity.setPermanentlyInvulnerable(true);
+            test.assertTrue(
+                    !entity.hurtServer(level, entity.damageSources().generic(), Float.MAX_VALUE),
+                    "Ordinary damage must retain the original test-element protection: " + type);
+            server.getCommands()
+                    .performPrefixedCommand(server.createCommandSourceStack(), "kill " + entity.getStringUUID());
+            test.assertTrue(entity.isRemoved(), "The actual kill command must remove " + type);
+        }
+        var holder = test.makeMockPlayer(GameType.SURVIVAL);
+        var held = test.spawn(EntityInit.TURRET.get(), 3, 3, 3);
+        test.assertTrue(held.pickUp(holder), "The command must also work on a carried turret");
+        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "kill " + held.getStringUUID());
+        test.assertTrue(
+                held.isRemoved() && holder.getPassengers().isEmpty(),
+                "Killing a held turret must also detach it from the holder");
+        test.succeed();
+    }
+
     @GameTest(maxTicks = 110)
     public void turretDamageCadenceMatchesOriginalWithoutExtraHurtCooldown(GameTestHelper test) {
         for (int x = 1; x <= 5; x++) {
