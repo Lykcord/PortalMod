@@ -9,6 +9,7 @@
     ],
     "fabric-client-gametest": [
       "net.portalmod.FirstPersonPoseClientTest",
+      "net.portalmod.AntlineFacesClientTest",
       "net.portalmod.PortalBoundaryVisibilityClientTest",
       "net.portalmod.PortalOptionsLayoutClientTest",
       "net.portalmod.TurretDamageClientTest",
