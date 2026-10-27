@@ -129,6 +129,15 @@ if (project.hasProperty('walkCapture')) {
     }
 }
 
+if (project.hasProperty('antlineMemory')) {
+    loom.runs.named('clientGameTest') {
+        vmArg '-Dportalmod.antlineMemory=true'
+        vmArg "-Dportalmod.antlineMemoryPower=${project.findProperty('antlineMemoryPower') ?: 'button'}"
+        vmArg '-Xmx1G'
+        vmArg "-Dportalmod.antlineMemoryOutput=${file('build/reports/antline-memory/' + (project.hasProperty('performanceMods') ? 'performance' : 'vanilla') + '-' + (project.findProperty('antlineMemoryPower') ?: 'button')).absolutePath}"
+    }
+}
+
 // Select client tests without editing the source manifest.
 tasks.named('processGametestResources') {
     inputs.property('clientTest', project.findProperty('clientTest') ?: '')

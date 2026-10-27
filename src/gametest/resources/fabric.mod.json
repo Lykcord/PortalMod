@@ -11,6 +11,7 @@
     "fabric-client-gametest": [
       "net.portalmod.FirstPersonPoseClientTest",
       "net.portalmod.AntlineFacesClientTest",
+      "net.portalmod.AntlineMemoryClientTest",
       "net.portalmod.PortalCloudsClientTest",
       "net.portalmod.PortalBackToBackClientTest",
       "net.portalmod.PortalBoundaryVisibilityClientTest",
