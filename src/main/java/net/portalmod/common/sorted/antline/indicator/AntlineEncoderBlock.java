@@ -46,16 +46,24 @@ public class AntlineEncoderBlock extends AntlineIcon implements AntlineActivator
     @Override
     public void neighborChanged(
             BlockState state, Level world, BlockPos pos, Block block, Orientation orientation, boolean b) {
-        if (world instanceof ServerLevel server && world.hasNeighborSignal(pos) != state.getValue(POWERED)) {
-            // Break feedback through decoders at the tick boundary.
-            server.scheduleTick(pos, this, 1);
+        if (world instanceof ServerLevel server) {
+            updatePower(state, server, pos);
         }
     }
 
     @Override
     protected void tick(BlockState state, ServerLevel world, BlockPos pos, RandomSource random) {
+        updatePower(state, world, pos);
+    }
+
+    private void updatePower(BlockState state, ServerLevel world, BlockPos pos) {
+        if (world.getBlockTicks().hasScheduledTick(pos, this)) {
+            return;
+        }
         boolean powered = world.hasNeighborSignal(pos);
         if (powered != state.getValue(POWERED)) {
+            // Keep the first response immediate; defer further feedback to the next tick.
+            world.scheduleTick(pos, this, 1);
             world.setBlockAndUpdate(pos, state.setValue(POWERED, powered));
         }
     }

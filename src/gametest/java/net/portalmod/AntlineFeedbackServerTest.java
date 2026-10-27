@@ -16,6 +16,7 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.portalmod.common.sorted.antline.AntlineBlock;
 import net.portalmod.common.sorted.antline.AntlineTileEntity;
+import net.portalmod.common.sorted.antline.indicator.AntlineDecoderBlock;
 import net.portalmod.common.sorted.antline.indicator.AntlineEncoderBlock;
 import net.portalmod.common.sorted.antline.indicator.AntlineOutput;
 import net.portalmod.common.sorted.button.StandingButtonBlock;
@@ -24,9 +25,18 @@ import net.portalmod.core.init.ItemInit;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 public final class AntlineFeedbackServerTest {
+    private record Loop(
+            BlockPos indicator,
+            BlockPos decoder,
+            BlockPos encoder,
+            BlockPos button,
+            List<BlockPos> wires,
+            AntlineFeedbackProbe.Watch watch) {}
+
     @GameTest(maxTicks = 100)
     public void indicatorDecoderEncoderLoopSettles(GameTestHelper test) {
         checkLoop(test, false);
@@ -35,6 +45,83 @@ public final class AntlineFeedbackServerTest {
     @GameTest(maxTicks = 100)
     public void invertedIndicatorDecoderEncoderClockStaysBounded(GameTestHelper test) {
         checkLoop(test, true);
+    }
+
+    @GameTest(maxTicks = 20)
+    public void encoderFollowsIndependentInputImmediately(GameTestHelper test) {
+        var level = test.getLevel();
+        var encoder = test.absolutePos(new BlockPos(3, 2, 3));
+        test.setBlock(new BlockPos(3, 1, 3), Blocks.STONE);
+        level.setBlockAndUpdate(encoder, BlockInit.ANTLINE_ENCODER.get().defaultBlockState());
+        level.setBlockAndUpdate(encoder.north(), Blocks.REDSTONE_BLOCK.defaultBlockState());
+        test.assertTrue(
+                level.getBlockState(encoder).getValue(AntlineEncoderBlock.POWERED),
+                "Original encoder responds immediately to rising redstone power");
+        test.runAfterDelay(
+                3,
+                () -> {
+                    level.setBlockAndUpdate(encoder.north(), Blocks.AIR.defaultBlockState());
+                    test.assertTrue(
+                            !level.getBlockState(encoder).getValue(AntlineEncoderBlock.POWERED),
+                            "Original encoder responds immediately when its redstone input stops");
+                    test.succeed();
+                });
+    }
+
+    @GameTest(maxTicks = 220)
+    public void normalButtonFeedbackMatchesOriginal(GameTestHelper test) {
+        // Recorded with upstream f117cc32 on Forge 1.16.5.
+        var level = test.getLevel();
+        var loop = createLoop(test, false);
+        test.runAfterDelay(
+                20,
+                () -> {
+                    assertLoopPower(test, loop, false);
+                    var button = loop.button().above();
+                    var state = level.getBlockState(button);
+                    ((StandingButtonBlock) state.getBlock()).press(state, level, button);
+                    assertLoopPower(test, loop, true);
+                    test.runAfterDelay(
+                            25,
+                            () -> {
+                                test.assertTrue(
+                                        !level.getBlockState(button).getValue(StandingButtonBlock.ACTIVE),
+                                        "The standing button must release after its original 20-tick pulse");
+                                assertLoopPower(test, loop, true);
+                                long packets = loop.watch().packets();
+                                test.runAfterDelay(
+                                        150,
+                                        () -> {
+                                            try (var watch = loop.watch()) {
+                                                assertLoopPower(test, loop, true);
+                                                test.assertTrue(
+                                                        watch.packets() == packets,
+                                                        "Original normal-mode feedback remains powered without repeated wire changes");
+                                                level.destroyBlock(loop.encoder(), false);
+                                                test.succeed();
+                                            }
+                                        });
+                            });
+                });
+    }
+
+    private static void assertLoopPower(GameTestHelper test, Loop loop, boolean powered) {
+        var level = test.getLevel();
+        test.assertTrue(
+                level.getBlockState(loop.indicator()).getValue(AntlineOutput.ACTIVATED) == powered,
+                "Indicator must match the original signal state");
+        test.assertTrue(
+                level.getBlockState(loop.decoder()).getValue(AntlineDecoderBlock.ACTIVATED) == powered,
+                "Decoder must match the original signal state");
+        test.assertTrue(
+                level.getBlockState(loop.encoder()).getValue(AntlineEncoderBlock.POWERED) == powered,
+                "Encoder must respond in the same update as the original");
+        for (var pos : loop.wires()) {
+            test.assertTrue(
+                    ((AntlineTileEntity) level.getBlockEntity(pos)).getSideMap().get(Direction.DOWN).isActive()
+                            == powered,
+                    "Every connected wire must match the original signal state");
+        }
     }
 
     @GameTest(maxTicks = 40)
@@ -91,7 +178,7 @@ public final class AntlineFeedbackServerTest {
                 });
     }
 
-    private static void checkLoop(GameTestHelper test, boolean reversed) {
+    private static Loop createLoop(GameTestHelper test, boolean reversed) {
         var level = test.getLevel();
         var indicator = test.absolutePos(new BlockPos(2, 2, 2));
         var decoder = indicator.east();
@@ -161,15 +248,25 @@ public final class AntlineFeedbackServerTest {
                                                             player, InteractionHand.MAIN_HAND, buttonStack, hit))
                                             .consumesAction(),
                                     "Standing button must connect to the third branch of the loop");
-                            for (int repeat = 0; repeat < 4; repeat++) {
-                                level.setBlockAndUpdate(encoder.north(), Blocks.REDSTONE_BLOCK.defaultBlockState());
-                                level.setBlockAndUpdate(encoder.north(), Blocks.AIR.defaultBlockState());
-                            }
-                            level.setBlockAndUpdate(encoder.north(), Blocks.REDSTONE_BLOCK.defaultBlockState());
                         });
         test.assertTrue(
                 updates > 0 && updates < 8192,
                 "Closed circuit must settle without repeated device notifications: " + updates);
+        return new Loop(indicator, decoder, encoder, button, List.copyOf(loopWires), watch);
+    }
+
+    private static void checkLoop(GameTestHelper test, boolean reversed) {
+        var level = test.getLevel();
+        var loop = createLoop(test, reversed);
+        var encoder = loop.encoder();
+        var button = loop.button();
+        var loopWires = loop.wires();
+        var watch = loop.watch();
+        for (int repeat = 0; repeat < 4; repeat++) {
+            level.setBlockAndUpdate(encoder.north(), Blocks.REDSTONE_BLOCK.defaultBlockState());
+            level.setBlockAndUpdate(encoder.north(), Blocks.AIR.defaultBlockState());
+        }
+        level.setBlockAndUpdate(encoder.north(), Blocks.REDSTONE_BLOCK.defaultBlockState());
         var settledPackets = new long[1];
         test.runAfterDelay(10, () -> settledPackets[0] = watch.packets());
         test.runAfterDelay(
