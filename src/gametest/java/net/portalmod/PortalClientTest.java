@@ -285,6 +285,8 @@ public class PortalClientTest implements FabricClientGameTest {
             context.waitTicks(5);
             context.takeScreenshot("portalmod-skin-selector");
             context.setScreen(() -> null);
+            float walkBeforePortal =
+                    context.computeOnClient(client -> client.player.avatarState().getInterpolatedWalkDistance(1));
             context.getInput().holdKey(options -> options.keyUp);
             try {
                 context.waitFor(client -> ((ITeleportable) client.player).hasLastUsedPortal(), 100);
@@ -292,6 +294,11 @@ public class PortalClientTest implements FabricClientGameTest {
                 context.getInput().releaseKey(options -> options.keyUp);
             }
             context.waitTicks(5);
+            float walkAfterPortal =
+                    context.computeOnClient(client -> client.player.avatarState().getInterpolatedWalkDistance(1));
+            if (walkAfterPortal - walkBeforePortal > 4) {
+                throw new AssertionError("Portal displacement was counted as footsteps, causing a view-bob shake");
+            }
             var clientPosition = context.computeOnClient(client -> client.player.position());
             world.getServer()
                     .runOnServer(
