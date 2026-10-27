@@ -30,11 +30,14 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
+
+import javax.imageio.ImageIO;
 
 public final class AntlineMemoryClientTest implements FabricClientGameTest {
     private record Sample(
@@ -197,6 +200,9 @@ public final class AntlineMemoryClientTest implements FabricClientGameTest {
                                                 .getBlockState(encoder)
                                                 .getValue(AntlineEncoderBlock.POWERED),
                                 40);
+                        if (clock) {
+                            checkClockFrames(context, output);
+                        }
                     }
                     if (phase == 6) {
                         server.runOnServer(
@@ -308,6 +314,39 @@ public final class AntlineMemoryClientTest implements FabricClientGameTest {
             throw new AssertionError("Cannot save antline memory profile", error);
         } finally {
             context.runOnClient(client -> client.options.framerateLimit().set(previousFps));
+        }
+    }
+
+    private static void checkClockFrames(ClientGameTestContext context, Path output) throws IOException {
+        var directory = output.resolve("clock-frames");
+        Files.createDirectories(directory);
+        int cyanFrames = 0;
+        int amberFrames = 0;
+        for (int frame = 0; frame < 32; frame++) {
+            context.waitTicks(1);
+            var screenshot = context.takeScreenshot("antline-clock-" + frame);
+            Files.copy(screenshot, directory.resolve(frame + ".png"), StandardCopyOption.REPLACE_EXISTING);
+            var image = ImageIO.read(screenshot.toFile());
+            int cyan = 0;
+            int amber = 0;
+            // The front wire is below the crosshair, clear of the hand and hotbar.
+            for (int y = image.getHeight() / 2; y < image.getHeight() * 55 / 100; y++) {
+                for (int x = image.getWidth() / 4; x < image.getWidth() * 7 / 10; x++) {
+                    int color = image.getRGB(x, y);
+                    int red = color >> 16 & 255;
+                    int green = color >> 8 & 255;
+                    int blue = color & 255;
+                    if (blue > 100 && green > red * 1.4 && blue > red * 1.5) cyan++;
+                    if (red > 100 && green > 80 && red > blue * 1.5 && green > blue * 1.3) amber++;
+                }
+            }
+            if (cyan > 20) cyanFrames++;
+            if (amber > 20) amberFrames++;
+        }
+        System.out.println("Visible clock frames: cyan=" + cyanFrames + ", amber=" + amberFrames);
+        if (cyanFrames == 0 || amberFrames == 0) {
+            throw new AssertionError(
+                    "The client must render both clock states: cyan=" + cyanFrames + ", amber=" + amberFrames);
         }
     }
 
