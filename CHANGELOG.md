@@ -1,3 +1,7 @@
+# Version 1.3.1+26.3-fabric.7
+
+- Hid Gabe from the creative inventory and creative search, matching the original mod.
+
 # Version 1.3.1+26.3-fabric.6
 
 - Restored the original encoder's immediate response to ordinary redstone changes while deferring repeated feedback across ticks.

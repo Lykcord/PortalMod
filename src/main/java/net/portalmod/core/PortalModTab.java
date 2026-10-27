@@ -28,6 +28,9 @@ public final class PortalModTab {
                                                 .forEach(
                                                         entry -> {
                                                             var item = entry.get();
+                                                            if (item == ItemInit.GABE.get()) {
+                                                                return;
+                                                            }
                                                             output.accept(item);
                                                             if (item instanceof PortalGun) {
                                                                 output.accept(
