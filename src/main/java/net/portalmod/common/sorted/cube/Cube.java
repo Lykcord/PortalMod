@@ -1,29 +1,33 @@
 package net.portalmod.common.sorted.cube;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.MobEntity;
-import net.minecraft.entity.ai.attributes.AttributeModifierMap;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.entity.player.ServerPlayerEntity;
-import net.minecraft.inventory.EquipmentSlotType;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.*;
-import net.minecraft.util.math.AxisAlignedBB;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.world.World;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.Mth;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySelector;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.HumanoidArm;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import net.portalmod.common.entities.TestElementEntity;
 import net.portalmod.common.sorted.button.SuperButtonBlock;
 import net.portalmod.core.init.BlockInit;
 import net.portalmod.core.init.CriteriaTriggerInit;
+import net.portalmod.core.init.DamageTypeInit;
 import net.portalmod.core.init.EntityInit;
 import net.portalmod.core.init.SoundInit;
 import net.portalmod.core.util.ModUtil;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class Cube extends TestElementEntity {
@@ -33,21 +37,16 @@ public class Cube extends TestElementEntity {
     public boolean wasOnGround = true;
     public float wasVerticalSpeed = 0;
 
-    public Cube(EntityType<? extends LivingEntity> entityType, World level) {
+    public Cube(EntityType<? extends LivingEntity> entityType, Level level) {
         super(entityType, level);
     }
-    
+
     public static DamageSource cube(LivingEntity entity) {
-        return new EntityDamageSource("cube", entity);
+        return entity.damageSources().source(DamageTypeInit.CUBE, entity);
     }
 
-    public static AttributeModifierMap.MutableAttribute createAttributes() {
-        return MobEntity.createMobAttributes();
-    }
-
-    @Override
-    public void remove() {
-        super.remove();
+    public static AttributeSupplier.Builder createAttributes() {
+        return Mob.createMobAttributes();
     }
 
     @Override
@@ -56,15 +55,13 @@ public class Cube extends TestElementEntity {
     }
 
     @Override
-    public boolean canBeCollidedWith() {
+    public boolean canBeCollidedWith(Entity entity) {
         return true;
     }
 
     @Override
     public boolean canCollideWith(Entity entity) {
-        return entity instanceof PlayerEntity
-                && !entity.hasPassenger(this)
-                && super.canCollideWith(entity);
+        return entity instanceof Player && !entity.hasPassenger(this) && super.canCollideWith(entity);
     }
 
     @Override
@@ -78,25 +75,21 @@ public class Cube extends TestElementEntity {
         if (!this.isFizzling()) {
 
             // todo only super button
-            if (!this.level.isClientSide && this.isPassenger() && this.isActive() && !this.oldActive) {
-                CriteriaTriggerInit.CUBE_ON_BUTTON.get().trigger((ServerPlayerEntity) this.getVehicle());
+            if (!this.level().isClientSide() && this.isPassenger() && this.isActive() && !this.oldActive) {
+                CriteriaTriggerInit.CUBE_ON_BUTTON.get().trigger((ServerPlayer) this.getVehicle());
             }
 
             this.oldActive = isActive();
 
-//        System.out.println(this.position());
-//        System.out.println(this.getDeltaMovement());
-//        System.out.println(((ITeleportable)this).getLastUsedPortal());
-
-//        System.out.println((this.level.isClientSide ? "c " : "") + this.position().equals(new Vector3d(this.xo, this.yo, this.zo)));
+            //        System.out.println((this.level.isClientSide() ? "c " : "") + this.position().equals(new
 
             // todo better damage system
 
-            AxisAlignedBB aabb = getBoundingBox().inflate(1.0E-7D);
-            List<Entity> entities = this.level.getEntities(this, aabb.inflate(1.0E-1D));
+            AABB aabb = getBoundingBox().inflate(1.0E-7D);
+            List<Entity> entities = this.level().getEntities(this, aabb.inflate(1.0E-1D));
 
             for (Entity entity : entities) {
-                AxisAlignedBB entityAABB = entity.getBoundingBox();
+                AABB entityAABB = entity.getBoundingBox();
                 double x0 = (aabb.maxX - entityAABB.minX);
                 double x1 = -(aabb.minX - entityAABB.maxX);
                 double y1 = -(aabb.minY - entityAABB.maxY);
@@ -106,30 +99,49 @@ public class Cube extends TestElementEntity {
                 double x = Math.min(x0, x1);
                 double z = Math.min(z0, z1);
 
-                if (y1 < x && y1 < z && getDeltaMovement().y > -.1 && oldDeltaY < -0.5f && entity instanceof LivingEntity) {
+                if (y1 < x
+                        && y1 < z
+                        && getDeltaMovement().y > -.1
+                        && oldDeltaY < -0.5f
+                        && entity instanceof LivingEntity) {
                     DamageSource damageSource = cube(this);
                     float damage = (float) oldDeltaY * -3;
-                    ((LivingEntity) entity).getCombatTracker().recordDamage(damageSource, ((LivingEntity) entity).getHealth(), damage);
-                    entity.hurt(damageSource, damage);
+                    if (this.level() instanceof ServerLevel server) {
+                        entity.hurtServer(server, damageSource, damage);
+                    }
                 }
             }
 
-            if (this.isOnGround() && !this.wasOnGround && oldDeltaY < -0.3) {
-                float volume = MathHelper.clamp((float) -this.oldDeltaY, 0, 1);
-                this.level.playSound(null, this.position().x, this.position().y, this.position().z, SoundInit.CUBE_HIT.get(), SoundCategory.NEUTRAL, volume, ModUtil.randomSoundPitch());
+            if (this.onGround() && !this.wasOnGround && oldDeltaY < -0.3) {
+                float volume = Mth.clamp((float) -this.oldDeltaY, 0, 1);
+                this.level()
+                        .playSound(
+                                null,
+                                this.position().x,
+                                this.position().y,
+                                this.position().z,
+                                SoundInit.CUBE_HIT.get(),
+                                SoundSource.NEUTRAL,
+                                volume,
+                                ModUtil.randomSoundPitch());
             }
 
-            this.wasOnGround = this.isOnGround();
+            this.wasOnGround = this.onGround();
 
             // push when entity near (copied from BoatEntity)
-            this.checkInsideBlocks();
-            List<Entity> list = this.level.getEntities(this, this.getBoundingBox().inflate(0.05, -0.01, 0.05), EntityPredicates.pushableBy(this));
-            for(Entity entity : list) {
+            this.applyEffectsFromBlocks();
+            List<Entity> list =
+                    this.level()
+                            .getEntities(
+                                    this,
+                                    this.getBoundingBox().inflate(0.05, -0.01, 0.05),
+                                    EntitySelector.pushableBy(this));
+            for (Entity entity : list) {
                 this.push(entity);
             }
         }
 
-        this.yBodyRot = this.yRot;
+        this.yBodyRot = this.getYRot();
 
         oldDeltaY = getDeltaMovement().y;
 
@@ -137,7 +149,16 @@ public class Cube extends TestElementEntity {
     }
 
     public void onSpawnedByPlayer() {
-        this.level.playSound(null, this.position().x, this.position().y, this.position().z, SoundInit.CUBE_HIT.get(), SoundCategory.NEUTRAL, 0.5f, ModUtil.randomSoundPitch());
+        this.level()
+                .playSound(
+                        null,
+                        this.position().x,
+                        this.position().y,
+                        this.position().z,
+                        SoundInit.CUBE_HIT.get(),
+                        SoundSource.NEUTRAL,
+                        0.5f,
+                        ModUtil.randomSoundPitch());
     }
 
     @Override
@@ -146,13 +167,15 @@ public class Cube extends TestElementEntity {
     }
 
     public boolean isActive() {
-        for(int z = -1; z <= 1; z++) {
-            for(int y = -1; y <= 1; y++) {
-                for(int x = -1; x <= 1; x++) {
+        for (int z = -1; z <= 1; z++) {
+            for (int y = -1; y <= 1; y++) {
+                for (int x = -1; x <= 1; x++) {
                     BlockPos pos = new BlockPos(x, y, z).offset(this.blockPosition());
-                    BlockState state = this.level.getBlockState(pos);
-                    if(state.getBlock() == BlockInit.SUPER_BUTTON.get() && state.getValue(SuperButtonBlock.ACTIVE)) {
-                        if(((SuperButtonBlock)BlockInit.SUPER_BUTTON.get()).getTrigger(state, pos).intersects(this.getBoundingBox())) {
+                    BlockState state = this.level().getBlockState(pos);
+                    if (state.getBlock() == BlockInit.SUPER_BUTTON.get() && state.getValue(SuperButtonBlock.ACTIVE)) {
+                        if (((SuperButtonBlock) BlockInit.SUPER_BUTTON.get())
+                                .getTrigger(state, pos)
+                                .intersects(this.getBoundingBox())) {
                             return true;
                         }
                     }
@@ -163,25 +186,20 @@ public class Cube extends TestElementEntity {
     }
 
     @Override
-    protected int calculateFallDamage(float f1, float f2) {
+    protected int calculateFallDamage(double f1, float f2) {
         return 0;
     }
 
     @Override
-    public Iterable<ItemStack> getArmorSlots() {
-        return new ArrayList<>();
-    }
-
-    @Override
-    public ItemStack getItemBySlot(EquipmentSlotType slotType) {
+    public ItemStack getItemBySlot(EquipmentSlot slotType) {
         return ItemStack.EMPTY;
     }
 
     @Override
-    public void setItemSlot(EquipmentSlotType slotType, ItemStack itemStack) {}
+    public void setItemSlot(EquipmentSlot slotType, ItemStack itemStack) {}
 
     @Override
-    public HandSide getMainArm() {
-        return HandSide.RIGHT;
+    public HumanoidArm getMainArm() {
+        return HumanoidArm.RIGHT;
     }
 }

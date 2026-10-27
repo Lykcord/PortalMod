@@ -1,8 +1,10 @@
 package net.portalmod.common.sorted.radio;
 
-import net.minecraft.util.*;
+import net.minecraft.util.StringRepresentable;
 
-public enum RadioState implements IStringSerializable {
+import java.util.Locale;
+
+public enum RadioState implements StringRepresentable {
     OFF(false),
     ON(true),
     INACTIVE(false),
@@ -21,8 +23,8 @@ public enum RadioState implements IStringSerializable {
     public String toString() {
         return this.getSerializedName();
     }
-    
+
     public String getSerializedName() {
-        return name().toLowerCase();
+        return name().toLowerCase(Locale.ROOT);
     }
 }

@@ -1,9 +1,9 @@
 package net.portalmod.common.sorted.radio;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.item.BlockItem;
-import net.minecraft.item.BlockItemUseContext;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 
 public class RadioBlockItem extends BlockItem {
     public RadioBlockItem(Block block, Properties properties) {
@@ -11,10 +11,11 @@ public class RadioBlockItem extends BlockItem {
     }
 
     @Override
-    protected boolean placeBlock(BlockItemUseContext context, BlockState state) {
+    protected boolean placeBlock(BlockPlaceContext context, BlockState state) {
         boolean b = super.placeBlock(context, state);
-        if(b && !context.getLevel().isClientSide()) {
-            RadioBlockTileEntity radio = ((RadioBlockTileEntity)context.getLevel().getBlockEntity(context.getClickedPos()));
+        if (b && !context.getLevel().isClientSide()) {
+            RadioBlockTileEntity radio =
+                    ((RadioBlockTileEntity) context.getLevel().getBlockEntity(context.getClickedPos()));
             radio.setInitialized();
             radio.sendUpdatePacket();
         }

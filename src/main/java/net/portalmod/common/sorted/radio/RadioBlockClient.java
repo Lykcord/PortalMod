@@ -10,14 +10,21 @@ public class RadioBlockClient {
     protected static final Map<RadioBlockTileEntity, RadioSound> RADIOS = new HashMap<>();
 
     protected static void handlePacket(RadioBlockTileEntity be, RadioState state) {
-        if(!state.isPlaying()) {
-            Minecraft.getInstance().getSoundManager().stop(RADIOS.get(be));
-        } else {
-            if(state == RadioState.ACTIVE)
-                RADIOS.put(be, new RadioSound(be.getBlockPos(), SoundInit.RADIO_DINOSAUR1.get(), false));
-            else if(state == RadioState.ON)
-                RADIOS.put(be, new RadioSound(be.getBlockPos(), SoundInit.RADIO_LOOP.get(), true));
-            Minecraft.getInstance().getSoundManager().play(RADIOS.get(be));
+        var manager = Minecraft.getInstance().getSoundManager();
+        var previous = RADIOS.remove(be);
+        if (previous != null) {
+            previous.stopPlaying();
+            manager.stop(previous);
         }
+        if (!state.isPlaying()) {
+            return;
+        }
+        var sound =
+                new RadioSound(
+                        be.getBlockPos(),
+                        state == RadioState.ACTIVE ? SoundInit.RADIO_DINOSAUR1.get() : SoundInit.RADIO_LOOP.get(),
+                        state == RadioState.ON);
+        RADIOS.put(be, sound);
+        manager.play(sound);
     }
 }

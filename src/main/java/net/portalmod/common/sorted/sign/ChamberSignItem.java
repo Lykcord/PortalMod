@@ -1,21 +1,21 @@
 package net.portalmod.common.sorted.sign;
 
-import net.minecraft.client.util.ITooltipFlag;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.ItemUseContext;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.util.ActionResultType;
-import net.minecraft.util.Direction;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.text.ITextComponent;
-import net.minecraft.world.World;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.item.component.TooltipDisplay;
+import net.minecraft.world.item.context.UseOnContext;
+import net.minecraft.world.level.Level;
 import net.portalmod.core.util.ModUtil;
 
-import javax.annotation.Nullable;
-import java.util.List;
+import java.util.function.Consumer;
 
 public class ChamberSignItem extends Item {
 
@@ -24,49 +24,55 @@ public class ChamberSignItem extends Item {
     }
 
     @Override
-    public ActionResultType useOn(ItemUseContext context) {
+    public InteractionResult useOn(UseOnContext context) {
         BlockPos blockpos = context.getClickedPos();
         Direction direction = context.getClickedFace();
         BlockPos blockpos1 = blockpos.relative(direction);
-        PlayerEntity playerentity = context.getPlayer();
+        Player playerentity = context.getPlayer();
         ItemStack itemstack = context.getItemInHand();
 
         if (playerentity != null && !this.mayPlace(playerentity, direction, itemstack, blockpos1)) {
-            return ActionResultType.PASS;
+            return InteractionResult.PASS;
         }
 
-        World world = context.getLevel();
+        Level world = context.getLevel();
 
         boolean clickedBottomHalf = (context.getClickLocation().y % 1) < 0.25;
         boolean clickedTopHalf = (context.getClickLocation().y % 1) > 0.75;
 
         BlockPos placePos = clickedBottomHalf ? blockpos1.below() : blockpos1;
-        ChamberSignEntity chamberSign = new ChamberSignEntity(world, placePos, direction, !clickedBottomHalf && !clickedTopHalf);
+        ChamberSignEntity chamberSign =
+                new ChamberSignEntity(world, placePos, direction, !clickedBottomHalf && !clickedTopHalf);
 
-        CompoundNBT compoundnbt = itemstack.getTag();
-        if (compoundnbt != null) {
-            EntityType.updateCustomEntityTag(world, playerentity, chamberSign, compoundnbt);
+        var entityData = itemstack.get(DataComponents.ENTITY_DATA);
+        if (entityData != null) {
+            EntityType.updateCustomEntityTag(world, playerentity, chamberSign, entityData);
         }
 
         if (chamberSign.survives()) {
-            if (!world.isClientSide) {
+            if (!world.isClientSide()) {
                 chamberSign.playPlacementSound();
                 world.addFreshEntity(chamberSign);
             }
 
-            itemstack.shrink(1);
-            return ActionResultType.sidedSuccess(world.isClientSide);
+            itemstack.consume(1, playerentity);
+            return InteractionResult.SUCCESS;
         }
 
-        return ActionResultType.PASS;
+        return InteractionResult.PASS;
     }
 
-    protected boolean mayPlace(PlayerEntity player, Direction direction, ItemStack itemStack, BlockPos pos) {
+    protected boolean mayPlace(Player player, Direction direction, ItemStack itemStack, BlockPos pos) {
         return !direction.getAxis().isVertical() && player.mayUseItemAt(pos, direction, itemStack);
     }
 
     @Override
-    public void appendHoverText(ItemStack itemStack, @Nullable World world, List<ITextComponent> list, ITooltipFlag flag) {
+    public void appendHoverText(
+            ItemStack itemStack,
+            Item.TooltipContext context,
+            TooltipDisplay display,
+            Consumer<Component> list,
+            TooltipFlag flag) {
         ModUtil.addTooltip("chamber_sign", list);
     }
 }

@@ -1,12 +1,11 @@
 package net.portalmod.common.sorted.radio;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.network.PacketBuffer;
-import net.minecraft.util.math.BlockPos;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
-import net.minecraftforge.fml.network.NetworkEvent;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.FriendlyByteBuf;
 import net.portalmod.core.packet.AbstractPacket;
+import net.portalmod.core.packet.PacketContext;
+import net.portalmod.core.util.ClientExecution;
 
 import java.util.function.Supplier;
 
@@ -22,27 +21,31 @@ public class SRadioUpdatePacket implements AbstractPacket<SRadioUpdatePacket> {
     }
 
     @Override
-    public void encode(PacketBuffer buffer) {
-        buffer.writeBlockPos(pos)
-                .writeEnum(state);
+    public void encode(FriendlyByteBuf buffer) {
+        buffer.writeBlockPos(pos).writeEnum(state);
     }
 
     @Override
-    public SRadioUpdatePacket decode(PacketBuffer buffer) {
+    public SRadioUpdatePacket decode(FriendlyByteBuf buffer) {
         return new SRadioUpdatePacket(buffer.readBlockPos(), buffer.readEnum(RadioState.class));
     }
 
     @Override
-    public boolean handle(Supplier<NetworkEvent.Context> context) {
-        context.get().enqueueWork(() -> {
-            DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> {
-                RadioBlockTileEntity blockEntity = (RadioBlockTileEntity)Minecraft.getInstance().level.getBlockEntity(pos);
-                if(blockEntity != null)
-                    blockEntity.handlePacket(state);
-            });
-        });
-
-        context.get().setPacketHandled(true);
+    public boolean handle(Supplier<PacketContext> context) {
+        context.get()
+                .enqueueWork(
+                        () -> {
+                            ClientExecution.run(
+                                    () ->
+                                            () -> {
+                                                var level = Minecraft.getInstance().level;
+                                                if (level != null
+                                                        && level.getBlockEntity(pos)
+                                                                instanceof RadioBlockTileEntity blockEntity) {
+                                                    blockEntity.handlePacket(state);
+                                                }
+                                            });
+                        });
         return true;
     }
 }

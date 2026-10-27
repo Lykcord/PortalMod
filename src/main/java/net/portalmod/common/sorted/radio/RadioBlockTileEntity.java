@@ -1,84 +1,94 @@
 package net.portalmod.common.sorted.radio;
 
-import net.minecraft.tileentity.ITickableTileEntity;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.world.World;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
-import net.minecraftforge.fml.network.PacketDistributor;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
 import net.portalmod.core.init.PacketInit;
 import net.portalmod.core.init.TileEntityTypeInit;
+import net.portalmod.core.util.ClientExecution;
 
-public class RadioBlockTileEntity extends TileEntity implements ITickableTileEntity {
-//    private RadioSound sound;
+public class RadioBlockTileEntity extends BlockEntity {
     private int countedTicks = 0;
     private boolean initialized = false;
 
-    public RadioBlockTileEntity() {
-        super(TileEntityTypeInit.RADIO.get());
+    public RadioBlockTileEntity(BlockPos pos, BlockState state) {
+        super(TileEntityTypeInit.RADIO.get(), pos, state);
     }
 
     public void setInitialized() {
         initialized = true;
     }
 
-    @Override
     public void tick() {
-        if(this.level.isClientSide())
+        if (this.level.isClientSide()) {
             return;
+        }
 
-        if(!initialized) {
-            if(!getBlockState().getValue(RadioBlock.POWERED))
+        if (!initialized) {
+            if (!getBlockState().getValue(RadioBlock.POWERED)) {
                 setState(RadioState.OFF);
+            }
             initialized = true;
         }
 
-        if(getState() == RadioState.ACTIVE) {
-            if(countedTicks++ == 900) {
+        if (getState() == RadioState.ACTIVE) {
+            if (countedTicks++ == 900) {
                 setState(RadioState.INACTIVE);
                 countedTicks = 0;
             }
-        } else countedTicks = 0;
+        } else {
+            countedTicks = 0;
+        }
     }
 
     public void switchManual() {
-        if(this.level.isClientSide() || getBlockState().getValue(RadioBlock.POWERED) || getState() == RadioState.ACTIVE)
+        if (this.level.isClientSide()
+                || getBlockState().getValue(RadioBlock.POWERED)
+                || getState() == RadioState.ACTIVE) {
             return;
+        }
 
-        if(isPlaying())
+        if (isPlaying()) {
             stop();
-        else
+        } else {
             play();
+        }
     }
 
     public void handlePacket(RadioState state) {
-        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> RadioBlockClient.handlePacket(this, state));
+        ClientExecution.run(() -> () -> RadioBlockClient.handlePacket(this, state));
     }
 
     public void play() {
-        if(this.level.isClientSide() || isPlaying()) return;
+        if (this.level.isClientSide() || isPlaying()) {
+            return;
+        }
 
-        if(this.level.dimension() != null && getLevel().dimension() == World.END)
+        if (this.level.dimension() != null && getLevel().dimension() == Level.END) {
             setState(RadioState.ACTIVE);
-        else
+        } else {
             setState(RadioState.ON);
+        }
         sendUpdatePacket();
     }
-    
-    public void stop() {
-        if(this.level.isClientSide() || !isPlaying()) return;
 
-        if(this.level.dimension() != null && getLevel().dimension() == World.END)
+    public void stop() {
+        if (this.level.isClientSide() || !isPlaying()) {
+            return;
+        }
+
+        if (this.level.dimension() != null && getLevel().dimension() == Level.END) {
             setState(RadioState.INACTIVE);
-        else
+        } else {
             setState(RadioState.OFF);
+        }
         sendUpdatePacket();
     }
 
     public void sendUpdatePacket() {
-        PacketInit.INSTANCE.send(PacketDistributor.TRACKING_CHUNK.with(
-                () -> this.level.getChunkAt(getBlockPos())),
-                    new SRadioUpdatePacket(getBlockPos(), getState()));
+        PacketInit.sendToTrackingChunk(
+                this.level.getChunkAt(getBlockPos()), new SRadioUpdatePacket(getBlockPos(), getState()));
     }
 
     private RadioState getState() {
@@ -95,8 +105,9 @@ public class RadioBlockTileEntity extends TileEntity implements ITickableTileEnt
 
     @Override
     public void setRemoved() {
-        if(this.level.isClientSide())
+        if (this.level.isClientSide()) {
             handlePacket(RadioState.OFF);
+        }
         super.setRemoved();
     }
 }

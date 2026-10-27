@@ -1,12 +1,11 @@
 package net.portalmod.common.entities;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.player.ServerPlayerEntity;
-import net.minecraft.network.PacketBuffer;
-import net.minecraft.util.math.vector.Vector3d;
-import net.minecraftforge.fml.network.NetworkEvent;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.portalmod.core.math.Vec3;
 import net.portalmod.core.packet.AbstractPacket;
+import net.portalmod.core.packet.PacketContext;
 
 import java.util.function.Supplier;
 
@@ -28,7 +27,7 @@ public class CTestElementHoldingPacket implements AbstractPacket<CTestElementHol
     }
 
     @Override
-    public void encode(PacketBuffer buffer) {
+    public void encode(FriendlyByteBuf buffer) {
         buffer.writeInt(this.id);
         buffer.writeDouble(this.oldPosition.x);
         buffer.writeDouble(this.oldPosition.y);
@@ -41,7 +40,7 @@ public class CTestElementHoldingPacket implements AbstractPacket<CTestElementHol
     }
 
     @Override
-    public CTestElementHoldingPacket decode(PacketBuffer buffer) {
+    public CTestElementHoldingPacket decode(FriendlyByteBuf buffer) {
         int id = buffer.readInt();
         Vec3 oldPosition = new Vec3(buffer.readDouble(), buffer.readDouble(), buffer.readDouble());
         Vec3 position = new Vec3(buffer.readDouble(), buffer.readDouble(), buffer.readDouble());
@@ -52,29 +51,33 @@ public class CTestElementHoldingPacket implements AbstractPacket<CTestElementHol
     }
 
     @Override
-    public boolean handle(Supplier<NetworkEvent.Context> context) {
-        context.get().enqueueWork(() -> {
-            ServerPlayerEntity sender = context.get().getSender();
-            if(sender == null)
-                return;
+    public boolean handle(Supplier<PacketContext> context) {
+        context.get()
+                .enqueueWork(
+                        () -> {
+                            ServerPlayer sender = context.get().getSender();
+                            if (sender == null) {
+                                return;
+                            }
 
-            Entity entity = sender.level.getEntity(this.id);
-            if(!(entity instanceof TestElementEntity))
-                return;
+                            Entity entity = sender.level().getEntity(this.id);
+                            if (!(entity instanceof TestElementEntity)) {
+                                return;
+                            }
 
-            TestElementEntity tee = (TestElementEntity)entity;
-            if(entity.getVehicle() != sender)
-                return;
+                            TestElementEntity tee = (TestElementEntity) entity;
+                            if (entity.getVehicle() != sender) {
+                                return;
+                            }
 
-            tee.serverOldPos = oldPosition;
-            tee.setPos(this.position.x, this.position.y, this.position.z);
+                            tee.serverOldPos = oldPosition;
+                            tee.setPos(this.position.x, this.position.y, this.position.z);
 
-            tee.yRot = this.rotation;
-            tee.yRotO = this.oldRotation;
-            tee.yBodyRot = this.rotation;
-            tee.yBodyRotO = this.oldRotation;
-        });
-        context.get().setPacketHandled(true);
+                            tee.setYRot(this.rotation);
+                            tee.yRotO = this.oldRotation;
+                            tee.yBodyRot = this.rotation;
+                            tee.yBodyRotO = this.oldRotation;
+                        });
         return true;
     }
 }

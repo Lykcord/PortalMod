@@ -1,34 +1,34 @@
 package net.portalmod.common.entities;
 
-import net.minecraft.advancements.CriteriaTriggers;
-import net.minecraft.client.renderer.LightTexture;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.MoverType;
-import net.minecraft.entity.item.BoatEntity;
-import net.minecraft.entity.item.minecart.AbstractMinecartEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.entity.player.ServerPlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.network.datasync.DataParameter;
-import net.minecraft.network.datasync.DataSerializers;
-import net.minecraft.network.datasync.EntityDataManager;
+import net.minecraft.advancements.triggers.CriteriaTriggers;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializers;
+import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.stats.Stats;
-import net.minecraft.util.DamageSource;
-import net.minecraft.util.EntityDamageSource;
-import net.minecraft.util.SoundCategory;
-import net.minecraft.util.math.AxisAlignedBB;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.shapes.IBooleanFunction;
-import net.minecraft.util.math.shapes.ISelectionContext;
-import net.minecraft.util.math.shapes.VoxelShape;
-import net.minecraft.util.math.shapes.VoxelShapes;
-import net.minecraft.util.math.vector.Vector3d;
-import net.minecraft.util.math.vector.Vector3f;
-import net.minecraft.world.GameRules;
-import net.minecraft.world.World;
+import net.minecraft.util.LightCoordsUtil;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.damagesource.DamageTypes;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.MoverType;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.vehicle.boat.Boat;
+import net.minecraft.world.entity.vehicle.minecart.AbstractMinecart;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.gamerules.GameRules;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.shapes.BooleanOp;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import net.portalmod.common.items.WrenchItem;
 import net.portalmod.common.particles.FizzleFlakeParticle;
 import net.portalmod.common.particles.FizzleGlowParticle;
@@ -37,29 +37,36 @@ import net.portalmod.common.sorted.portal.PortalEntity;
 import net.portalmod.common.sorted.portalgun.CPortalGunInteractionPacket;
 import net.portalmod.common.sorted.portalgun.PortalGun;
 import net.portalmod.common.sorted.portalgun.PortalGunInteraction;
+import net.portalmod.core.init.DamageTypeInit;
 import net.portalmod.core.init.EntityTagInit;
-import net.portalmod.core.init.FluidInit;
-import net.portalmod.core.init.PacketInit;
+import net.portalmod.core.init.GameRuleInit;
 import net.portalmod.core.init.SoundInit;
 import net.portalmod.core.math.AABBUtil;
 import net.portalmod.core.math.Mat4;
 import net.portalmod.core.math.Vec3;
+import net.portalmod.core.packet.ClientNetworking;
 import net.portalmod.core.util.ModUtil;
+
+import org.joml.Vector3f;
 
 import java.util.List;
 import java.util.Random;
 
-/**
- * Entity which can be fizzled, dropped by a cube dropper, picked up using a portal gun and broken with a wrench.
- */
+/** Entity which can be fizzled, dropped by a cube dropper, picked up using a portal gun and broken with a wrench. */
 public abstract class TestElementEntity extends LivingEntity implements Fizzleable {
 
-    public static final DataParameter<Integer> FIZZLE_TICKS_ID = EntityDataManager.defineId(TestElementEntity.class, DataSerializers.INT);
-    public static final DataParameter<Boolean> FROM_DROPPER_ID = EntityDataManager.defineId(TestElementEntity.class, DataSerializers.BOOLEAN);
-    private static final DataParameter<Integer> WIGGLE_ID = EntityDataManager.defineId(TestElementEntity.class, DataSerializers.INT);
-    private static final DataParameter<Integer> DATA_ID_HURT = EntityDataManager.defineId(TestElementEntity.class, DataSerializers.INT);
-    private static final DataParameter<Integer> DATA_ID_HURTDIR = EntityDataManager.defineId(TestElementEntity.class, DataSerializers.INT);
-    private static final DataParameter<Float> DATA_ID_DAMAGE = EntityDataManager.defineId(TestElementEntity.class, DataSerializers.FLOAT);
+    public static final EntityDataAccessor<Integer> FIZZLE_TICKS_ID =
+            SynchedEntityData.defineId(TestElementEntity.class, EntityDataSerializers.INT);
+    public static final EntityDataAccessor<Boolean> FROM_DROPPER_ID =
+            SynchedEntityData.defineId(TestElementEntity.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Integer> WIGGLE_ID =
+            SynchedEntityData.defineId(TestElementEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> DATA_ID_HURT =
+            SynchedEntityData.defineId(TestElementEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> DATA_ID_HURTDIR =
+            SynchedEntityData.defineId(TestElementEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Float> DATA_ID_DAMAGE =
+            SynchedEntityData.defineId(TestElementEntity.class, EntityDataSerializers.FLOAT);
 
     public static final float HOLDING_DISTANCE = 1.5f;
 
@@ -73,8 +80,8 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
     private Integer oldPortalChainLength;
     private Float eyeHeightOld;
 
-    public TestElementEntity(EntityType<? extends LivingEntity> p_i48577_1_, World p_i48577_2_) {
-        super(p_i48577_1_, p_i48577_2_);
+    public TestElementEntity(EntityType<? extends LivingEntity> entityType, Level level) {
+        super(entityType, level);
         this.canFizzle = true;
     }
 
@@ -126,10 +133,9 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
 
     public int getFizzleLight(int packedLight) {
         int fizzleAmount = (int) (this.getFizzleTicks() * 0.6);
-        return LightTexture.pack(
-                Math.max(0, LightTexture.block(packedLight) - fizzleAmount),
-                Math.max(0, LightTexture.sky(packedLight) - fizzleAmount)
-        );
+        return LightCoordsUtil.pack(
+                Math.max(0, LightCoordsUtil.block(packedLight) - fizzleAmount),
+                Math.max(0, LightCoordsUtil.sky(packedLight) - fizzleAmount));
     }
 
     public void fizzleTick() {
@@ -140,24 +146,27 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
         }
 
         double minSpeed = 0.08;
-        Vector3d xzMovement = this.getDeltaMovement().multiply(1, 0, 1);
+        net.minecraft.world.phys.Vec3 xzMovement = this.getDeltaMovement().multiply(1, 0, 1);
 
         // If no horizontal movement, choose randomly
         if (xzMovement.length() == 0) {
-            xzMovement = new Vector3d(new Random().nextFloat() * 0.1 - 0.05, 0, new Random().nextFloat() * 0.1 - 0.05);
+            xzMovement =
+                    new net.minecraft.world.phys.Vec3(
+                            new Random().nextFloat() * 0.1 - 0.05, 0, new Random().nextFloat() * 0.1 - 0.05);
         }
 
-        Vector3d newMovement = xzMovement.length() < minSpeed ? xzMovement.normalize().scale(minSpeed) : xzMovement.scale(0.95);
+        net.minecraft.world.phys.Vec3 newMovement =
+                xzMovement.length() < minSpeed ? xzMovement.normalize().scale(minSpeed) : xzMovement.scale(0.95);
         this.setDeltaMovement(newMovement);
 
-        if (this.level.isClientSide) {
-            FizzleGlowParticle.createGlowParticles(level, this);
-            FizzleFlakeParticle.createFlakeParticles(level, this);
+        if (this.level().isClientSide()) {
+            FizzleGlowParticle.createGlowParticles(level(), this);
+            FizzleFlakeParticle.createFlakeParticles(level(), this);
         }
 
         // Rotate slowly
-        this.yRot += 35f * (float) newMovement.length();
-        this.yHeadRot = this.yRot;
+        this.setYRot(this.getYRot() + 35f * (float) newMovement.length());
+        this.yHeadRot = this.getYRot();
 
         if (fizzleTicks > this.maxFizzleTime && this.isAlive()) {
             this.fizzleKill();
@@ -166,46 +175,55 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
         this.setFizzleTicks(fizzleTicks + 1);
     }
 
-    /**
-     * On the first tick of fizzling
-     */
+    /** On the first tick of fizzling */
     public void fizzleInit() {
         this.setNoGravity(true);
-        this.level.playSound(null, this.position().x, this.position().y, this.position().z, SoundInit.ENTITY_FIZZLE.get(), SoundCategory.NEUTRAL, 1, ModUtil.randomSlightSoundPitch());
+        this.level()
+                .playSound(
+                        null,
+                        this.position().x,
+                        this.position().y,
+                        this.position().z,
+                        SoundInit.ENTITY_FIZZLE.get(),
+                        SoundSource.NEUTRAL,
+                        1,
+                        ModUtil.randomSlightSoundPitch());
     }
 
-    /**
-     * On the last tick of fizzling
-     */
+    /** On the last tick of fizzling */
     public void fizzleKill() {
-        if (!this.isFromDropper() && !this.getType().is(EntityTagInit.FIZZLER_NO_ITEM_DROPS) && !this.level.isClientSide) {
-            this.dropAllDeathLoot(new DamageSource("fizzle"));
+        if (!this.isFromDropper()
+                && !this.is(EntityTagInit.FIZZLER_NO_ITEM_DROPS)
+                && this.level() instanceof ServerLevel server) {
+            this.dropAllDeathLoot(server, this.damageSources().source(DamageTypeInit.FIZZLE));
         }
-        this.remove();
+        this.discard();
     }
 
     public void awardKill() {
         Entity holder = this.getVehicle();
 
-        if (this.isPassenger() && holder instanceof PlayerEntity) {
-            ((PlayerEntity) holder).awardStat(Stats.ENTITY_KILLED.get(this.getType()));
+        if (this.isPassenger() && holder instanceof Player) {
+            ((Player) holder).awardStat(Stats.ENTITY_KILLED.get(this.getType()));
 
-            if (holder instanceof ServerPlayerEntity) {
+            if (holder instanceof ServerPlayer) {
                 CriteriaTriggers.PLAYER_KILLED_ENTITY.trigger(
-                        (ServerPlayerEntity) holder,
-                        this,
-                        DamageSource.playerAttack((PlayerEntity) holder)
-                );
+                        (ServerPlayer) holder, this, this.damageSources().playerAttack((Player) holder));
             }
         }
     }
 
-    public boolean pickUp(PlayerEntity player) {
+    public boolean pickUp(Player player) {
         boolean riding = this.startRiding(player);
-        if (!riding) return false;
+        if (!riding) {
+            return false;
+        }
 
-        if (player.level.isClientSide()) {
-            PacketInit.INSTANCE.sendToServer(new CPortalGunInteractionPacket.Builder(PortalGunInteraction.PICK_ENTITY).data(this.getId()).build());
+        if (player.level().isClientSide()) {
+            ClientNetworking.sendToServer(
+                    new CPortalGunInteractionPacket.Builder(PortalGunInteraction.PICK_ENTITY)
+                            .data(this.getId())
+                            .build());
         }
 
         return true;
@@ -213,11 +231,11 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
 
     @Override
     public void rideTick() {
-        this.setDeltaMovement(Vector3d.ZERO);
+        this.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
         this.tick();
 
-        if (!(this.getVehicle() instanceof PlayerEntity)) {
-            if (this.getVehicle() instanceof AbstractMinecartEntity || this.getVehicle() instanceof BoatEntity) {
+        if (!(this.getVehicle() instanceof Player)) {
+            if (this.getVehicle() instanceof AbstractMinecart || this.getVehicle() instanceof Boat) {
                 super.rideTick();
             } else {
                 this.stopRiding();
@@ -225,13 +243,13 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
             return;
         }
 
-        PlayerEntity player = (PlayerEntity)getVehicle();
+        Player player = (Player) getVehicle();
 
-        if(!this.level.isClientSide) {
+        if (!this.level().isClientSide()) {
             // server assigns old position stored in serverOldPos
             // since the former resets every tick
             // and thus cannot be assigned from the packet itself
-            if(this.serverOldPos != null) {
+            if (this.serverOldPos != null) {
                 this.xo = this.serverOldPos.x;
                 this.yo = this.serverOldPos.y;
                 this.zo = this.serverOldPos.z;
@@ -247,44 +265,47 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
             Vec3 originalEyePos = eyePos.clone();
 
             // account for eye height
-            if(eyeHeightOld != null) {
+            if (eyeHeightOld != null) {
                 eyeOldPos = eyeOldPos.sub(0, player.getEyeHeight(), 0);
                 eyeOldPos.add(0, eyeHeightOld, 0);
             }
             eyeHeightOld = player.getEyeHeight();
             Vec3 originalEyeOldPos = eyeOldPos.clone();
 
-            Vec3 ridingVersor = new Vec3(0, 0, 1)
-                    .transform(new Mat4(Vector3f.XP.rotationDegrees(player.getViewXRot(1))))
-                    .transform(new Mat4(Vector3f.YN.rotationDegrees(player.getViewYRot(1))));
+            Vec3 ridingVersor =
+                    new Vec3(0, 0, 1)
+                            .transform(Mat4.identity().rotateDeg(new Vector3f(1, 0, 0), player.getViewXRot(1)))
+                            .transform(Mat4.identity().rotateDeg(new Vector3f(0, -1, 0), player.getViewYRot(1)));
 
             Vec3 ridingVec = ridingVersor.clone().mul(HOLDING_DISTANCE);
 
             // get portals along the holding ray
             Vec3 from = eyePos;
             Vec3 to = eyePos.clone().add(ridingVec);
-            List<PortalEntity> portalChain = ModUtil.getPortalsAlongRay(this.level, from, to, portal -> true);
+            List<PortalEntity> portalChain = ModUtil.getPortalsAlongRay(this.level(), from, to, portal -> true);
             boolean passedPortal = this.oldPortalChainLength != null && portalChain.size() != this.oldPortalChainLength;
             this.oldPortalChainLength = portalChain.size();
 
             // compute the matrices from them
             Mat4 portalMatrix = Mat4.identity();
             Mat4 portalRotationMatrix = Mat4.identity();
-            for(PortalEntity portal : portalChain) {
-                if(!portal.getOtherPortal().isPresent())
+            for (PortalEntity portal : portalChain) {
+                if (!portal.getOtherPortal().isPresent()) {
                     break;
+                }
 
-                Mat4 matrix = portal.getSourceBasis().getChangeOfBasisMatrix(portal.getOtherPortal().get().getDestinationBasis());
+                Mat4 matrix =
+                        portal.getSourceBasis()
+                                .getChangeOfBasisMatrix(portal.getOtherPortal().get().getDestinationBasis());
 
-                portalMatrix = Mat4.identity()
-                        .translate(new Vec3(portal.getOtherPortal().get().position()))
-                        .mul(matrix)
-                        .translate(new Vec3(portal.position()).negate())
-                        .mul(portalMatrix);
+                portalMatrix =
+                        Mat4.identity()
+                                .translate(new Vec3(portal.getOtherPortal().get().position()))
+                                .mul(matrix)
+                                .translate(new Vec3(portal.position()).negate())
+                                .mul(portalMatrix);
 
-                portalRotationMatrix = Mat4.identity()
-                        .mul(matrix)
-                        .mul(portalRotationMatrix);
+                portalRotationMatrix = Mat4.identity().mul(matrix).mul(portalRotationMatrix);
             }
 
             eyePos = eyePos.transform(portalMatrix);
@@ -292,31 +313,33 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
             ridingVec = ridingVec.transform(portalRotationMatrix);
             ridingVersor = ridingVersor.transform(portalRotationMatrix);
 
-            Vector3d ridingPos = eyePos.clone().add(ridingVec).to3d();
+            net.minecraft.world.phys.Vec3 ridingPos = eyePos.clone().add(ridingVec).to3d();
 
             // check if the new position is free of collision
-            if(passedPortal && !holderJustTeleported) {
-                AxisAlignedBB nextSpace = this.getBoundingBox().move(this.position().reverse()).move(ridingPos);
+            if (passedPortal && !holderJustTeleported) {
+                AABB nextSpace = this.getBoundingBox().move(this.position().reverse()).move(ridingPos);
                 boolean nextSpaceEmpty = true;
 
                 // check for portals in the next position
-                List<PortalEntity> portalsInCube = PortalEntity.getOpenPortals(this.level, nextSpace, portal -> true);
-                if(portalsInCube.isEmpty()) {
+                List<PortalEntity> portalsInCube = PortalEntity.getOpenPortals(this.level(), nextSpace, portal -> true);
+                if (portalsInCube.isEmpty()) {
                     dropHeldEntities(player, false, true, player.getMainHandItem());
-                    PacketInit.INSTANCE.sendToServer(new CPortalGunInteractionPacket.Builder(PortalGunInteraction.RELEASE_ENTITY).build());
+                    ClientNetworking.sendToServer(
+                            new CPortalGunInteractionPacket.Builder(PortalGunInteraction.RELEASE_ENTITY).build());
                     return;
                 }
 
                 // temporarily set the hitbox to there for internal stuff
-                AxisAlignedBB oldHitbox = this.getBoundingBox();
+                AABB oldHitbox = this.getBoundingBox();
                 this.setBoundingBox(nextSpace);
 
-                for(BlockPos pos : AABBUtil.getBlocksWithin(nextSpace)) {
-                    VoxelShape blockShape = level.getBlockState(pos)
-                            .getCollisionShape(this.level, pos, ISelectionContext.of(this))
-                            .move(pos.getX(), pos.getY(), pos.getZ());
+                for (BlockPos pos : AABBUtil.getBlocksWithin(nextSpace)) {
+                    VoxelShape blockShape =
+                            level().getBlockState(pos)
+                                    .getCollisionShape(this.level(), pos, CollisionContext.of(this))
+                                    .move(pos.getX(), pos.getY(), pos.getZ());
 
-                    if(VoxelShapes.joinIsNotEmpty(blockShape, VoxelShapes.create(nextSpace), IBooleanFunction.AND)) {
+                    if (Shapes.joinIsNotEmpty(blockShape, Shapes.create(nextSpace), BooleanOp.AND)) {
                         nextSpaceEmpty = false;
                     }
                 }
@@ -324,31 +347,43 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
                 this.setBoundingBox(oldHitbox);
 
                 // if there's any collision drop it
-                if(!nextSpaceEmpty) {
+                if (!nextSpaceEmpty) {
                     dropHeldEntities(player, false, true, player.getMainHandItem());
-                    PacketInit.INSTANCE.sendToServer(new CPortalGunInteractionPacket.Builder(PortalGunInteraction.RELEASE_ENTITY).build());
+                    ClientNetworking.sendToServer(
+                            new CPortalGunInteractionPacket.Builder(PortalGunInteraction.RELEASE_ENTITY).build());
                     return;
                 }
             }
 
             // calculate rotation
-            Vec3 lookVec = new Vec3(0, 0, 1)
-                    .transform(new Mat4(Vector3f.YN.rotationDegrees(this.getVehicle().getYHeadRot())))
-                    .transform(portalRotationMatrix);
-            this.yRot = -(float)(Math.atan2(lookVec.x, lookVec.z) * 180 / Math.PI);
-            this.yBodyRot = this.yRot;
+            Vec3 lookVec =
+                    new Vec3(0, 0, 1)
+                            .transform(
+                                    Mat4.identity().rotateDeg(new Vector3f(0, -1, 0), this.getVehicle().getYHeadRot()))
+                            .transform(portalRotationMatrix);
+            this.setYRot(-(float) (Math.atan2(lookVec.x, lookVec.z) * 180 / Math.PI));
+            this.yBodyRot = this.getYRot();
 
             // old position
             Vec3 oldRidingVec = this.oldRidingVec;
-            if(oldRidingVec == null) {
+            if (oldRidingVec == null) {
                 Vec3 unteleportedOldRidingVec = new Vec3(this.position());
-                for(int i = portalChain.size() - 1; i >= 0; i--) {
+                for (int i = portalChain.size() - 1; i >= 0; i--) {
                     PortalEntity portal = portalChain.get(i);
-                    if(!portal.getOtherPortal().isPresent())
+                    if (!portal.getOtherPortal().isPresent()) {
                         break;
+                    }
 
-                    Mat4 matrix = portal.getOtherPortal().get().getSourceBasis().getChangeOfBasisMatrix(portal.getDestinationBasis());
-                    unteleportedOldRidingVec = unteleportedOldRidingVec.sub(portal.getOtherPortal().get().position()).transform(matrix).add(portal.position());
+                    Mat4 matrix =
+                            portal.getOtherPortal()
+                                    .get()
+                                    .getSourceBasis()
+                                    .getChangeOfBasisMatrix(portal.getDestinationBasis());
+                    unteleportedOldRidingVec =
+                            unteleportedOldRidingVec
+                                    .sub(portal.getOtherPortal().get().position())
+                                    .transform(matrix)
+                                    .add(portal.position());
                 }
 
                 oldRidingVec = unteleportedOldRidingVec.clone().sub(originalEyeOldPos);
@@ -356,8 +391,8 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
 
             oldRidingVec = oldRidingVec.transform(portalRotationMatrix);
 
-            if(this.holderJustTeleported) {
-                if(this.holderJustTeleportedMatrix != null) {
+            if (this.holderJustTeleported) {
+                if (this.holderJustTeleportedMatrix != null) {
                     // holding client
                     oldRidingVec = oldRidingVec.transform(this.holderJustTeleportedMatrix);
                     this.holderJustTeleportedMatrix = null;
@@ -367,8 +402,8 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
                 }
 
                 this.holderJustTeleported = false;
-            } else if(passedPortal) {
-                this.yRotO = this.yRot;
+            } else if (passedPortal) {
+                this.yRotO = this.getYRot();
                 this.yBodyRotO = this.yBodyRot;
             }
 
@@ -376,31 +411,46 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
             Vec3 oldPos = eyeOldPos.clone().add(oldRidingVec);
             Vec3 center = new Vec3(this.getBoundingBox().getCenter()).sub(0, this.getBoundingBox().getYsize() / 2, 0);
             this.setBoundingBox(this.getBoundingBox().move(center.negate().to3d()).move(oldPos.to3d()));
-            this.setPosAndOldPos(oldPos.x, oldPos.y, oldPos.z);
+            this.snapTo(oldPos.x, oldPos.y, oldPos.z);
 
             // move the entity
             this.move(MoverType.SELF, ridingPos.subtract(ModUtil.getOldPos(this)));
 
             // tell the server
-            PacketInit.INSTANCE.sendToServer(new CTestElementHoldingPacket(this.getId(),
-                    new Vec3(ModUtil.getOldPos(this)), new Vec3(this.position()), this.yBodyRotO, this.yBodyRot));
+            ClientNetworking.sendToServer(
+                    new CTestElementHoldingPacket(
+                            this.getId(),
+                            new Vec3(ModUtil.getOldPos(this)),
+                            new Vec3(this.position()),
+                            this.yBodyRotO,
+                            this.yBodyRot));
 
             // detach if too far
-            if(this.position().distanceTo(ridingPos) > 1) {
+            if (this.position().distanceTo(ridingPos) > 1) {
                 dropHeldEntities(player, false, true, player.getMainHandItem());
-                PacketInit.INSTANCE.sendToServer(new CPortalGunInteractionPacket.Builder(PortalGunInteraction.RELEASE_ENTITY).build());
+                ClientNetworking.sendToServer(
+                        new CPortalGunInteractionPacket.Builder(PortalGunInteraction.RELEASE_ENTITY).build());
             }
 
             // calculate unteleported position for next tick
             Vec3 unteleportedPos = new Vec3(this.position());
 
-            for(int i = portalChain.size() - 1; i >= 0; i--) {
+            for (int i = portalChain.size() - 1; i >= 0; i--) {
                 PortalEntity portal = portalChain.get(i);
-                if(!portal.getOtherPortal().isPresent())
+                if (!portal.getOtherPortal().isPresent()) {
                     break;
+                }
 
-                Mat4 matrix = portal.getOtherPortal().get().getSourceBasis().getChangeOfBasisMatrix(portal.getDestinationBasis());
-                unteleportedPos = unteleportedPos.sub(portal.getOtherPortal().get().position()).transform(matrix).add(portal.position());
+                Mat4 matrix =
+                        portal.getOtherPortal()
+                                .get()
+                                .getSourceBasis()
+                                .getChangeOfBasisMatrix(portal.getDestinationBasis());
+                unteleportedPos =
+                        unteleportedPos
+                                .sub(portal.getOtherPortal().get().position())
+                                .transform(matrix)
+                                .add(portal.position());
             }
 
             this.oldRidingVec = unteleportedPos.clone().sub(originalEyePos);
@@ -408,11 +458,11 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
 
         this.fallDistance = 0;
 
-        if (player.level.isClientSide) {
+        if (player.level().isClientSide()) {
             if (player.getMainHandItem().getItem() instanceof PortalGun) {
-                PortalGunSparkParticle.createParticles(this.level, player, false);
+                PortalGunSparkParticle.createParticles(this.level(), player, false);
             } else if (player.getOffhandItem().getItem() instanceof PortalGun) {
-                PortalGunSparkParticle.createParticles(this.level, player, true);
+                PortalGunSparkParticle.createParticles(this.level(), player, true);
             }
         }
 
@@ -423,8 +473,9 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
     }
 
     public void onHolderTeleport(PortalEntity from, PortalEntity to) {
-        if(this.holderJustTeleportedMatrix == null)
+        if (this.holderJustTeleportedMatrix == null) {
             this.holderJustTeleportedMatrix = Mat4.identity();
+        }
 
         Mat4 matrix = from.getSourceBasis().getChangeOfBasisMatrix(to.getDestinationBasis());
         this.holderJustTeleportedMatrix = matrix.mul(this.holderJustTeleportedMatrix);
@@ -437,10 +488,11 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
     }
 
     @Override
-    public boolean startRiding(Entity entity) {
+    public boolean startRiding(Entity entity, boolean force, boolean sendEvent) {
         this.oldRidingVec = null;
         this.oldPortalChainLength = null;
-        return super.startRiding(entity);
+        this.serverOldPos = null;
+        return super.startRiding(entity, force, sendEvent);
     }
 
     @Override
@@ -448,65 +500,69 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
         Entity vehicle = this.getVehicle();
 
         this.removeVehicle();
-        if (!(vehicle instanceof PlayerEntity)) return;
+        if (!(vehicle instanceof Player)) {
+            return;
+        }
 
         this.boardingCooldown = 0;
 
-        Vector3d momentum;
-        if(this.level.isClientSide) {
+        net.minecraft.world.phys.Vec3 momentum;
+        if (this.level().isClientSide()) {
             momentum = this.position().subtract(ModUtil.getOldPos(this));
         } else {
-            momentum = this.position().subtract(this.serverOldPos.to3d());
+            momentum =
+                    this.serverOldPos == null
+                            ? net.minecraft.world.phys.Vec3.ZERO
+                            : this.position().subtract(this.serverOldPos.to3d());
         }
 
         // Random movement so the cube cant fall perfectly onto a player which makes them swim
-        this.setDeltaMovement(momentum.add(
-                ModUtil.symmetricRandom(0.01f),
-                0,
-                ModUtil.symmetricRandom(0.01f)));
+        this.setDeltaMovement(momentum.add(ModUtil.symmetricRandom(0.01f), 0, ModUtil.symmetricRandom(0.01f)));
     }
 
-    public static void dropHeldEntities(PlayerEntity player, boolean yeet, boolean nullifyMomentum, ItemStack itemStack) {
+    public static void dropHeldEntities(Player player, boolean yeet, boolean nullifyMomentum, ItemStack itemStack) {
         List<Entity> passengers = player.getPassengers();
-        for(int i = passengers.size() - 1; i >= 0; --i) {
+        for (int i = passengers.size() - 1; i >= 0; --i) {
             Entity entity = passengers.get(i);
-            if(!(entity instanceof TestElementEntity)) {
+            if (!(entity instanceof TestElementEntity)) {
                 continue;
             }
 
             entity.stopRiding();
 
-            if(itemStack.getItem() instanceof PortalGun) {
+            if (itemStack.getItem() instanceof PortalGun) {
                 PortalGun.dropCube(player, itemStack);
             }
 
             final float maxSpeed = 0.5f;
             final float strength = .3f;
 
-            Vector3d velocity = entity.getDeltaMovement();
+            net.minecraft.world.phys.Vec3 velocity = entity.getDeltaMovement();
             boolean exceedsLimit = velocity.add(player.getDeltaMovement().reverse()).length() > maxSpeed;
 
-            if(nullifyMomentum) {
-                entity.setDeltaMovement(Vector3d.ZERO);
+            if (nullifyMomentum) {
+                entity.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
             } else {
-                if(exceedsLimit) {
-                    entity.setDeltaMovement(velocity.normalize().multiply(maxSpeed, maxSpeed, maxSpeed).add(player.getDeltaMovement()));
+                if (exceedsLimit) {
+                    entity.setDeltaMovement(
+                            velocity.normalize().multiply(maxSpeed, maxSpeed, maxSpeed).add(player.getDeltaMovement()));
                 }
 
-                if(yeet) {
-                    entity.setDeltaMovement(velocity.add(player.getViewVector(0).multiply(strength, strength, strength)));
+                if (yeet) {
+                    entity.setDeltaMovement(
+                            velocity.add(player.getViewVector(0).multiply(strength, strength, strength)));
                 }
             }
         }
     }
 
     @Override
-    public boolean isControlledByLocalInstance() {
+    protected boolean isLocalClientAuthoritative() {
         Entity entity = this.getVehicle();
-        if(entity instanceof PlayerEntity) {
-            return ((PlayerEntity)entity).isLocalPlayer();
+        if (entity instanceof Player) {
+            return ((Player) entity).isLocalPlayer();
         } else {
-            return !this.level.isClientSide;
+            return !this.level().isClientSide();
         }
     }
 
@@ -519,40 +575,41 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
     }
 
     public boolean isPickedUp() {
-        return this.getVehicle() != null && this.getVehicle() instanceof PlayerEntity;
+        return this.getVehicle() != null && this.getVehicle() instanceof Player;
     }
 
     public void dropIfPickedUp() {
         if (this.isPickedUp()) {
-            PlayerEntity player = (PlayerEntity) this.getVehicle();
+            Player player = (Player) this.getVehicle();
             assert player != null;
             dropHeldEntities(player, false, false, player.getMainHandItem());
         }
     }
 
     @Override
-    public void remove(boolean keepData) {
-        super.remove(keepData);
+    public void remove(RemovalReason reason) {
         this.dropIfPickedUp();
+        super.remove(reason);
     }
 
     @Override
-    public boolean hurt(DamageSource source, float damage) {
-        if (this.level.isClientSide || !this.isAlive()) {
+    public boolean hurtServer(ServerLevel level, DamageSource source, float damage) {
+        if (this.level().isClientSide() || !this.isAlive()) {
             return false;
         }
 
         boolean shouldSwing = true;
-        boolean holdingWrench = source instanceof EntityDamageSource && source.getEntity() instanceof LivingEntity && WrenchItem.hitWithWrench((LivingEntity) source.getEntity());
-        boolean outOfWorld = source == DamageSource.OUT_OF_WORLD;
-        boolean inGoo = source == FluidInit.GOO_DAMAGE && this.getVehicle() == null;
+        boolean holdingWrench =
+                source.getEntity() instanceof LivingEntity
+                        && WrenchItem.hitWithWrench((LivingEntity) source.getEntity());
+        boolean outOfWorld = source.is(DamageTypes.FELL_OUT_OF_WORLD);
+        boolean inGoo = source.is(DamageTypeInit.GOO) && this.getVehicle() == null;
         boolean isCreative = source.isCreativePlayer();
 
         boolean shouldHurt = holdingWrench || inGoo || outOfWorld || isCreative;
 
         if (holdingWrench) {
             damage *= 1.5f;
-//            this.playSound(SoundInit.CUBE_HIT.get(), 0.75f, ModUtil.randomSoundPitch());
         }
 
         if (inGoo) {
@@ -576,47 +633,46 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
         this.setDamage(this.getDamage() + damage * 10.0F);
         this.markHurt();
         if (creative || this.getDamage() > 40.0F) {
-            this.remove();
-            if (!creative && !this.isFromDropper() && this.level.getGameRules().getBoolean(GameRules.RULE_DOENTITYDROPS)) {
-                this.dropAllDeathLoot(source);
+            this.discard();
+            if (!creative
+                    && !this.isFromDropper()
+                    && this.level() instanceof ServerLevel server
+                    && GameRuleInit.getBoolean(server, GameRules.ENTITY_DROPS)) {
+                this.dropAllDeathLoot(server, source);
             }
         }
     }
 
     @Override
-    public void animateHurt() {
+    public void animateHurt(float direction) {
         this.setHurtDir(-this.getHurtDir());
         this.setHurtTime(10);
         this.setDamage(this.getDamage() + this.getDamage() * 10.0F);
     }
 
     @Override
-    protected void defineSynchedData() {
-        super.defineSynchedData();
-        this.entityData.define(FIZZLE_TICKS_ID, 0);
-        this.entityData.define(FROM_DROPPER_ID, false);
-        this.entityData.define(WIGGLE_ID, 0);
-        this.entityData.define(DATA_ID_HURT, 0);
-        this.entityData.define(DATA_ID_HURTDIR, 1);
-        this.entityData.define(DATA_ID_DAMAGE, 0.0F);
+    protected void defineSynchedData(SynchedEntityData.Builder builder) {
+        super.defineSynchedData(builder);
+        builder.define(FIZZLE_TICKS_ID, 0);
+        builder.define(FROM_DROPPER_ID, false);
+        builder.define(WIGGLE_ID, 0);
+        builder.define(DATA_ID_HURT, 0);
+        builder.define(DATA_ID_HURTDIR, 1);
+        builder.define(DATA_ID_DAMAGE, 0.0F);
     }
 
     @Override
-    public void addAdditionalSaveData(CompoundNBT nbt) {
+    public void addAdditionalSaveData(ValueOutput nbt) {
         super.addAdditionalSaveData(nbt);
         nbt.putInt("FizzleTicks", this.getFizzleTicks());
         nbt.putBoolean("FromDropper", this.isFromDropper());
     }
 
     @Override
-    public void readAdditionalSaveData(CompoundNBT nbt) {
+    public void readAdditionalSaveData(ValueInput nbt) {
         super.readAdditionalSaveData(nbt);
-        if (nbt.contains("FizzleTicks")) {
-            this.setFizzleTicks(nbt.getInt("FizzleTicks"));
-        }
-        if (nbt.contains("FromDropper")) {
-            this.setFromDropper(nbt.getBoolean("FromDropper"));
-        }
+        this.setFizzleTicks(nbt.getIntOr("FizzleTicks", 0));
+        this.setFromDropper(nbt.getBooleanOr("FromDropper", false));
     }
 
     public int getFizzleTicks() {
@@ -659,11 +715,11 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
         return this.entityData.get(DATA_ID_HURT);
     }
 
-    public void setHurtDir(int hurtDir) {
-        this.entityData.set(DATA_ID_HURTDIR, hurtDir);
+    public void setHurtDir(float hurtDir) {
+        this.entityData.set(DATA_ID_HURTDIR, (int) hurtDir);
     }
 
-    public int getHurtDir() {
+    public float getHurtDir() {
         return this.entityData.get(DATA_ID_HURTDIR);
     }
 }

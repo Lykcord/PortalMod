@@ -1,19 +1,22 @@
 package net.portalmod.common.sorted.turret;
-import net.minecraft.util.IStringSerializable;
 
-public enum TurretState implements IStringSerializable {
-    RESTING,        // Default
-    OPENING,        // Opening wings
-    SHOOTING,       // Pew pew
-    LOST_TARGET,    // Aiming laser back to the middle
-    CLOSING,        // Closing wings
-    FALLING,        // Falling over
-    DEAD,           // Completely deactivated
+import net.minecraft.util.StringRepresentable;
+
+import java.util.Locale;
+
+public enum TurretState implements StringRepresentable {
+    RESTING, // Default
+    OPENING, // Opening wings
+    SHOOTING, // Pew pew
+    LOST_TARGET, // Aiming laser back to the middle
+    CLOSING, // Closing wings
+    FALLING, // Falling over
+    DEAD, // Completely deactivated
     ;
 
     @Override
     public String getSerializedName() {
-        return this.name().toLowerCase();
+        return this.name().toLowerCase(Locale.ROOT);
     }
 
     public boolean isStanding() {

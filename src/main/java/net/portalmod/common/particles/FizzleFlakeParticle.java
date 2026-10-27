@@ -1,28 +1,41 @@
 package net.portalmod.common.particles;
 
-import net.minecraft.client.particle.*;
-import net.minecraft.client.world.ClientWorld;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.particles.BasicParticleType;
-import net.minecraft.particles.IParticleData;
-import net.minecraft.util.math.vector.Vector3d;
-import net.minecraft.world.World;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.particle.Particle;
+import net.minecraft.client.particle.ParticleProvider;
+import net.minecraft.client.particle.SingleQuadParticle;
+import net.minecraft.client.particle.SpriteSet;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
+import net.minecraft.core.particles.ParticleOptions;
+import net.minecraft.core.particles.SimpleParticleType;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 import net.portalmod.core.init.ParticleInit;
 
 import java.util.Random;
 
-public class FizzleFlakeParticle extends SpriteTexturedParticle {
+public class FizzleFlakeParticle extends SingleQuadParticle {
 
-    public FizzleFlakeParticle(ClientWorld world, double x, double y, double z, double dx, double dy, double dz) {
-        super(world, x, y, z, dx, dy, dz);
+    public FizzleFlakeParticle(
+            ClientLevel world,
+            double x,
+            double y,
+            double z,
+            double dx,
+            double dy,
+            double dz,
+            TextureAtlasSprite sprite) {
+        super(world, x, y, z, dx, dy, dz, sprite);
         this.setSize(0.01F, 0.01F);
         this.setColor(0.1f, 0.1f, 0.1f);
         this.gravity = 0.06F;
         this.yd -= 0.1;
     }
 
-    public IParticleRenderType getRenderType() {
-        return IParticleRenderType.PARTICLE_SHEET_OPAQUE;
+    protected Layer getLayer() {
+        return Layer.OPAQUE;
     }
 
     public void tick() {
@@ -46,20 +59,22 @@ public class FizzleFlakeParticle extends SpriteTexturedParticle {
         if (this.lifetime-- <= 0) {
             this.remove();
         }
-
     }
 
-    public void postMoveUpdate() {
-    }
+    public void postMoveUpdate() {}
 
-    public static void createFlakeParticles(World world, LivingEntity entity) {
+    public static void createFlakeParticles(Level world, LivingEntity entity) {
+        if (!(world instanceof ClientLevel client)) {
+            return;
+        }
         double heightMid = entity.getBbHeight() * 0.5;
         double widthMid = entity.getBbWidth() * 0.5;
 
-        Vector3d offset = new Vector3d(random(widthMid), random(heightMid), random(widthMid));
-        Vector3d particlePos = entity.position().add(offset);
+        Vec3 offset = new Vec3(random(widthMid), random(heightMid), random(widthMid));
+        Vec3 particlePos = entity.position().add(offset);
 
-        world.addParticle(ParticleInit.FIZZLE_FLAKE_FALLING.get(), particlePos.x, particlePos.y, particlePos.z, 0, 0, 0);
+        client.addParticle(
+                ParticleInit.FIZZLE_FLAKE_FALLING.get(), particlePos.x, particlePos.y, particlePos.z, 0, 0, 0);
     }
 
     public static double random(double i) {
@@ -67,10 +82,19 @@ public class FizzleFlakeParticle extends SpriteTexturedParticle {
     }
 
     public static class FallingParticle extends FizzleFlakeParticle {
-        public final IParticleData landParticle;
+        public final ParticleOptions landParticle;
 
-        public FallingParticle(ClientWorld world, double x, double y, double z, double dx, double dy, double dz, IParticleData landParticle) {
-            super(world, x, y, z, dx, dy, dz);
+        public FallingParticle(
+                ClientLevel world,
+                double x,
+                double y,
+                double z,
+                double dx,
+                double dy,
+                double dz,
+                ParticleOptions landParticle,
+                TextureAtlasSprite sprite) {
+            super(world, x, y, z, dx, dy, dz, sprite);
             this.landParticle = landParticle;
         }
 
@@ -82,38 +106,61 @@ public class FizzleFlakeParticle extends SpriteTexturedParticle {
         }
     }
 
-    public static class FallingFactory implements IParticleFactory<BasicParticleType> {
-        public final IAnimatedSprite sprite;
+    public static class FallingFactory implements ParticleProvider<SimpleParticleType> {
+        public final SpriteSet sprite;
 
-        public FallingFactory(IAnimatedSprite sprite) {
+        public FallingFactory(SpriteSet sprite) {
             this.sprite = sprite;
         }
 
-        public Particle createParticle(BasicParticleType type, ClientWorld world, double x, double y, double z, double dx, double dy, double dz) {
-            FizzleFlakeParticle particle = new FallingParticle(world, x, y, z, dx, dy, dz, ParticleInit.FIZZLE_FLAKE_LANDING.get());
-            particle.pickSprite(this.sprite);
-            return particle;
+        public Particle createParticle(
+                SimpleParticleType type,
+                ClientLevel world,
+                double x,
+                double y,
+                double z,
+                double dx,
+                double dy,
+                double dz,
+                RandomSource random) {
+            return new FallingParticle(
+                    world, x, y, z, dx, dy, dz, ParticleInit.FIZZLE_FLAKE_LANDING.get(), this.sprite.get(random));
         }
     }
 
     public static class LandingParticle extends FizzleFlakeParticle {
-        public LandingParticle(ClientWorld world, double x, double y, double z, double dx, double dy, double dz) {
-            super(world, x, y, z, dx, dy, dz);
-            this.lifetime = (int)(16.0D / (Math.random() * 0.8D + 0.2D));
+        public LandingParticle(
+                ClientLevel world,
+                double x,
+                double y,
+                double z,
+                double dx,
+                double dy,
+                double dz,
+                TextureAtlasSprite sprite) {
+            super(world, x, y, z, dx, dy, dz, sprite);
+            this.lifetime = (int) (16.0D / (Math.random() * 0.8D + 0.2D));
         }
     }
 
-    public static class LandingFactory implements IParticleFactory<BasicParticleType> {
-        public final IAnimatedSprite sprite;
+    public static class LandingFactory implements ParticleProvider<SimpleParticleType> {
+        public final SpriteSet sprite;
 
-        public LandingFactory(IAnimatedSprite sprite) {
+        public LandingFactory(SpriteSet sprite) {
             this.sprite = sprite;
         }
 
-        public Particle createParticle(BasicParticleType type, ClientWorld world, double x, double y, double z, double dx, double dy, double dz) {
-            FizzleFlakeParticle particle = new FizzleFlakeParticle.LandingParticle(world, x, y, z, dx, dy, dz);
-            particle.pickSprite(this.sprite);
-            return particle;
+        public Particle createParticle(
+                SimpleParticleType type,
+                ClientLevel world,
+                double x,
+                double y,
+                double z,
+                double dx,
+                double dy,
+                double dz,
+                RandomSource random) {
+            return new LandingParticle(world, x, y, z, dx, dy, dz, this.sprite.get(random));
         }
     }
 }
