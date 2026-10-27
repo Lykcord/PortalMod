@@ -24,7 +24,11 @@ public final class AntlineFeedbackProbe {
     }
 
     public static Watch watch(Level level, Set<BlockPos> devices) {
-        var watch = new Watch(level, Set.copyOf(devices));
+        return watch(level, devices, 8192);
+    }
+
+    public static Watch watch(Level level, Set<BlockPos> devices, int limit) {
+        var watch = new Watch(level, Set.copyOf(devices), limit);
         WATCHES.add(watch);
         return watch;
     }
@@ -35,8 +39,16 @@ public final class AntlineFeedbackProbe {
             throw new AssertionError("Antline feedback exceeded 8192 device updates without settling");
         }
         for (var watch : WATCHES) {
-            if (watch.level == level && watch.devices.contains(pos) && ++watch.updates > 8192) {
+            if (watch.level == level && watch.devices.contains(pos) && ++watch.updates > watch.limit) {
                 throw new AssertionError("Antline feedback exceeded its update budget across server ticks");
+            }
+        }
+    }
+
+    public static void packet(Level level, BlockPos pos) {
+        for (var watch : WATCHES) {
+            if (watch.level == level && watch.devices.contains(pos)) {
+                watch.packets++;
             }
         }
     }
@@ -45,14 +57,21 @@ public final class AntlineFeedbackProbe {
         private final Level level;
         private final Set<BlockPos> devices;
         private int updates;
+        private long packets;
+        private final int limit;
 
-        private Watch(Level level, Set<BlockPos> devices) {
+        private Watch(Level level, Set<BlockPos> devices, int limit) {
             this.level = level;
             this.devices = devices;
+            this.limit = limit;
         }
 
         public int updates() {
             return updates;
+        }
+
+        public long packets() {
+            return packets;
         }
 
         @Override

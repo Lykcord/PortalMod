@@ -67,9 +67,6 @@ public class AntlineBlockItem extends BlockItem {
             AntlineTileEntity.Side side = sideMap.get(clickedFace.getOpposite());
             block.sideUpdate(level, side, pos, true, shift, null);
 
-            // Activate if needed
-            block.recursiveSignalChain(level, side, pos, null, false, 0);
-
             block.sendUpdatePacket(
                     level, pos, clickedFace.getOpposite(), (AntlineTileEntity) level.getBlockEntity(pos));
         }

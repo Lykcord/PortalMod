@@ -2,6 +2,6 @@
   "required": true,
   "package": "net.portalmod.test.mixin",
   "compatibilityLevel": "JAVA_25",
-  "mixins": ["AntlineFeedbackMixin"],
+  "mixins": ["AntlineFeedbackMixin", "AntlinePacketProbeMixin"],
   "injectors": {"defaultRequire": 1}
 }

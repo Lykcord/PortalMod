@@ -25,6 +25,7 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.EntityCollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import net.portalmod.common.sorted.antline.indicator.AntlineOutput;
 import net.portalmod.core.init.PacketInit;
 import net.portalmod.core.init.TileEntityTypeInit;
 import net.portalmod.core.util.ClientExecution;
@@ -32,23 +33,23 @@ import net.portalmod.core.util.ClientModUtil;
 
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 public class AntlineBlock extends Block implements EntityBlock {
 
-    /**
-     * Antline positions currently being processed by {@link #recursiveSignalChain} on the current thread. Used by
-     * {@link #neighborChanged} to skip re-entrant work for antlines already on the call stack, preventing
-     * setBlock/output feedback loops while still allowing signal to propagate into physically-separate antline networks
-     * (e.g. via an encoder/decoder redstone bridge).
-     */
-    private static final ThreadLocal<Set<BlockPos>> ACTIVE_SIGNAL_POSITIONS = ThreadLocal.withInitial(HashSet::new);
+    private record WireNode(BlockPos pos, Direction face) {}
 
-    private static final int MAX_RECURSION_DEPTH = 256;
+    // Output callbacks must not re-enter a network while its final state is being published.
+    private static final ThreadLocal<Set<WireNode>> UPDATING_NODES = ThreadLocal.withInitial(HashSet::new);
+
     private static final int NO_THRESHOLD = 20;
 
     public enum ConnectionType {
@@ -132,103 +133,92 @@ public class AntlineBlock extends Block implements EntityBlock {
         return ConnectionType.NONE;
     }
 
-    public void recursiveSignalChain(
-            Level level,
-            AntlineTileEntity.Side side,
-            BlockPos pos,
-            Direction originDirection,
-            boolean active,
-            int depth) {
-        BlockPos trackedPos = pos.immutable();
-        Set<BlockPos> activePositions = ACTIVE_SIGNAL_POSITIONS.get();
-        boolean addedToActive = activePositions.add(trackedPos);
+    public void updateSignalNetwork(Level level, BlockPos pos, Direction face) {
+        if (level.isClientSide() || face == null) {
+            return;
+        }
+        var start = new WireNode(pos.immutable(), face);
+        var updating = UPDATING_NODES.get();
+        if (updating.contains(start)) {
+            return;
+        }
+        var pending = new ArrayDeque<WireNode>();
+        var wires = new LinkedHashMap<WireNode, AntlineTileEntity.Side>();
+        var outputs = new LinkedHashSet<BlockPos>();
+        boolean powered = false;
+        pending.add(start);
+
+        // Read every input before changing any wire or output.
+        while (!pending.isEmpty()) {
+            var node = pending.removeFirst();
+            if (wires.containsKey(node)) {
+                continue;
+            }
+            if (updating.contains(node)) {
+                return;
+            }
+            if (!(level.getBlockEntity(node.pos()) instanceof AntlineTileEntity entity)) {
+                continue;
+            }
+            var side = entity.getSideMap().get(node.face());
+            if (side.isEmpty()) {
+                continue;
+            }
+            wires.put(node, side);
+            for (Direction direction : Direction.values()) {
+                if (direction.getAxis() == node.face().getAxis() || !side.hasConnection(direction)) {
+                    continue;
+                }
+                var type = getConnectionType(level, node.pos(), node.face(), direction, NO_THRESHOLD);
+                if (type == ConnectionType.NONE) {
+                    continue;
+                }
+                var friend = new Friend(type, node.pos(), node.face(), direction);
+                if (type == ConnectionType.ELEMENT) {
+                    var state = level.getBlockState(friend.pos);
+                    if (state.getBlock() instanceof AntlineActivator input) {
+                        powered |= input.isAntlineActive(state);
+                    }
+                    if (state.getBlock() instanceof AntlineActivated) {
+                        outputs.add(friend.pos.immutable());
+                    }
+                } else {
+                    pending.addLast(new WireNode(friend.pos.immutable(), friend.sideDirection));
+                }
+            }
+        }
+        if (wires.isEmpty()) {
+            return;
+        }
+        updating.addAll(wires.keySet());
         try {
-            if (depth > MAX_RECURSION_DEPTH) {
-                return;
-            }
-            Boolean newActive = null;
-
-            // Loop prevention
-            if (active == side.isActive() && originDirection != null) {
-                return;
-            }
-            side.setActive(active);
-
-            // Dead end
-            if (side.countConnections() < 2 && originDirection != null) {
-                sendUpdatePacket(level, pos, side.toDirection(), (AntlineTileEntity) level.getBlockEntity(pos));
-                return;
-            }
-
-            boolean becameActive = active;
-
-            // In all connection directions
-            for (Direction connectDirection : side.absoluteConnections()) {
-                if (connectDirection.getAxis() == side.toDirection().getAxis() // Rule out relative up / down
-                        || connectDirection == originDirection) {
-                    continue;
-                } // Prevent signal from going backwards
-
-                // Check direction
-                ConnectionType connectionType =
-                        getConnectionType(level, pos, side.toDirection(), connectDirection, NO_THRESHOLD);
-                if (connectionType == ConnectionType.NONE) {
-                    continue;
+            var changed = new ArrayList<WireNode>();
+            for (var entry : wires.entrySet()) {
+                if (entry.getValue().isActive() != powered) {
+                    entry.getValue().setActive(powered);
+                    changed.add(entry.getKey());
                 }
-
-                Friend friend = new Friend(connectionType, pos, side.toDirection(), connectDirection);
-
-                // If it's an element, (un)power it
-                if (connectionType == ConnectionType.ELEMENT) {
-                    BlockState neighborState = level.getBlockState(friend.pos);
-                    Block neighborBlock = neighborState.getBlock();
-
-                    // Power indicators
-                    if (neighborBlock instanceof AntlineActivated) {
-                        ((AntlineActivated) neighborBlock)
-                                .onAntlineActivation(active, neighborState, level, friend.pos);
+            }
+            // Publish indicators first so decoders read the final indicator state.
+            for (boolean indicators : new boolean[] {true, false}) {
+                for (var output : outputs) {
+                    var state = level.getBlockState(output);
+                    if (state.getBlock() instanceof AntlineActivated device
+                            && (device instanceof AntlineOutput) == indicators) {
+                        device.updateAntlineActivation(state, level, output);
                     }
-
-                    // Hit another input, adopt its signal
-                    if (neighborBlock instanceof AntlineActivator) {
-                        newActive = ((AntlineActivator) neighborBlock).isAntlineActive(neighborState);
-
-                        if (newActive && !active) {
-                            recursiveSignalChain(level, side, pos, null, newActive, 0);
-                        }
-
-                        becameActive = newActive;
-
-                        continue;
-                    }
-                    continue;
-                }
-
-                // It's another Antline. Do a recursive signal call
-                AntlineTileEntity entity = ((AntlineTileEntity) level.getBlockEntity(friend.pos));
-                AntlineTileEntity.SideMap sideMap = entity.getSideMap();
-                recursiveSignalChain(
-                        level,
-                        sideMap.get(friend.sideDirection),
-                        friend.pos,
-                        friend.connectDirection,
-                        active || becameActive,
-                        depth + 1);
-
-                // If the antline we just updated ended up being powered, we set becameActive to true, so we don't
-                // unpower the next ones we were supposed to unpower.
-                if (((AntlineTileEntity) level.getBlockEntity(friend.pos))
-                        .getSideMap()
-                        .get(friend.sideDirection)
-                        .isActive()) {
-                    becameActive = true;
                 }
             }
-
-            sendUpdatePacket(level, pos, side.toDirection(), (AntlineTileEntity) level.getBlockEntity(pos));
+            for (var node : changed) {
+                if (level.getBlockEntity(node.pos()) instanceof AntlineTileEntity entity
+                        && entity.getSideMap().hasSide(node.face())) {
+                    sendUpdatePacket(level, node.pos(), node.face(), entity);
+                }
+            }
         } finally {
-            if (addedToActive) {
-                activePositions.remove(trackedPos);
+            updating.removeAll(wires.keySet());
+            if (updating.isEmpty()) {
+                UPDATING_NODES.remove();
             }
         }
     }
@@ -240,9 +230,6 @@ public class AntlineBlock extends Block implements EntityBlock {
             boolean allowNewConnections,
             boolean shift,
             Direction allowedConnectDirection) {
-        Boolean active = null;
-        Direction originDirection = null;
-
         // In all directions for that side
         for (Direction connectionDirection : Direction.values()) {
             boolean allowConnection = (allowedConnectDirection == connectionDirection) || allowNewConnections;
@@ -276,22 +263,9 @@ public class AntlineBlock extends Block implements EntityBlock {
             if (!element && connect && allowConnection) {
                 connect(level, friend.pos, friend.sideDirection, friend.connectDirection, true);
             } // Neighbor
-
-            if (friend == null) {
-                continue;
-            }
-
-            BlockState friendState = level.getBlockState(friend.pos);
-            if (element && friendState.getBlock() instanceof AntlineActivator) {
-                active = ((AntlineActivator) friendState.getBlock()).isAntlineActive(friendState);
-                originDirection = connectionDirection;
-            }
         }
 
-        // If a signal source was found, recurse
-        if (active != null) {
-            recursiveSignalChain(level, side, pos, originDirection, active, 0);
-        }
+        updateSignalNetwork(level, pos, side.toDirection());
     }
 
     private static class Friend {
@@ -344,6 +318,9 @@ public class AntlineBlock extends Block implements EntityBlock {
         AntlineTileEntity tileEntity = (AntlineTileEntity) level.getBlockEntity(pos);
         AntlineTileEntity.Side sideObj = tileEntity.getSideMap().get(side);
 
+        if (sideObj.hasConnection(connectDir) == connect) {
+            return;
+        }
         if (connect) {
             sideObj.addConnection(connectDir);
         } else {
@@ -371,10 +348,6 @@ public class AntlineBlock extends Block implements EntityBlock {
     private void updateNeighbor(BlockState blockState, Level level, BlockPos pos, Direction neighborDir) {
         BlockPos neighborPos = pos.relative(neighborDir);
 
-        if (!level.isClientSide() && ACTIVE_SIGNAL_POSITIONS.get().contains(pos)) {
-            return;
-        }
-
         BlockState neighborState = level.getBlockState(neighborPos);
 
         if (!(level.getBlockEntity(pos) instanceof AntlineTileEntity tileEntity)) {
@@ -392,11 +365,9 @@ public class AntlineBlock extends Block implements EntityBlock {
 
         // Update each side
         for (AntlineTileEntity.Side side : sideMap.values()) {
-            if (side.isEmpty()) {
+            if (side.isEmpty() || UPDATING_NODES.get().contains(new WireNode(pos, side.toDirection()))) {
                 continue;
             }
-
-            boolean usedToHaveConnection = side.hasConnection(neighborDir);
 
             // Allow new connections if the updating block is connectable with the side
             sideUpdate(
@@ -406,16 +377,6 @@ public class AntlineBlock extends Block implements EntityBlock {
                     false,
                     true,
                     neighborState.getBlock() instanceof AntlineConnector ? neighborDir : null);
-
-            boolean hasNowConnection = side.hasConnection(neighborDir);
-
-            if (!usedToHaveConnection) {
-                continue;
-            }
-
-            if (!hasNowConnection) {
-                recursiveSignalChain(level, side, pos, null, false, 0);
-            }
         }
     }
 
@@ -466,7 +427,7 @@ public class AntlineBlock extends Block implements EntityBlock {
                         continue;
                     }
 
-                    recursiveSignalChain(level, side, pos, null, false, 0);
+                    updateSignalNetwork(level, pos, side.toDirection());
                 }
             }
         }
