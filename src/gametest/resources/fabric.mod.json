@@ -31,13 +31,8 @@
     ]
   },
   "mixins": [
-    {
-      "config": "portalmod-test.mixins.json",
-      "environment": "client"
-    },
-    {
-      "config": "portalmod-test-common.mixins.json"
-    }
+    {"config": "portalmod-test.mixins.json", "environment": "client"},
+    {"config": "portalmod-test-common.mixins.json"}
   ],
   "depends": {
     "portalmod": "*"

@@ -37,12 +37,13 @@ This fork targets Minecraft Java 26.3, Fabric Loader 0.20.1, and Java 25.
 ./gradlew runGameTest
 ./gradlew runClientGameTest
 ./gradlew runClientGameTest -PperformanceMods
+./gradlew runClientGameTest --args="--graphicsBackend VULKAN"
 ./gradlew runClientGameTest -PperformanceMods --args="--graphicsBackend VULKAN"
 ```
 
 The optional performance test profile loads Sodium 0.9.2, Lithium 0.26.2, FerriteCore 9.0.0, ImmediatelyFast 1.17.1, and the Fabric 26.3 build of Entity Culling 1.11.3. These mods are not bundled or required by PortalMod.
 
-The client suite passes with OpenGL and Minecraft's native Vulkan backend. Vulkan was checked on Linux with an NVIDIA RTX 3080.
+The client suite passes with vanilla rendering and the performance profile on both OpenGL and Minecraft's native Vulkan backend. Vulkan was checked on Linux with an NVIDIA RTX 3080.
 
 The client checks include rendered-pixel assertions for 50 crossing positions and angles, screen-edge portal openings, main-world terrain restoration, wall occlusion, destination sky, and cube meshes on both sides of an opening. They also check unwanted outlines, item translations, single-sample movement replay, TCP player/cube traversal, and chamber-content interactions. The server checks cover the original testing elements, persistence, and native ticking.
 

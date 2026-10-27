@@ -1,3 +1,15 @@
+# Version 1.3.1+26.3-fabric.4
+
+- Kept the first-person body hidden during crouching and swimming pose transitions.
+- Fixed breaking one antline face discarding the other faces on the client, including wall/floor combinations.
+- Moved encoder input changes to scheduled ticks so indicator/decoder feedback cannot flood the same neighbor-update chain.
+- Fixed Vulkan's same-submission cloud fence crash by keeping cloud buffers separate for each portal view.
+- Restored the original portal texture orientation, with the bright border at the bottom.
+- Stopped back-face portal highlights drawing over visible portal openings while keeping highlights through solid walls.
+- Removed unintended outlines from worn Long Fall Boots.
+- Fixed Done and Escape navigation in PortalMod options and centered the PortalMod title artwork.
+- Added client, server, and rendered-pixel regressions for the reported cases.
+
 # Version 1.3.1+26.3-fabric.3
 
 - Fixed the walking-bob and auto-jump measurements counting portal displacement as physical walking, which caused the screen to shake during traversal.
