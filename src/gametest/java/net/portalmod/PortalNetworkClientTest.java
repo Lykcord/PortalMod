@@ -8,14 +8,16 @@ import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.network.protocol.game.ClientboundEntityPositionSyncPacket;
+import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.PositionPath;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.Vec3;
 import net.portalmod.common.entities.TestElementEntity;
 import net.portalmod.common.items.WrenchItem;
 import net.portalmod.common.sorted.cube.Cube;
@@ -24,6 +26,7 @@ import net.portalmod.common.sorted.portal.ClientPortalManager;
 import net.portalmod.common.sorted.portal.ITeleportable;
 import net.portalmod.common.sorted.portal.PortalEnd;
 import net.portalmod.common.sorted.portal.PortalManager;
+import net.portalmod.common.sorted.portal.PortalPlacer;
 import net.portalmod.common.sorted.portalgun.CPortalGunInteractionPacket;
 import net.portalmod.common.sorted.portalgun.PortalGun;
 import net.portalmod.common.sorted.portalgun.PortalGunInteraction;
@@ -176,7 +179,10 @@ public class PortalNetworkClientTest implements FabricClientGameTest {
             context.waitFor(
                     client ->
                             client.level.getEntity(cubeId) != null
-                                    && client.player.position().distanceTo(new Vec3(.5, 100, 4)) < .1);
+                                    && client.player
+                                                    .position()
+                                                    .distanceTo(new net.minecraft.world.phys.Vec3(.5, 100, 4))
+                                            < .1);
             context.getInput().lookAt(180, 0);
             context.waitTicks(5);
             context.runOnClient(
@@ -199,6 +205,26 @@ public class PortalNetworkClientTest implements FabricClientGameTest {
             context.runOnClient(
                     client -> {
                         var cube = (Cube) client.level.getEntity(cubeId);
+                        client.getConnection()
+                                .handleMoveEntity(
+                                        new ClientboundMoveEntityPacket.Rot(cubeId, (byte) 0, (byte) 0, true));
+                        if (cube.isInterpolating()) {
+                            throw new AssertionError("Stale server rotation must not fight a locally held cube");
+                        }
+                        var predicted = cube.position();
+                        var packetBase = cube.getPositionCodec().getBase();
+                        try {
+                            client.getConnection()
+                                    .handleEntityPositionSync(
+                                            new ClientboundEntityPositionSyncPacket(
+                                                    cubeId, PositionPath.of(predicted.add(.25, 0, 0)), 0, 0, true));
+                            if (cube.isInterpolating() || cube.position().distanceTo(predicted) > .00001) {
+                                throw new AssertionError(
+                                        "Absolute server echoes must preserve the local held pose too");
+                            }
+                        } finally {
+                            cube.getPositionCodec().setBase(packetBase);
+                        }
                         float body = client.player.yBodyRot, oldBody = client.player.yBodyRotO;
                         try {
                             client.player.yBodyRot = client.player.yBodyRotO = 0;
@@ -257,6 +283,55 @@ public class PortalNetworkClientTest implements FabricClientGameTest {
                                     "Release before the first movement update produced invalid momentum");
                         }
                     });
+            server.runOnServer(
+                    instance -> {
+                        var level = connection.getServerPlayer().level();
+                        var entry =
+                                PortalPlacer.placePortal(
+                                        level,
+                                        PortalEnd.PRIMARY,
+                                        "blue",
+                                        gun,
+                                        new net.portalmod.core.math.Vec3(.5, 101, 1),
+                                        Direction.SOUTH,
+                                        Direction.UP,
+                                        false,
+                                        null,
+                                        null);
+                        var exit =
+                                PortalPlacer.placePortal(
+                                        level,
+                                        PortalEnd.SECONDARY,
+                                        "orange",
+                                        gun,
+                                        new net.portalmod.core.math.Vec3(.5, 101, 8),
+                                        Direction.NORTH,
+                                        Direction.UP,
+                                        false,
+                                        null,
+                                        null);
+                        if (entry == null || exit == null) {
+                            throw new AssertionError("TCP cube traversal portals failed to place");
+                        }
+                        var cube = level.getEntity(cubeId);
+                        cube.snapTo(.5, 100, 1.3);
+                        cube.setDeltaMovement(0, 0, -.4);
+                    });
+            context.waitFor(client -> client.level.getEntity(cubeId).getZ() > 6, 100);
+            connection.waitForClientboundPackets();
+            context.waitTicks(5);
+            var teleportedCube = context.computeOnClient(client -> client.level.getEntity(cubeId).position());
+            server.runOnServer(
+                    instance -> {
+                        var cube = connection.getServerPlayer().level().getEntity(cubeId);
+                        if (cube.position().distanceTo(teleportedCube) > .5) {
+                            throw new AssertionError(
+                                    "TCP cube teleport lost movement history or packet coordinates: "
+                                            + teleportedCube
+                                            + " vs "
+                                            + cube.position());
+                        }
+                    });
             var triggerPos = new BlockPos(2, 100, 3);
             server.runOnServer(
                     instance -> {
@@ -276,7 +351,10 @@ public class PortalNetworkClientTest implements FabricClientGameTest {
                                     client.player,
                                     InteractionHand.MAIN_HAND,
                                     new BlockHitResult(
-                                            Vec3.atCenterOf(triggerPos), Direction.SOUTH, triggerPos, false)));
+                                            net.minecraft.world.phys.Vec3.atCenterOf(triggerPos),
+                                            Direction.SOUTH,
+                                            triggerPos,
+                                            false)));
             context.waitFor(client -> TriggerSelectionClient.isSelecting());
             context.runOnClient(
                     client -> {
@@ -311,7 +389,10 @@ public class PortalNetworkClientTest implements FabricClientGameTest {
                                     client.player,
                                     InteractionHand.MAIN_HAND,
                                     new BlockHitResult(
-                                            Vec3.atCenterOf(triggerPos), Direction.SOUTH, triggerPos, false)));
+                                            net.minecraft.world.phys.Vec3.atCenterOf(triggerPos),
+                                            Direction.SOUTH,
+                                            triggerPos,
+                                            false)));
             context.waitFor(client -> TriggerSelectionClient.isSelecting());
             server.runOnServer(
                     instance -> connection.getServerPlayer().setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY));
@@ -333,7 +414,10 @@ public class PortalNetworkClientTest implements FabricClientGameTest {
                                     client.player,
                                     InteractionHand.MAIN_HAND,
                                     new BlockHitResult(
-                                            Vec3.atCenterOf(triggerPos), Direction.SOUTH, triggerPos, false)));
+                                            net.minecraft.world.phys.Vec3.atCenterOf(triggerPos),
+                                            Direction.SOUTH,
+                                            triggerPos,
+                                            false)));
             context.waitFor(client -> TriggerSelectionClient.isSelecting());
         }
         context.runOnClient(

@@ -11,11 +11,15 @@
       "net.portalmod.PortalBoundaryVisibilityClientTest",
       "net.portalmod.PortalOptionsLayoutClientTest",
       "net.portalmod.TurretDamageClientTest",
+      "net.portalmod.PortalEntityVisualClientTest",
+      "net.portalmod.PortalTraversalClientTest",
+      "net.portalmod.PortalVisibilityClientTest",
       "net.portalmod.FaithPlateConfigurationClientTest",
       "net.portalmod.PortalNetworkClientTest",
       "net.portalmod.LegacyChunkClientTest",
       "net.portalmod.common.sorted.radio.ChamberContentClientTest",
-      "net.portalmod.PortalClientTest"
+      "net.portalmod.PortalClientTest",
+      "net.portalmod.PortalSwimmingClientTest"
     ]
   },
   "depends": {
