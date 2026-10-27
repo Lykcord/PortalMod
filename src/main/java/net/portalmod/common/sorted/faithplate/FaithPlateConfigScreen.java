@@ -40,7 +40,7 @@ public class FaithPlateConfigScreen extends Screen {
     private FaithPlateParabola parabola;
 
     public FaithPlateConfigScreen(BlockPos selected) {
-        super(Component.translatable("screen.portalmod.faithplate"));
+        super(Component.translatable("block.portalmod.faithplate"));
         this.selected = selected.immutable();
     }
 

@@ -72,7 +72,9 @@ public class ItemInit {
     public static final Entry<Item> STANDING_BUTTON = registerBlockItem("standing_button", BlockInit.STANDING_BUTTON);
 
     public static final Entry<Item> ANTLINE =
-            register("antline", key -> new AntlineBlockItem(BlockInit.ANTLINE.get(), properties(key)));
+            register(
+                    "antline",
+                    key -> new AntlineBlockItem(BlockInit.ANTLINE.get(), properties(key).useBlockDescriptionPrefix()));
 
     public static final Entry<Item> ANTLINE_INDICATOR =
             registerBlockItem("antline_indicator", BlockInit.ANTLINE_INDICATOR);
@@ -81,10 +83,14 @@ public class ItemInit {
     public static final Entry<Item> ANTLINE_ENCODER = registerBlockItem("antline_encoder", BlockInit.ANTLINE_ENCODER);
 
     public static final Entry<Item> TRIGGER =
-            register("trigger", key -> new BlockItem(BlockInit.TRIGGER.get(), properties(key)));
+            register(
+                    "trigger",
+                    key -> new BlockItem(BlockInit.TRIGGER.get(), properties(key).useBlockDescriptionPrefix()));
 
     public static final Entry<Item> AUTOPORTAL =
-            register("autoportal", key -> new BlockItem(BlockInit.AUTOPORTAL.get(), properties(key)));
+            register(
+                    "autoportal",
+                    key -> new BlockItem(BlockInit.AUTOPORTAL.get(), properties(key).useBlockDescriptionPrefix()));
 
     public static final Entry<Item> CHAMBER_DOOR = registerBlockItem("chamber_door", BlockInit.CHAMBER_DOOR);
     public static final Entry<Item> PUSH_DOOR = registerBlockItem("push_door", BlockInit.PUSH_DOOR);
@@ -97,7 +103,7 @@ public class ItemInit {
     public static final Entry<Item> CHAMBER_LIGHTS =
             register(
                     "chamber_lights",
-                    key -> new BlockItem(BlockInit.CHAMBER_LIGHTS.get(), properties(key))); // todo remove ister
+                    key -> new BlockItem(BlockInit.CHAMBER_LIGHTS.get(), properties(key).useBlockDescriptionPrefix()));
 
     public static final Entry<Item> GOO_BUCKET =
             register("goo_bucket", key -> new GooBucketItem(FluidInit.GOO_FLUID, properties(key).stacksTo(1)));
@@ -108,12 +114,20 @@ public class ItemInit {
     public static final Entry<Item> REPULSION_GEL =
             register(
                     "repulsion_gel",
-                    key -> new GelContainer(BlockInit.REPULSION_GEL.get(), properties(key).stacksTo(1), 0x3776F1));
+                    key ->
+                            new GelContainer(
+                                    BlockInit.REPULSION_GEL.get(),
+                                    properties(key).useBlockDescriptionPrefix().stacksTo(1),
+                                    0x3776F1));
 
     public static final Entry<Item> PROPULSION_GEL =
             register(
                     "propulsion_gel",
-                    key -> new GelContainer(BlockInit.PROPULSION_GEL.get(), properties(key).stacksTo(1), 0xE3834A));
+                    key ->
+                            new GelContainer(
+                                    BlockInit.PROPULSION_GEL.get(),
+                                    properties(key).useBlockDescriptionPrefix().stacksTo(1),
+                                    0xE3834A));
 
     public static final Entry<Item> TURRET = registerSpawnEgg("turret", EntityInit.TURRET, "turret");
 
@@ -137,12 +151,23 @@ public class ItemInit {
                                                                     PortalMod.MODID, "rain")))));
 
     public static final Entry<Item> FOREST_CAKE =
-            register("forest_cake", key -> new BlockItem(BlockInit.FOREST_CAKE.get(), properties(key).stacksTo(1)));
+            register(
+                    "forest_cake",
+                    key ->
+                            new BlockItem(
+                                    BlockInit.FOREST_CAKE.get(),
+                                    properties(key).useBlockDescriptionPrefix().stacksTo(1)));
 
     public static final Entry<Item> PLATFORM_BEAM =
-            register("platform_beam", key -> new BlockItem(BlockInit.PLATFORM_BEAM.get(), properties(key)));
+            register(
+                    "platform_beam",
+                    key -> new BlockItem(BlockInit.PLATFORM_BEAM.get(), properties(key).useBlockDescriptionPrefix()));
     public static final Entry<Item> RUSTY_PLATFORM_BEAM =
-            register("rusty_platform_beam", key -> new BlockItem(BlockInit.RUSTY_PLATFORM_BEAM.get(), properties(key)));
+            register(
+                    "rusty_platform_beam",
+                    key ->
+                            new BlockItem(
+                                    BlockInit.RUSTY_PLATFORM_BEAM.get(), properties(key).useBlockDescriptionPrefix()));
 
     // Blocks
     public static final Entry<Item> LUNECAST = registerPanelBlockItem("lunecast", BlockInit.LUNECAST);
@@ -252,11 +277,12 @@ public class ItemInit {
     }
 
     public static Entry<Item> registerPanelBlockItem(String name, Entry<Block> block) {
-        return ItemInit.register(name, key -> new PanelBlockItem(block.get(), properties(key)));
+        return ItemInit.register(
+                name, key -> new PanelBlockItem(block.get(), properties(key).useBlockDescriptionPrefix()));
     }
 
     public static Entry<Item> registerBlockItem(String name, Entry<Block> block) {
-        return ItemInit.register(name, key -> new BlockItem(block.get(), properties(key)));
+        return ItemInit.register(name, key -> new BlockItem(block.get(), properties(key).useBlockDescriptionPrefix()));
     }
 
     public static Entry<Item> registerSpawnEgg(String name, Entry<? extends EntityType<?>> entity, String tooltip) {
