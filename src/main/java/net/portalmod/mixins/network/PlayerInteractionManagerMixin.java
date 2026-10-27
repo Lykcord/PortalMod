@@ -1,41 +1,58 @@
 package net.portalmod.mixins.network;
 
-import net.minecraft.entity.ai.attributes.ModifiableAttributeInstance;
-import net.minecraft.network.play.client.CPlayerDiggingPacket;
-import net.minecraft.server.management.PlayerInteractionManager;
-import net.minecraft.util.Direction;
-import net.minecraft.util.math.BlockPos;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.ServerPlayerGameMode;
+import net.portalmod.common.sorted.antline.AntlineBlock;
+import net.portalmod.common.sorted.antline.AntlineTileEntity;
 import net.portalmod.common.sorted.portal.PortalServerProofManager;
+
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-@Mixin(PlayerInteractionManager.class)
+@Mixin(ServerPlayerGameMode.class)
 public class PlayerInteractionManagerMixin {
-    private BlockPos pmCapturedBlockPos;
+    @Shadow protected ServerPlayer player;
 
     @Inject(
-                        method = "handleBlockBreakAction",
-            at = @At("HEAD")
-    )
-    private void pmCaptureBlockPos(BlockPos pos, CPlayerDiggingPacket.Action action, Direction direction, int buildLimit, CallbackInfo info) {
-        this.pmCapturedBlockPos = pos;
+            method = "destroyBlock",
+            at =
+                    @At(
+                            value = "INVOKE",
+                            target =
+                                    "Lnet/minecraft/server/level/ServerLevel;removeBlock(Lnet/minecraft/core/BlockPos;Z)Z"),
+            cancellable = true)
+    private void portalmod$breakAntlineSide(BlockPos pos, CallbackInfoReturnable<Boolean> cir) {
+        var level = player.level();
+        var state = level.getBlockState(pos);
+        if (!(state.getBlock() instanceof AntlineBlock antline)) {
+            return;
+        }
+        antline.breakTargetedSide(state, level, pos, player);
+        player.connection.send(new ClientboundBlockUpdatePacket(pos, level.getBlockState(pos)));
+        if (level.getBlockEntity(pos) instanceof AntlineTileEntity entity) {
+            player.connection.send(entity.getUpdatePacket());
+        }
+        cir.setReturnValue(false);
     }
 
-    @Redirect(
-                        method = "handleBlockBreakAction",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/entity/ai/attributes/ModifiableAttributeInstance;getValue()D"
-            )
-    )
-    private double pmAllowThroughPortalBreakReach(ModifiableAttributeInstance attribute) {
-        PlayerInteractionManager thiss = (PlayerInteractionManager)(Object)this;
-        if(PortalServerProofManager.getInstance().hasBelievableProof(thiss.player, this.pmCapturedBlockPos, true))
-            return Double.POSITIVE_INFINITY;
-
-        return attribute.getValue();
+    @WrapOperation(
+            method = "handleBlockBreakAction",
+            at =
+                    @At(
+                            value = "INVOKE",
+                            target =
+                                    "Lnet/minecraft/server/level/ServerPlayer;isWithinBlockInteractionRange(Lnet/minecraft/core/BlockPos;D)Z"))
+    private boolean portalmod$allowPortalReach(
+            ServerPlayer player, BlockPos pos, double extraRange, Operation<Boolean> original) {
+        return original.call(player, pos, extraRange)
+                || PortalServerProofManager.getInstance().hasBelievableProof(player, pos, true);
     }
 }

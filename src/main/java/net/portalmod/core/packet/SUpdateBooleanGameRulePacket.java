@@ -1,15 +1,8 @@
 package net.portalmod.core.packet;
 
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.world.ClientWorld;
-import net.minecraft.network.PacketBuffer;
-import net.minecraft.world.GameRules;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
-import net.minecraftforge.fml.network.NetworkEvent;
+import net.minecraft.network.FriendlyByteBuf;
 import net.portalmod.core.init.GameRuleInit;
 
-import java.nio.charset.StandardCharsets;
 import java.util.function.Supplier;
 
 public class SUpdateBooleanGameRulePacket implements AbstractPacket<SUpdateBooleanGameRulePacket> {
@@ -24,32 +17,19 @@ public class SUpdateBooleanGameRulePacket implements AbstractPacket<SUpdateBoole
     }
 
     @Override
-    public SUpdateBooleanGameRulePacket decode(PacketBuffer buffer) {
-        int length = buffer.readInt();
-        String rule = buffer.readCharSequence(length, StandardCharsets.UTF_8).toString();
-        boolean value = buffer.readBoolean();
-        return new SUpdateBooleanGameRulePacket(rule, value);
+    public SUpdateBooleanGameRulePacket decode(FriendlyByteBuf buffer) {
+        return new SUpdateBooleanGameRulePacket(buffer.readUtf(256), buffer.readBoolean());
     }
 
     @Override
-    public void encode(PacketBuffer buffer) {
-        buffer.writeInt(this.name.length());
-        buffer.writeCharSequence(this.name, StandardCharsets.UTF_8);
+    public void encode(FriendlyByteBuf buffer) {
+        buffer.writeUtf(this.name, 256);
         buffer.writeBoolean(this.value);
     }
 
     @Override
-    public boolean handle(Supplier<NetworkEvent.Context> context) {
-        context.get().enqueueWork(() -> {
-            DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> {
-                ClientWorld level = Minecraft.getInstance().level;
-                if(level == null)
-                    return;
-
-                level.getGameRules().getRule(GameRuleInit.<GameRules.BooleanValue>getRule(this.name)).set(this.value, null);
-            });
-        });
-        context.get().setPacketHandled(true);
+    public boolean handle(Supplier<PacketContext> context) {
+        context.get().enqueueWork(() -> GameRuleInit.updateClientRule(this.name, this.value));
         return true;
     }
 }
