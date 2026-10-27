@@ -11,6 +11,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.portalmod.PMState;
+import net.portalmod.client.compat.PortalRendererCompatibility;
 import net.portalmod.client.render.PortalCamera;
 import net.portalmod.core.math.Mat4;
 import net.portalmod.core.math.Vec3;
@@ -106,21 +107,14 @@ public class PortalEntityClient {
         Mat4 changeOfBasisMatrix = portalBasis.getChangeOfBasisMatrix(targetPortalBasis);
 
         if (portalPosBobbed.dot(normalBobbed) < 0) {
-            Vec3 newCameraPos =
-                    new Vec3(cameraPos)
-                            .sub(portalPos.add(new Vec3(portal.getNormal()).mul(0.0005f).to3d()))
-                            .transform(changeOfBasisMatrix)
-                            .add(targetPortalPos.add(new Vec3(targetPortal.getNormal()).mul(0.0005f).to3d()));
+            Mat4 portalTransform = PortalEntity.getPortalToPortalMatrix(portal, targetPortal);
+            Vec3 newCameraPos = new Vec3(cameraPos).transform(portalTransform);
             ((ActiveRenderInfoAccessor) newCamera).pmSetPosition(newCameraPos.to3d());
 
             if (useBobbing) {
                 if (PMState.cameraPosOverrideForRenderingSelf != null) {
                     PMState.cameraPosOverrideForRenderingSelf =
-                            PMState.cameraPosOverrideForRenderingSelf
-                                    .clone()
-                                    .sub(portalPos.add(new Vec3(portal.getNormal()).mul(0.0005f).to3d()))
-                                    .transform(changeOfBasisMatrix)
-                                    .add(targetPortalPos.add(new Vec3(targetPortal.getNormal()).mul(0.0005f).to3d()));
+                            PMState.cameraPosOverrideForRenderingSelf.clone().transform(portalTransform);
                 }
             }
 
@@ -185,6 +179,9 @@ public class PortalEntityClient {
         if (transformed == null) {
             return;
         }
+        boolean warped =
+                transformed.position().distanceToSqr(animated.position()) > 1.0E-10
+                        || Math.abs(transformed.rotation().dot(animated.rotation())) < .99999F;
         var access = (ActiveRenderInfoAccessor) camera;
         access.pmSetPosition(transformed.position());
         access.pmSetRotation(transformed.yRot(), transformed.xRot());
@@ -193,6 +190,7 @@ public class PortalEntityClient {
             access.pmGetBlockPosition().set(BlockPos.containing(forLight.position()));
         }
         PMState.cameraRoll = transformed.getRoll();
+        PortalRendererCompatibility.onCameraUpdated(camera, warped);
     }
 
     public static boolean isLocalPlayerMoving() {

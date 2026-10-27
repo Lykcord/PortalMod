@@ -165,6 +165,9 @@ public final class DuplicateEntityRenderer {
         var offset = new Vec3(entity.getPosition(partialTicks)).sub(entity.position());
         var body = transformBounds(entity.getBoundingBox().move(offset.to3d()), transform);
         float height = entity.getEyeHeight();
+        if (body.inflate(Camera.PROJECTION_Z_NEAR * 1.5).contains(cameraPos.to3d())) {
+            return false;
+        }
         if (body.contains(cameraPos.to3d()) ^ body.contains(cameraPos.clone().sub(0, height, 0).to3d())) {
             return false;
         }
