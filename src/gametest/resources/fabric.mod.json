@@ -5,7 +5,8 @@
   "environment": "*",
   "entrypoints": {
     "fabric-gametest": [
-      "net.portalmod.PortalServerTest"
+      "net.portalmod.PortalServerTest",
+      "net.portalmod.AntlineFeedbackServerTest"
     ],
     "fabric-client-gametest": [
       "net.portalmod.FirstPersonPoseClientTest",
@@ -30,6 +31,9 @@
     {
       "config": "portalmod-test.mixins.json",
       "environment": "client"
+    },
+    {
+      "config": "portalmod-test-common.mixins.json"
     }
   ],
   "depends": {

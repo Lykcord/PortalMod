@@ -3,6 +3,8 @@ package net.portalmod.common.sorted.antline.indicator;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.level.BlockGetter;
@@ -44,6 +46,14 @@ public class AntlineEncoderBlock extends AntlineIcon implements AntlineActivator
     @Override
     public void neighborChanged(
             BlockState state, Level world, BlockPos pos, Block block, Orientation orientation, boolean b) {
+        if (world instanceof ServerLevel server && world.hasNeighborSignal(pos) != state.getValue(POWERED)) {
+            // Break feedback through decoders at the tick boundary.
+            server.scheduleTick(pos, this, 1);
+        }
+    }
+
+    @Override
+    protected void tick(BlockState state, ServerLevel world, BlockPos pos, RandomSource random) {
         boolean powered = world.hasNeighborSignal(pos);
         if (powered != state.getValue(POWERED)) {
             world.setBlockAndUpdate(pos, state.setValue(POWERED, powered));
