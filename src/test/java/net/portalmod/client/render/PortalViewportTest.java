@@ -8,6 +8,24 @@ import org.junit.jupiter.api.Test;
 
 public class PortalViewportTest {
     @Test
+    public void targetBucketsPreserveResolutionAndReuseSmallApertureChanges() {
+        var first = new PortalViewport(-.5F, -.5F, .5F, .5F);
+        var moved = new PortalViewport(-.501F, -.501F, .501F, .501F);
+        assertEquals(first.targetWidth(854), moved.targetWidth(854));
+        assertEquals(first.targetHeight(480), moved.targetHeight(480));
+        for (int pixels : new int[] {1, 480, 854, 1920}) {
+            for (int fraction = 1; fraction <= 100; fraction++) {
+                float extent = fraction / 100F;
+                var viewport = new PortalViewport(-extent, -extent, extent, extent);
+                assertTrue(viewport.targetWidth(pixels) >= viewport.width(pixels));
+                assertTrue(viewport.targetWidth(pixels) <= pixels);
+                assertTrue(viewport.targetHeight(pixels) >= viewport.height(pixels));
+                assertTrue(viewport.targetHeight(pixels) <= pixels);
+            }
+        }
+    }
+
+    @Test
     public void cropAndTextureCoordinatesAgreeAcrossNestedViews() {
         var parent = PortalViewport.FULL.intersect(new float[] {-.75f, -.5f, .75f, .5f});
         var child = parent.intersect(new float[] {-.25f, -.125f, 1, .25f});

@@ -13,6 +13,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.util.ARGB;
 import net.minecraft.world.attribute.EnvironmentAttributes;
+import net.portalmod.client.compat.PortalRendererCompatibility;
 import net.portalmod.mixins.accessors.GameRendererAccessor;
 import net.portalmod.mixins.accessors.LevelExtractorAccessor;
 
@@ -53,7 +54,8 @@ public final class PortalSceneExtractor {
                                 client.gameRenderer.bossOverlayWorldDarkening(root.worldPartialTicks),
                                 level);
         var frustum = camera.getCullFrustum();
-        int radius = Math.max(2, client.options.getEffectiveRenderDistance() >> Math.min(recursion, 5));
+        // Recursion narrows the aperture but keeps the terrain draw distance.
+        int radius = client.options.getEffectiveRenderDistance();
         var sections = visibleSections(camera, frustum, radius);
         var nearby =
                 sections.stream()
@@ -64,6 +66,7 @@ public final class PortalSceneExtractor {
         var savedSections = List.copyOf(renderer.visibleSections());
         var savedNearby = List.copyOf(renderer.nearbyVisibleSections());
         var extractor = (LevelExtractorAccessor) client.levelExtractor;
+        PortalRendererCompatibility.beginExtraction();
         try {
             renderer.visibleSections().clear();
             renderer.visibleSections().addAll(sections);
@@ -72,6 +75,7 @@ public final class PortalSceneExtractor {
             renderer.entityRenderDispatcher().prepare(camera, client.crosshairPickEntity);
             renderer.blockEntityRenderDispatcher().prepare(camera.position());
             collectSectionUpdates(level, extractor, sections, root);
+            PortalRendererCompatibility.prepareTerrain(camera, state, true);
             extractor.pmExtractEntities(camera, frustum, delta, state);
             extractor.pmExtractBlockEntities(camera, root.worldPartialTicks, state);
             if (outline) {
@@ -81,8 +85,11 @@ public final class PortalSceneExtractor {
             renderer.weatherEffectRenderer()
                     .extractRenderState(level, root.worldPartialTicks, camera.position(), state.weatherRenderState);
             if (renderer.skyRenderer() != null) {
-                renderer.skyRenderer().extractRenderState(level, root.worldPartialTicks, camera, state.skyRenderState);
+                renderer.skyRenderer()
+                        .extractRenderState(level, root.worldPartialTicks, fogCamera, state.skyRenderState);
             }
+            // Render destination sky even when the virtual camera is below the exit wall.
+            state.skyRenderState.shouldRenderDarkDisc = false;
             renderer.worldBorderRenderer()
                     .extract(
                             level.getWorldBorder(),
@@ -93,14 +100,16 @@ public final class PortalSceneExtractor {
             client.particleEngine.extract(
                     state.particlesRenderState, new Frustum(frustum).offset(-3), camera, root.worldPartialTicks);
             Vector4fc cloud =
-                    camera.attributeProbe().getValue(EnvironmentAttributes.CLOUD_COLOR, root.worldPartialTicks);
+                    fogCamera.attributeProbe().getValue(EnvironmentAttributes.CLOUD_COLOR, root.worldPartialTicks);
             state.cloudColor = ARGB.colorFromVector4f(cloud);
             if (ARGB.alpha(state.cloudColor) > 0) {
                 state.cloudHeight =
-                        camera.attributeProbe().getValue(EnvironmentAttributes.CLOUD_HEIGHT, root.worldPartialTicks);
+                        fogCamera.attributeProbe().getValue(EnvironmentAttributes.CLOUD_HEIGHT, root.worldPartialTicks);
             }
-            return new PortalScene(state, sections, nearby);
+            return new PortalScene(state, sections, nearby, camera);
         } finally {
+            PortalRendererCompatibility.endExtraction();
+            PortalRendererCompatibility.prepareTerrain(client.gameRenderer.mainCamera(), root, false);
             renderer.visibleSections().clear();
             renderer.visibleSections().addAll(savedSections);
             renderer.nearbyVisibleSections().clear();

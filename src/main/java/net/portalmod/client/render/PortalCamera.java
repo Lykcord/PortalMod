@@ -30,6 +30,8 @@ public class PortalCamera extends Camera {
         setEntity(entity);
         setRotation(yaw, pitch);
         setPosition(position.to3d());
+        // Portal cameras need a seeded environment probe to read sky and fog colors.
+        attributeProbe().tick((ClientLevel) level, position.to3d());
         var access = (ActiveRenderInfoAccessor) this;
         var main = Minecraft.getInstance().gameRenderer.mainCamera();
         var mainAccess = (ActiveRenderInfoAccessor) main;
@@ -118,6 +120,15 @@ public class PortalCamera extends Camera {
                 ? new Matrix4f(projection)
                 : PortalProjection.clipAtPlane(
                         projection, clipPlane, RenderSystem.getDevice().getDeviceInfo().isZZeroToOne());
+    }
+
+    /** Culls only the aperture that will be drawn, without using the GPU's oblique depth plane. */
+    public void refreshFrustum(Matrix4fc baseProjection, PortalViewport viewport) {
+        var projection =
+                PortalProjection.forCulling(
+                        viewport.projection(baseProjection), RenderSystem.getDevice().getDeviceInfo().isZZeroToOne());
+        ((ActiveRenderInfoAccessor) this)
+                .pmPrepareCullFrustum(getViewRotationMatrix(new Matrix4f()), projection, position());
     }
 
     public void refreshFrustum() {

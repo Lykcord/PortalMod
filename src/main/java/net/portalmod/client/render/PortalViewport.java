@@ -47,4 +47,18 @@ public record PortalViewport(float left, float bottom, float right, float top) {
     public int height(int fullHeight) {
         return Math.max(1, (int) Math.ceil(fullHeight * (top - bottom) / 2));
     }
+
+    // Keep slightly different apertures in the same texture-size bucket. Camera motion
+    // otherwise allocates new color, depth and transparency targets almost every frame.
+    public int targetWidth(int fullWidth) {
+        return bucket(width(fullWidth), fullWidth);
+    }
+
+    public int targetHeight(int fullHeight) {
+        return bucket(height(fullHeight), fullHeight);
+    }
+
+    private static int bucket(int exact, int full) {
+        return Math.min(Math.max(1, full), (exact + 31) & ~31);
+    }
 }

@@ -12,22 +12,34 @@ import net.minecraft.client.TextureFilteringMethod;
 import net.minecraft.client.renderer.GlobalSettingsUniform;
 import net.minecraft.client.renderer.fog.FogData;
 import net.minecraft.client.renderer.fog.FogRenderer;
+import net.portalmod.client.compat.PortalRendererCompatibility;
 import net.portalmod.mixins.accessors.FogRendererAccessor;
 import net.portalmod.mixins.accessors.GameRenderStateAccessor;
 import net.portalmod.mixins.accessors.GameRendererAccessor;
 import net.portalmod.mixins.accessors.LevelRendererAccessor;
 
 import org.joml.Matrix4f;
+import org.joml.Matrix4fc;
 import org.joml.Vector4f;
 
 import java.util.List;
 
 public final class PortalSceneRenderer implements AutoCloseable {
     private static RenderTarget activeTarget;
+    private static Matrix4fc activeProjection;
+    private static Matrix4fc activeSkyProjection;
     private GlobalSettingsUniform globals;
 
     public static RenderTarget activeTarget() {
         return activeTarget;
+    }
+
+    public static Matrix4fc activeProjection() {
+        return activeProjection;
+    }
+
+    public static Matrix4fc activeSkyProjection() {
+        return activeSkyProjection;
     }
 
     public void render(
@@ -35,6 +47,7 @@ public final class PortalSceneRenderer implements AutoCloseable {
             RenderTarget target,
             GraphicsResourceAllocator allocator,
             Matrix4f projection,
+            Matrix4fc skyProjection,
             boolean outline,
             boolean sky) {
         var client = Minecraft.getInstance();
@@ -45,6 +58,8 @@ public final class PortalSceneRenderer implements AutoCloseable {
         var oldLevelState = levelAccess.pmRenderState();
         var oldGameState = game.levelRenderState;
         var oldTarget = activeTarget;
+        var oldActiveProjection = activeProjection;
+        var oldSkyProjection = activeSkyProjection;
         var oldProjection = RenderSystem.getProjectionMatrixBuffer();
         var oldProjectionType = RenderSystem.getProjectionType();
         var oldFog = RenderSystem.getShaderFog();
@@ -56,6 +71,8 @@ public final class PortalSceneRenderer implements AutoCloseable {
         modelView.pushMatrix();
         try {
             activeTarget = target;
+            activeProjection = projection;
+            activeSkyProjection = skyProjection;
             levelAccess.pmRenderState(scene.state());
             gameAccess.pmLevelState(scene.state());
             renderer.visibleSections().clear();
@@ -87,6 +104,7 @@ public final class PortalSceneRenderer implements AutoCloseable {
                     scene.state().cameraRenderState.pos,
                     options.textureFiltering == TextureFilteringMethod.RGSS);
             var fog = uploadFog(scene.state().cameraRenderState.fogData);
+            PortalRendererCompatibility.prepareTerrain(scene.camera(), scene.state(), true);
             renderer.render(
                     allocator,
                     outline,
@@ -104,6 +122,9 @@ public final class PortalSceneRenderer implements AutoCloseable {
             gameAccess.pmLevelState(oldGameState);
             levelAccess.pmOutlineFrame(oldOutline);
             activeTarget = oldTarget;
+            activeProjection = oldActiveProjection;
+            activeSkyProjection = oldSkyProjection;
+            PortalRendererCompatibility.prepareTerrain(client.gameRenderer.mainCamera(), oldGameState, false);
             RenderSystem.setProjectionMatrix(oldProjection, oldProjectionType);
             RenderSystem.setShaderFog(oldFog);
             RenderSystem.setGlobalSettingsUniform(oldGlobals);

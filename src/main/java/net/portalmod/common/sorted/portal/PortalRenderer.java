@@ -214,7 +214,8 @@ public class PortalRenderer {
                                     new PortalScene(
                                             context.levelState(),
                                             context.levelRenderer().visibleSections(),
-                                            context.levelRenderer().nearbyVisibleSections()),
+                                            context.levelRenderer().nearbyVisibleSections(),
+                                            context.camera()),
                                     PortalViewport.FULL,
                                     projection,
                                     null,
@@ -263,14 +264,17 @@ public class PortalRenderer {
             PROFILE.portalsVisited++;
             PROFILE.maxRecursionReached = Math.max(PROFILE.maxRecursionReached, depth + 1);
             var toCamera = new Vec3(camera.position()).sub(portal.position());
-            if (portal == exit
-                    || toCamera.magnitude() > 1
-                            && (toCamera.dot(new Vec3(portal.getDirection())) < 0
-                                    || !camera.getCullFrustum().isVisible(portal.getBoundingBox()))) {
+            // Use the projected quad; bobbing and roll can make the camera frustum reject a visible edge.
+            if (portal == exit || toCamera.magnitude() > 1 && toCamera.dot(new Vec3(portal.getDirection())) < 0) {
                 PROFILE.portalsCulled++;
                 continue;
             }
-            var rect = portalRect(portal, camera, projection);
+            var portalModel = modelView(portal, camera, portal.getWallAttachmentDistance(camera));
+            if (PortalVisibility.fullyClipped(portalModel, clip)) {
+                PROFILE.portalsCulled++;
+                continue;
+            }
+            var rect = portalRect(portalModel, projection);
             var childViewport = rect == null ? viewport : viewport.intersect(rect);
             if (childViewport == null) {
                 portalsCulledByNdcRect++;
@@ -290,8 +294,10 @@ public class PortalRenderer {
                 recursion = depth + 1;
                 var other = portal.getOtherPortal().get();
                 var transformed = setupCamera(camera, portal, root.worldPartialTicks);
+                transformed.refreshFrustum(projection, childViewport);
                 var fogCamera = new PortalCamera(transformed, root.worldPartialTicks);
                 ((ActiveRenderInfoAccessor) fogCamera).pmSetPosition(other.position());
+                fogCamera.attributeProbe().tick(context.level(), other.position());
                 try {
                     var childScene =
                             PortalSceneExtractor.extract(
@@ -321,7 +327,7 @@ public class PortalRenderer {
             }
             openings.add(
                     new Opening(
-                            modelView(portal, camera, portal.getWallAttachmentDistance(camera)),
+                            portalModel,
                             texture("mask" + (age < 4 ? "_spawning" + age : "")),
                             frame,
                             index,
@@ -382,8 +388,8 @@ public class PortalRenderer {
             if (child != null) {
                 var descriptor =
                         new RenderTargetDescriptor(
-                                child.viewport().width(main.width),
-                                child.viewport().height(main.height),
+                                child.viewport().targetWidth(main.width),
+                                child.viewport().targetHeight(main.height),
                                 new RenderTargetDescriptor.TextureProperties(
                                         new Vector4f(), main.getColorTexture().getFormat()),
                                 new RenderTargetDescriptor.TextureProperties(new Vector4f(), GpuFormat.D32_FLOAT));
@@ -394,10 +400,10 @@ public class PortalRenderer {
                 try {
                     activeSurfaces = prepare(child, allocator, baseProjection, main, sky, children);
                     currentlyRenderingPortals = true;
-                    var childProjection = child.viewport().projection(baseProjection);
-                    childProjection =
+                    var skyProjection = child.viewport().projection(baseProjection);
+                    var childProjection =
                             PortalProjection.clipAtPlane(
-                                    childProjection,
+                                    skyProjection,
                                     child.clip(),
                                     RenderSystem.getDevice().getDeviceInfo().isZZeroToOne());
                     scenes.render(
@@ -405,6 +411,7 @@ public class PortalRenderer {
                             target,
                             allocator,
                             childProjection,
+                            skyProjection,
                             child.scene().state().blockOutlineRenderState != null,
                             sky);
                     drawHighlights(child, target, childProjection);
@@ -475,31 +482,10 @@ public class PortalRenderer {
                 .mul(PortalEntity.setupMatrix(portal.getDirection(), portal.getUpVector(), pivot.to3d()).to4f());
     }
 
-    private static float[] portalRect(PortalEntity portal, Camera camera, Matrix4f projection) {
-        var box = portal.getBoundingBox();
-        var matrix = new Matrix4f(projection).mul(camera.getViewRotationMatrix(new Matrix4f()));
-        float left = Float.POSITIVE_INFINITY, bottom = left, right = Float.NEGATIVE_INFINITY, top = right;
-        for (double x : new double[] {box.minX, box.maxX}) {
-            for (double y : new double[] {box.minY, box.maxY}) {
-                for (double z : new double[] {box.minZ, box.maxZ}) {
-                    var point =
-                            matrix.transform(
-                                    new Vector4f(
-                                            (float) (x - camera.position().x),
-                                            (float) (y - camera.position().y),
-                                            (float) (z - camera.position().z),
-                                            1));
-                    if (point.w <= .01f) {
-                        return null;
-                    }
-                    left = Math.min(left, point.x / point.w);
-                    right = Math.max(right, point.x / point.w);
-                    bottom = Math.min(bottom, point.y / point.w);
-                    top = Math.max(top, point.y / point.w);
-                }
-            }
-        }
-        return new float[] {left, bottom, right, top};
+    private static float[] portalRect(Matrix4f modelView, Matrix4f projection) {
+        var window = Minecraft.getInstance().getWindow();
+        return PortalVisibility.projectOpening(
+                modelView, projection, Math.max(1, window.getWidth()), Math.max(1, window.getHeight()));
     }
 
     private static Matrix4f preparedProjection(LevelRenderState state) {

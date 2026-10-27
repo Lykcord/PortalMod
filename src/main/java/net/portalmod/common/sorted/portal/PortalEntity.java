@@ -4,6 +4,8 @@ import com.google.common.collect.Lists;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.minecraft.client.Camera;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -809,6 +811,7 @@ public class PortalEntity extends Entity {
         return this.position().add(new Vec3(this.direction.getOpposite().getStep()).mul(.501).to3d());
     }
 
+    @Environment(EnvType.CLIENT)
     public static void setupMatrix(
             PoseStack matrix, Direction direction, Direction upVector, net.minecraft.world.phys.Vec3 center) {
         int i = direction.getStepY() * -1;
@@ -855,6 +858,7 @@ public class PortalEntity extends Entity {
         return new Vec3(this.direction.getStep()).to3f();
     }
 
+    @Environment(EnvType.CLIENT)
     public float getWallAttachmentDistance(Camera camera) {
         double distance = camera.position().subtract(this.position()).length();
         return (float) Math.min(0.0001 + Math.max(0.1 / 98 * (distance - 2), 0), 0.1);

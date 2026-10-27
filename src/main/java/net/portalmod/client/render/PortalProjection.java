@@ -8,6 +8,13 @@ import org.joml.Vector4fc;
 public final class PortalProjection {
     private PortalProjection() {}
 
+    /** Keep the rendered x/y aperture while giving the CPU frustum conventional forward depth. */
+    public static Matrix4f forCulling(Matrix4fc reversedProjection, boolean zeroToOne) {
+        var result = new Matrix4f(reversedProjection);
+        var depth = result.getRow(2, new Vector4f());
+        return result.setRow(2, zeroToOne ? result.getRow(3, new Vector4f()).sub(depth) : depth.negate());
+    }
+
     public static Matrix4f clipAtPlane(Matrix4fc projection, Vector4fc plane, boolean zeroToOne) {
         var result = new Matrix4f(projection);
         // A plane through the eye produces a singular projection during portal crossings.
