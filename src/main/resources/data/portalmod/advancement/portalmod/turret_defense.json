@@ -7,7 +7,7 @@
   },
   "display": {
     "icon": {
-      "item": "portalmod:turret"
+      "id": "portalmod:turret"
     },
     "title": {
       "translate": "advancements.portalmod.turret_defense.title"

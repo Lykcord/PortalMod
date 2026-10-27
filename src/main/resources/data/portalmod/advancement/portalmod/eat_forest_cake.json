@@ -5,19 +5,15 @@
       "trigger": "minecraft:item_used_on_block",
       "conditions": {
         "location": {
-          "block": {
-            "block": "portalmod:forest_cake",
-            "powered": {
-              "powered": true
-            }
-          }
+          "type": "minecraft:match_block",
+          "blocks": "portalmod:forest_cake"
         }
       }
     }
   },
   "display": {
     "icon": {
-      "item": "portalmod:forest_cake"
+      "id": "portalmod:forest_cake"
     },
     "title": {
       "translate": "advancements.portalmod.eat_forest_cake.title"

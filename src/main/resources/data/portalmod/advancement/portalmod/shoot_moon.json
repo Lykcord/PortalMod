@@ -7,7 +7,7 @@
   },
   "display": {
     "icon": {
-      "item": "minecraft:end_stone"
+      "id": "minecraft:end_stone"
     },
     "title": {
       "translate": "advancements.portalmod.shoot_moon.title"

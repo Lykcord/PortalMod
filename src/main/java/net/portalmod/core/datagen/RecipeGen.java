@@ -1,42 +1,67 @@
 package net.portalmod.core.datagen;
 
-import net.minecraft.advancements.criterion.*;
-import net.minecraft.block.Blocks;
-import net.minecraft.data.*;
-import net.minecraft.item.Items;
-import net.minecraft.item.crafting.Ingredient;
+import net.fabricmc.fabric.api.tag.convention.v2.ConventionalItemTags;
+import net.minecraft.advancements.Advancement;
+import net.minecraft.advancements.predicates.BlockPredicate;
+import net.minecraft.advancements.predicates.ItemPredicate;
+import net.minecraft.advancements.predicates.LocationPredicate;
+import net.minecraft.advancements.triggers.Criterion;
+import net.minecraft.advancements.triggers.ItemUsedOnLocationTrigger;
+import net.minecraft.advancements.triggers.KilledTrigger;
+import net.minecraft.core.HolderGetter;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.data.recipes.RecipeCategory;
+import net.minecraft.data.recipes.RecipeOutput;
+import net.minecraft.data.recipes.RecipeProvider;
+import net.minecraft.data.recipes.SimpleCookingRecipeBuilder;
+import net.minecraft.data.recipes.SingleItemRecipeBuilder;
+import net.minecraft.data.recipes.SpecialRecipeBuilder;
+import net.minecraft.data.worldgen.BootstrapContext;
 import net.minecraft.tags.ItemTags;
-import net.minecraft.util.IItemProvider;
-import net.minecraftforge.common.Tags;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.crafting.CookingBookCategory;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.Recipe;
+import net.minecraft.world.level.ItemLike;
+import net.minecraft.world.level.block.Blocks;
+import net.portalmod.common.sorted.portalgun.PortalGunDuplicateRecipe;
+import net.portalmod.common.sorted.portalgun.PortalGunModifyRecipe;
 import net.portalmod.core.init.ItemInit;
 import net.portalmod.core.init.ItemTagInit;
-import net.portalmod.core.init.RecipeInit;
-
-import java.util.function.Consumer;
 
 public class RecipeGen extends RecipeProvider {
-    public static final CriterionInstance ROOT_CRITERION = RightClickBlockWithItemTrigger.Instance.itemUsedOnBlock(
-            LocationPredicate.Builder.location().setBlock(BlockPredicate.Builder.block().of(Blocks.CRAFTING_TABLE).build()),
-            ItemPredicate.Builder.item());
-    public static final CriterionInstance CAKE_CRITERION = KilledTrigger.Instance.playerKilledEntity();
+    public final Criterion<?> ROOT_CRITERION;
+    private final HolderGetter<Item> itemLookup;
+    public final Criterion<?> CAKE_CRITERION = KilledTrigger.TriggerInstance.playerKilledEntity();
 
-    public static final CriterionInstance HAS_CUBE = RecipeProvider.has(ItemTagInit.CUBES);
-    public static final CriterionInstance HAS_INDICATOR = RecipeProvider.has(ItemTagInit.INDICATORS);
-    public static final CriterionInstance HAS_LUNECAST = RecipeProvider.has(ItemTagInit.LUNECAST);
-    public static final CriterionInstance HAS_BLACKPLATE = RecipeProvider.has(ItemTagInit.BLACKPLATE);
-    public static final CriterionInstance HAS_CHAMBER_DECORATION = RecipeProvider.has(ItemTagInit.CHAMBER_DECORATION);
-    public static final CriterionInstance HAS_ELEMENT = RecipeProvider.has(ItemTagInit.TESTING_ELEMENTS);
+    public final Criterion<?> HAS_CUBE = has(ItemTagInit.CUBES);
+    public final Criterion<?> HAS_INDICATOR = has(ItemTagInit.INDICATORS);
+    public final Criterion<?> HAS_LUNECAST = has(ItemTagInit.LUNECAST);
+    public final Criterion<?> HAS_BLACKPLATE = has(ItemTagInit.BLACKPLATE);
+    public final Criterion<?> HAS_CHAMBER_DECORATION = has(ItemTagInit.CHAMBER_DECORATION);
+    public final Criterion<?> HAS_ELEMENT = has(ItemTagInit.TESTING_ELEMENTS);
 
-    public RecipeGen(DataGenerator generator) {
-        super(generator);
+    public RecipeGen(BootstrapContext<Recipe<?>> recipes, BootstrapContext<Advancement> advancements) {
+        super(recipes, advancements);
+        itemLookup = recipes.lookup(Registries.ITEM);
+        ROOT_CRITERION =
+                ItemUsedOnLocationTrigger.TriggerInstance.itemUsedOnBlock(
+                        LocationPredicate.Builder.location()
+                                .setBlock(
+                                        BlockPredicate.Builder.block()
+                                                .of(recipes.lookup(Registries.BLOCK), Blocks.CRAFTING_TABLE)),
+                        ItemPredicate.Builder.item());
     }
 
     @Override
-    protected void buildShapelessRecipes(Consumer<IFinishedRecipe> c) {
+    public void buildRecipes() {
+        RecipeOutput recipes = output;
 
         // --- Basic Items --- //
 
-        ShapedRecipeBuilder.shaped(ItemInit.PORTALGUN.get())
+        shaped(RecipeCategory.MISC, ItemInit.PORTALGUN.get())
                 .pattern("ii ")
                 .pattern("ron")
                 .define('i', Items.IRON_INGOT)
@@ -44,31 +69,37 @@ public class RecipeGen extends RecipeProvider {
                 .define('o', Items.ENDER_PEARL)
                 .define('n', Items.NETHERITE_INGOT)
                 .unlockedBy("has_item", ROOT_CRITERION)
-                .save(c);
+                .save(recipes);
 
-        CustomRecipeBuilder.special(RecipeInit.PORTAL_GUN_MODIFY.get()).save(c, "portalmod:portalgun_edit");
-        CustomRecipeBuilder.special(RecipeInit.PORTAL_GUN_DUPLICATE.get()).save(c, "portalmod:portalgun_duplicate");
+        SpecialRecipeBuilder.special(PortalGunModifyRecipe::new).save(recipes, "portalmod:portalgun_edit");
+        SpecialRecipeBuilder.special(PortalGunDuplicateRecipe::new).save(recipes, "portalmod:portalgun_duplicate");
 
-        ShapedRecipeBuilder.shaped(ItemInit.LONGFALL_BOOTS.get())
-                .pattern("i i").define('i', Items.IRON_INGOT)
-                .pattern("n n").define('n', Items.NETHERITE_SCRAP)
+        shaped(RecipeCategory.MISC, ItemInit.LONGFALL_BOOTS.get())
+                .pattern("i i")
+                .define('i', Items.IRON_INGOT)
+                .pattern("n n")
+                .define('n', Items.NETHERITE_SCRAP)
                 .unlockedBy("has_item", ROOT_CRITERION)
-                .save(c);
+                .save(recipes);
 
-        ShapedRecipeBuilder.shaped(ItemInit.WRENCH.get())
-                .pattern(" i ").define('i', Items.IRON_INGOT)
-                .pattern(" ii").define('/', Items.STICK)
+        shaped(RecipeCategory.MISC, ItemInit.WRENCH.get())
+                .pattern(" i ")
+                .define('i', Items.IRON_INGOT)
+                .pattern(" ii")
+                .define('/', Items.STICK)
                 .pattern("/  ")
                 .unlockedBy("has_item", ROOT_CRITERION)
-                .save(c);
+                .save(recipes);
 
-        ShapedRecipeBuilder.shaped(ItemInit.RADIO.get())
-                .pattern(" i ").define('i', Items.IRON_INGOT)
-                .pattern("ioi").define('o', Items.JUKEBOX)
+        shaped(RecipeCategory.MISC, ItemInit.RADIO.get())
+                .pattern(" i ")
+                .define('i', Items.IRON_INGOT)
+                .pattern("ioi")
+                .define('o', Items.JUKEBOX)
                 .unlockedBy("has_item", ROOT_CRITERION)
-                .save(c);
+                .save(recipes);
 
-        ShapedRecipeBuilder.shaped(ItemInit.FOREST_CAKE.get())
+        shaped(RecipeCategory.MISC, ItemInit.FOREST_CAKE.get())
                 .pattern("oio")
                 .pattern("cfc")
                 .pattern("www")
@@ -78,9 +109,9 @@ public class RecipeGen extends RecipeProvider {
                 .define('f', Items.ROTTEN_FLESH)
                 .define('w', Items.WHEAT)
                 .unlockedBy("kill_entity", CAKE_CRITERION)
-                .save(c);
+                .save(recipes);
 
-        ShapedRecipeBuilder.shaped(ItemInit.TRIGGER.get())
+        shaped(RecipeCategory.MISC, ItemInit.TRIGGER.get())
                 .pattern(" i ")
                 .pattern(" l ")
                 .pattern("rpr")
@@ -89,89 +120,91 @@ public class RecipeGen extends RecipeProvider {
                 .define('r', Items.REDSTONE)
                 .define('p', ItemTags.PLANKS)
                 .unlockedBy("has_item", HAS_ELEMENT)
-                .save(c);
+                .save(recipes);
 
-        ShapedRecipeBuilder.shaped(ItemInit.AUTOPORTAL.get())
+        shaped(RecipeCategory.MISC, ItemInit.AUTOPORTAL.get())
                 .pattern("i i")
                 .pattern("e e")
                 .pattern("i i")
                 .define('i', Items.IRON_INGOT)
                 .define('e', Items.ENDER_PEARL)
                 .unlockedBy("has_item", HAS_ELEMENT)
-                .save(c);
-
-
+                .save(recipes);
 
         // --- Cubes --- //
 
-        ShapedRecipeBuilder.shaped(ItemInit.STORAGE_CUBE.get())
-                .pattern("IiI").define('I', Items.IRON_INGOT)
-                .pattern("i i").define('i', Items.IRON_NUGGET)
+        shaped(RecipeCategory.MISC, ItemInit.STORAGE_CUBE.get())
+                .pattern("IiI")
+                .define('I', Items.IRON_INGOT)
+                .pattern("i i")
+                .define('i', Items.IRON_NUGGET)
                 .pattern("IiI")
                 .unlockedBy("has_item", ROOT_CRITERION)
-                .save(c);
+                .save(recipes);
 
-        ShapedRecipeBuilder.shaped(ItemInit.COMPANION_CUBE.get())
-                .pattern("IiI").define('I', Items.IRON_INGOT)
-                .pattern("iai").define('i', Items.IRON_NUGGET)
-                .pattern("IiI").define('a', Items.GOLDEN_APPLE)
+        shaped(RecipeCategory.MISC, ItemInit.COMPANION_CUBE.get())
+                .pattern("IiI")
+                .define('I', Items.IRON_INGOT)
+                .pattern("iai")
+                .define('i', Items.IRON_NUGGET)
+                .pattern("IiI")
+                .define('a', Items.GOLDEN_APPLE)
                 .unlockedBy("has_item", HAS_CUBE)
-                .save(c);
+                .save(recipes);
 
-        ShapedRecipeBuilder.shaped(ItemInit.VINTAGE_CUBE.get())
-                .pattern("IiI").define('I', Items.IRON_INGOT)
-                .pattern("ipi").define('i', Items.IRON_NUGGET)
-                .pattern("IiI").define('p', ItemTags.PLANKS)
+        shaped(RecipeCategory.MISC, ItemInit.VINTAGE_CUBE.get())
+                .pattern("IiI")
+                .define('I', Items.IRON_INGOT)
+                .pattern("ipi")
+                .define('i', Items.IRON_NUGGET)
+                .pattern("IiI")
+                .define('p', ItemTags.PLANKS)
                 .unlockedBy("has_item", HAS_CUBE)
-                .save(c);
-
-
+                .save(recipes);
 
         // --- Antline --- //
 
-        ShapelessRecipeBuilder.shapeless(ItemInit.ANTLINE.get(), 8)
+        shapeless(RecipeCategory.MISC, ItemInit.ANTLINE.get(), 8)
                 .requires(Items.GOLD_INGOT)
-                .requires(Items.LIGHT_BLUE_DYE)
+                .requires(Items.DYE.lightBlue())
                 .requires(Items.GLOWSTONE_DUST)
                 .unlockedBy("has_item", ROOT_CRITERION)
-                .save(c);
+                .save(recipes);
 
-        ShapedRecipeBuilder.shaped(ItemInit.ANTLINE_INDICATOR.get())
+        shaped(RecipeCategory.MISC, ItemInit.ANTLINE_INDICATOR.get())
                 .pattern("iai")
                 .define('i', Items.IRON_INGOT)
                 .define('a', ItemInit.ANTLINE.get())
                 .unlockedBy("has_item", ROOT_CRITERION)
-                .save(c);
+                .save(recipes);
 
-        ShapelessRecipeBuilder.shapeless(ItemInit.ANTLINE_TIMER.get())
+        shapeless(RecipeCategory.MISC, ItemInit.ANTLINE_TIMER.get())
                 .requires(ItemInit.ANTLINE_INDICATOR.get())
                 .requires(Items.CLOCK)
                 .unlockedBy("has_item", HAS_INDICATOR)
-                .save(c);
+                .save(recipes);
 
-        ShapelessRecipeBuilder.shapeless(ItemInit.ANTLINE_DECODER.get())
+        shapeless(RecipeCategory.MISC, ItemInit.ANTLINE_DECODER.get())
                 .requires(ItemInit.ANTLINE_INDICATOR.get())
                 .requires(Items.REDSTONE)
                 .unlockedBy("has_item", HAS_INDICATOR)
                 .group("antline_decoder")
-                .save(c, "portalmod:antline_decoder_from_indicator");
+                .save(recipes, "portalmod:antline_decoder_from_indicator");
 
-        ShapelessRecipeBuilder.shapeless(ItemInit.ANTLINE_DECODER.get())
+        shapeless(RecipeCategory.MISC, ItemInit.ANTLINE_DECODER.get())
                 .requires(ItemInit.ANTLINE_ENCODER.get())
                 .unlockedBy("has_item", HAS_INDICATOR)
                 .group("antline_decoder")
-                .save(c, "portalmod:antline_decoder_from_encoder");
+                .save(recipes, "portalmod:antline_decoder_from_encoder");
 
-        ShapelessRecipeBuilder.shapeless(ItemInit.ANTLINE_ENCODER.get())
+        shapeless(RecipeCategory.MISC, ItemInit.ANTLINE_ENCODER.get())
                 .requires(ItemInit.ANTLINE_DECODER.get())
                 .unlockedBy("has_item", HAS_INDICATOR)
-                .save(c);
-
-
+                .save(recipes);
 
         // --- Testing Elements --- //
 
-        ShapedRecipeBuilder.shaped(ItemInit.SUPER_BUTTON.get())
+        shaped(RecipeCategory.MISC, ItemInit.SUPER_BUTTON.get())
                 .pattern("ipi")
                 .pattern("#a#")
                 .define('i', Items.IRON_NUGGET)
@@ -179,30 +212,33 @@ public class RecipeGen extends RecipeProvider {
                 .define('p', ItemTagInit.PRESSURE_PLATES)
                 .define('a', ItemInit.ANTLINE.get())
                 .unlockedBy("has_item", ROOT_CRITERION)
-                .save(c);
+                .save(recipes);
 
-        ShapedRecipeBuilder.shaped(ItemInit.STANDING_BUTTON.get())
-                .pattern("b").define('b', ItemTags.BUTTONS)
-                .pattern("i").define('i', Items.IRON_INGOT)
-                .pattern("#").define('#', Items.BLACKSTONE)
+        shaped(RecipeCategory.MISC, ItemInit.STANDING_BUTTON.get())
+                .pattern("b")
+                .define('b', ItemTagInit.BUTTONS)
+                .pattern("i")
+                .define('i', Items.IRON_INGOT)
+                .pattern("#")
+                .define('#', Items.BLACKSTONE)
                 .unlockedBy("has_item", ROOT_CRITERION)
-                .save(c);
+                .save(recipes);
 
-        ShapedRecipeBuilder.shaped(ItemInit.CHAMBER_DOOR.get())
+        shaped(RecipeCategory.MISC, ItemInit.CHAMBER_DOOR.get())
                 .pattern("bb")
                 .pattern("ii")
                 .define('b', ItemInit.BLACKPLATE_SLAB.get())
                 .define('i', Items.IRON_DOOR)
                 .unlockedBy("has_item", ROOT_CRITERION)
-                .save(c);
+                .save(recipes);
 
-        ShapelessRecipeBuilder.shapeless(ItemInit.PUSH_DOOR.get())
+        shapeless(RecipeCategory.MISC, ItemInit.PUSH_DOOR.get())
                 .requires(Items.IRON_DOOR)
-                .requires(ItemTags.BUTTONS)
+                .requires(ItemTagInit.BUTTONS)
                 .unlockedBy("has_item", HAS_ELEMENT)
-                .save(c);
+                .save(recipes);
 
-        ShapedRecipeBuilder.shaped(ItemInit.TURRET.get())
+        shaped(RecipeCategory.MISC, ItemInit.TURRET.get())
                 .pattern(" i ")
                 .pattern("brb")
                 .pattern("/i/")
@@ -211,40 +247,46 @@ public class RecipeGen extends RecipeProvider {
                 .define('r', Items.REDSTONE)
                 .define('/', Items.STICK)
                 .unlockedBy("has_item", HAS_ELEMENT)
-                .save(c);
+                .save(recipes);
 
-        ShapelessRecipeBuilder.shapeless(ItemInit.BULLETS.get(), 4)
+        shapeless(RecipeCategory.MISC, ItemInit.BULLETS.get(), 4)
                 .requires(Items.GUNPOWDER)
                 .requires(Items.GOLD_INGOT)
                 .unlockedBy("has_item", HAS_ELEMENT)
-                .save(c);
+                .save(recipes);
 
-        ShapedRecipeBuilder.shaped(ItemInit.CUBE_DROPPER.get())
+        shaped(RecipeCategory.MISC, ItemInit.CUBE_DROPPER.get())
                 .pattern("III")
                 .pattern("gDg")
                 .pattern("iii")
                 .define('I', Items.IRON_INGOT)
                 .define('i', Items.IRON_NUGGET)
                 .define('D', Items.DISPENSER)
-                .define('g', Tags.Items.GLASS_PANES)
+                .define('g', ConventionalItemTags.GLASS_PANES)
                 .unlockedBy("has_item", HAS_ELEMENT)
-                .save(c);
+                .save(recipes);
 
-        ShapedRecipeBuilder.shaped(ItemInit.FIZZLER_EMITTER.get(), 2)
-                .pattern("Bi").define('i', Items.IRON_INGOT)
-                .pattern("Bd").define('d', Items.PRISMARINE_CRYSTALS)
-                .pattern("Bi").define('B', Items.BLACKSTONE)
+        shaped(RecipeCategory.MISC, ItemInit.FIZZLER_EMITTER.get(), 2)
+                .pattern("Bi")
+                .define('i', Items.IRON_INGOT)
+                .pattern("Bd")
+                .define('d', Items.PRISMARINE_CRYSTALS)
+                .pattern("Bi")
+                .define('B', Items.BLACKSTONE)
                 .unlockedBy("has_item", HAS_ELEMENT)
-                .save(c);
+                .save(recipes);
 
-        ShapedRecipeBuilder.shaped(ItemInit.CHAMBER_SIGN.get())
-                .pattern("igi").define('g', Items.GLOWSTONE)
-                .pattern("ibi").define('b', Items.WHITE_BANNER)
-                .pattern("igi").define('i', Items.IRON_NUGGET)
+        shaped(RecipeCategory.MISC, ItemInit.CHAMBER_SIGN.get())
+                .pattern("igi")
+                .define('g', Items.GLOWSTONE)
+                .pattern("ibi")
+                .define('b', Items.BANNER.white())
+                .pattern("igi")
+                .define('i', Items.IRON_NUGGET)
                 .unlockedBy("has_item", HAS_ELEMENT)
-                .save(c);
+                .save(recipes);
 
-        ShapedRecipeBuilder.shaped(ItemInit.FAITHPLATE.get())
+        shaped(RecipeCategory.MISC, ItemInit.FAITHPLATE.get())
                 .pattern(" p ")
                 .pattern("Pai")
                 .pattern("bbb")
@@ -254,263 +296,298 @@ public class RecipeGen extends RecipeProvider {
                 .define('i', Items.IRON_INGOT)
                 .define('b', ItemInit.BLACKPLATE_SLAB.get())
                 .unlockedBy("has_item", HAS_ELEMENT)
-                .save(c);
+                .save(recipes);
 
-        ShapedRecipeBuilder.shaped(ItemInit.CONTAINER.get())
-                .pattern("i i").define('i', Items.IRON_INGOT)
-                .pattern("pip").define('p', Items.PAPER)
+        shaped(RecipeCategory.MISC, ItemInit.CONTAINER.get())
+                .pattern("i i")
+                .define('i', Items.IRON_INGOT)
+                .pattern("pip")
+                .define('p', Items.PAPER)
                 .unlockedBy("has_item", HAS_ELEMENT)
-                .save(c);
+                .save(recipes);
 
-        ShapelessRecipeBuilder.shapeless(ItemInit.REPULSION_GEL.get())
+        shapeless(RecipeCategory.MISC, ItemInit.REPULSION_GEL.get())
                 .requires(Items.WARPED_FUNGUS)
                 .requires(Items.SLIME_BALL)
                 .requires(ItemInit.CONTAINER.get())
                 .unlockedBy("has_item", HAS_ELEMENT)
-                .save(c);
+                .save(recipes);
 
-        ShapelessRecipeBuilder.shapeless(ItemInit.PROPULSION_GEL.get())
+        shapeless(RecipeCategory.MISC, ItemInit.PROPULSION_GEL.get())
                 .requires(Items.CRIMSON_FUNGUS)
                 .requires(Items.MAGMA_CREAM)
                 .requires(ItemInit.CONTAINER.get())
                 .unlockedBy("has_item", HAS_ELEMENT)
-                .save(c);
-
-
+                .save(recipes);
 
         // --- Building Blocks --- //
 
-        ShapedRecipeBuilder.shaped(ItemInit.LUNECAST.get(), 4)
-                .pattern("q#").define('q', Items.QUARTZ)
-                .pattern("#q").define('#', Items.END_STONE)
+        shaped(RecipeCategory.MISC, ItemInit.LUNECAST.get(), 4)
+                .pattern("q#")
+                .define('q', Items.QUARTZ)
+                .pattern("#q")
+                .define('#', Items.END_STONE)
                 .unlockedBy("has_item", ROOT_CRITERION)
-                .save(c);
+                .save(recipes);
 
-        ShapedRecipeBuilder.shaped(ItemInit.BLACKPLATE.get(), 4)
-                .pattern("i#").define('i', Items.IRON_NUGGET)
-                .pattern("#i").define('#', Items.BLACKSTONE)
+        shaped(RecipeCategory.MISC, ItemInit.BLACKPLATE.get(), 4)
+                .pattern("i#")
+                .define('i', Items.IRON_NUGGET)
+                .pattern("#i")
+                .define('#', Items.BLACKSTONE)
                 .unlockedBy("has_item", ROOT_CRITERION)
-                .save(c);
+                .save(recipes);
 
-        lunecastVariant(c, ItemInit.ARBORED_LUNECAST.get(), Ingredient.of(Items.GRASS, Items.TALL_GRASS, Items.SEAGRASS, Items.VINE));
-        lunecastVariant(c, ItemInit.ERODED_LUNECAST.get(), Ingredient.of(Items.DIRT, Items.COARSE_DIRT, Items.GRAVEL));
-        lunecastVariant(c, ItemInit.VINTAGE_LUNECAST.get(), Ingredient.of(ItemTags.PLANKS));
-        blackplateVariant(c, ItemInit.ARBORED_BLACKPLATE.get(), Ingredient.of(Items.GRASS, Items.TALL_GRASS, Items.SEAGRASS, Items.VINE));
-        blackplateVariant(c, ItemInit.ERODED_BLACKPLATE.get(), Ingredient.of(Items.DIRT, Items.COARSE_DIRT, Items.GRAVEL));
-        blackplateVariant(c, ItemInit.VINTAGE_BLACKPLATE.get(), Ingredient.of(ItemTags.PLANKS));
+        lunecastVariant(
+                recipes,
+                ItemInit.ARBORED_LUNECAST.get(),
+                Ingredient.of(Items.SHORT_GRASS, Items.TALL_GRASS, Items.SEAGRASS, Items.VINE));
+        lunecastVariant(
+                recipes, ItemInit.ERODED_LUNECAST.get(), Ingredient.of(Items.DIRT, Items.COARSE_DIRT, Items.GRAVEL));
+        lunecastVariant(
+                recipes, ItemInit.VINTAGE_LUNECAST.get(), Ingredient.of(itemLookup.getOrThrow(ItemTags.PLANKS)));
+        blackplateVariant(
+                recipes,
+                ItemInit.ARBORED_BLACKPLATE.get(),
+                Ingredient.of(Items.SHORT_GRASS, Items.TALL_GRASS, Items.SEAGRASS, Items.VINE));
+        blackplateVariant(
+                recipes, ItemInit.ERODED_BLACKPLATE.get(), Ingredient.of(Items.DIRT, Items.COARSE_DIRT, Items.GRAVEL));
+        blackplateVariant(
+                recipes, ItemInit.VINTAGE_BLACKPLATE.get(), Ingredient.of(itemLookup.getOrThrow(ItemTags.PLANKS)));
 
-        CookingRecipeBuilder.smelting(Ingredient.of(ItemInit.LUNECAST.get()),
+        SimpleCookingRecipeBuilder.smelting(
+                        Ingredient.of(ItemInit.LUNECAST.get()),
+                        RecipeCategory.MISC,
+                        CookingBookCategory.BLOCKS,
                         ItemInit.FRACTURED_LUNECAST.get(),
-                        0.1f, 200)
+                        0.1f,
+                        200)
                 .unlockedBy("has_item", HAS_LUNECAST)
-                .save(c);
+                .save(recipes);
 
-        CookingRecipeBuilder.smelting(Ingredient.of(ItemInit.BLACKPLATE.get()),
+        SimpleCookingRecipeBuilder.smelting(
+                        Ingredient.of(ItemInit.BLACKPLATE.get()),
+                        RecipeCategory.MISC,
+                        CookingBookCategory.BLOCKS,
                         ItemInit.FRACTURED_BLACKPLATE.get(),
-                        0.1f, 200)
+                        0.1f,
+                        200)
                 .unlockedBy("has_item", HAS_BLACKPLATE)
-                .save(c);
+                .save(recipes);
 
-        lunecastSlab(c, ItemInit.LUNECAST_SLAB.get(), ItemInit.LUNECAST.get());
-        lunecastSlab(c, ItemInit.ARBORED_LUNECAST_SLAB.get(), ItemInit.ARBORED_LUNECAST.get());
-        lunecastSlab(c, ItemInit.ERODED_LUNECAST_SLAB.get(), ItemInit.ERODED_LUNECAST.get());
-        lunecastSlab(c, ItemInit.FRACTURED_LUNECAST_SLAB.get(), ItemInit.FRACTURED_LUNECAST.get());
-        lunecastSlab(c, ItemInit.VINTAGE_LUNECAST_SLAB.get(), ItemInit.VINTAGE_LUNECAST.get());
-        blackplateSlab(c, ItemInit.BLACKPLATE_SLAB.get(), ItemInit.BLACKPLATE.get());
-        blackplateSlab(c, ItemInit.ARBORED_BLACKPLATE_SLAB.get(), ItemInit.ARBORED_BLACKPLATE.get());
-        blackplateSlab(c, ItemInit.ERODED_BLACKPLATE_SLAB.get(), ItemInit.ERODED_BLACKPLATE.get());
-        blackplateSlab(c, ItemInit.FRACTURED_BLACKPLATE_SLAB.get(), ItemInit.FRACTURED_BLACKPLATE.get());
-        blackplateSlab(c, ItemInit.VINTAGE_BLACKPLATE_SLAB.get(), ItemInit.VINTAGE_BLACKPLATE.get());
+        lunecastSlab(recipes, ItemInit.LUNECAST_SLAB.get(), ItemInit.LUNECAST.get());
+        lunecastSlab(recipes, ItemInit.ARBORED_LUNECAST_SLAB.get(), ItemInit.ARBORED_LUNECAST.get());
+        lunecastSlab(recipes, ItemInit.ERODED_LUNECAST_SLAB.get(), ItemInit.ERODED_LUNECAST.get());
+        lunecastSlab(recipes, ItemInit.FRACTURED_LUNECAST_SLAB.get(), ItemInit.FRACTURED_LUNECAST.get());
+        lunecastSlab(recipes, ItemInit.VINTAGE_LUNECAST_SLAB.get(), ItemInit.VINTAGE_LUNECAST.get());
+        blackplateSlab(recipes, ItemInit.BLACKPLATE_SLAB.get(), ItemInit.BLACKPLATE.get());
+        blackplateSlab(recipes, ItemInit.ARBORED_BLACKPLATE_SLAB.get(), ItemInit.ARBORED_BLACKPLATE.get());
+        blackplateSlab(recipes, ItemInit.ERODED_BLACKPLATE_SLAB.get(), ItemInit.ERODED_BLACKPLATE.get());
+        blackplateSlab(recipes, ItemInit.FRACTURED_BLACKPLATE_SLAB.get(), ItemInit.FRACTURED_BLACKPLATE.get());
+        blackplateSlab(recipes, ItemInit.VINTAGE_BLACKPLATE_SLAB.get(), ItemInit.VINTAGE_BLACKPLATE.get());
 
-        lunecastStairs(c, ItemInit.LUNECAST_STAIRS.get(), ItemInit.LUNECAST.get());
-        lunecastStairs(c, ItemInit.ARBORED_LUNECAST_STAIRS.get(), ItemInit.ARBORED_LUNECAST.get());
-        lunecastStairs(c, ItemInit.ERODED_LUNECAST_STAIRS.get(), ItemInit.ERODED_LUNECAST.get());
-        lunecastStairs(c, ItemInit.FRACTURED_LUNECAST_STAIRS.get(), ItemInit.FRACTURED_LUNECAST.get());
-        lunecastStairs(c, ItemInit.VINTAGE_LUNECAST_STAIRS.get(), ItemInit.VINTAGE_LUNECAST.get());
-        blackplateStairs(c, ItemInit.BLACKPLATE_STAIRS.get(), ItemInit.BLACKPLATE.get());
-        blackplateStairs(c, ItemInit.ARBORED_BLACKPLATE_STAIRS.get(), ItemInit.ARBORED_BLACKPLATE.get());
-        blackplateStairs(c, ItemInit.ERODED_BLACKPLATE_STAIRS.get(), ItemInit.ERODED_BLACKPLATE.get());
-        blackplateStairs(c, ItemInit.FRACTURED_BLACKPLATE_STAIRS.get(), ItemInit.FRACTURED_BLACKPLATE.get());
-        blackplateStairs(c, ItemInit.VINTAGE_BLACKPLATE_STAIRS.get(), ItemInit.VINTAGE_BLACKPLATE.get());
+        lunecastStairs(recipes, ItemInit.LUNECAST_STAIRS.get(), ItemInit.LUNECAST.get());
+        lunecastStairs(recipes, ItemInit.ARBORED_LUNECAST_STAIRS.get(), ItemInit.ARBORED_LUNECAST.get());
+        lunecastStairs(recipes, ItemInit.ERODED_LUNECAST_STAIRS.get(), ItemInit.ERODED_LUNECAST.get());
+        lunecastStairs(recipes, ItemInit.FRACTURED_LUNECAST_STAIRS.get(), ItemInit.FRACTURED_LUNECAST.get());
+        lunecastStairs(recipes, ItemInit.VINTAGE_LUNECAST_STAIRS.get(), ItemInit.VINTAGE_LUNECAST.get());
+        blackplateStairs(recipes, ItemInit.BLACKPLATE_STAIRS.get(), ItemInit.BLACKPLATE.get());
+        blackplateStairs(recipes, ItemInit.ARBORED_BLACKPLATE_STAIRS.get(), ItemInit.ARBORED_BLACKPLATE.get());
+        blackplateStairs(recipes, ItemInit.ERODED_BLACKPLATE_STAIRS.get(), ItemInit.ERODED_BLACKPLATE.get());
+        blackplateStairs(recipes, ItemInit.FRACTURED_BLACKPLATE_STAIRS.get(), ItemInit.FRACTURED_BLACKPLATE.get());
+        blackplateStairs(recipes, ItemInit.VINTAGE_BLACKPLATE_STAIRS.get(), ItemInit.VINTAGE_BLACKPLATE.get());
 
-        lunecastPlatform(c, ItemInit.LUNECAST_PLATFORM.get(), ItemInit.LUNECAST.get());
-        lunecastPlatform(c, ItemInit.ARBORED_LUNECAST_PLATFORM.get(), ItemInit.ARBORED_LUNECAST.get());
-        lunecastPlatform(c, ItemInit.ERODED_LUNECAST_PLATFORM.get(), ItemInit.ERODED_LUNECAST.get());
-        lunecastPlatform(c, ItemInit.FRACTURED_LUNECAST_PLATFORM.get(), ItemInit.FRACTURED_LUNECAST.get());
-        lunecastPlatform(c, ItemInit.VINTAGE_LUNECAST_PLATFORM.get(), ItemInit.VINTAGE_LUNECAST.get());
-        blackplatePlatform(c, ItemInit.BLACKPLATE_PLATFORM.get(), ItemInit.BLACKPLATE.get());
-        blackplatePlatform(c, ItemInit.ARBORED_BLACKPLATE_PLATFORM.get(), ItemInit.ARBORED_BLACKPLATE.get());
-        blackplatePlatform(c, ItemInit.ERODED_BLACKPLATE_PLATFORM.get(), ItemInit.ERODED_BLACKPLATE.get());
-        blackplatePlatform(c, ItemInit.FRACTURED_BLACKPLATE_PLATFORM.get(), ItemInit.FRACTURED_BLACKPLATE.get());
-        blackplatePlatform(c, ItemInit.VINTAGE_BLACKPLATE_PLATFORM.get(), ItemInit.VINTAGE_BLACKPLATE.get());
+        lunecastPlatform(recipes, ItemInit.LUNECAST_PLATFORM.get(), ItemInit.LUNECAST.get());
+        lunecastPlatform(recipes, ItemInit.ARBORED_LUNECAST_PLATFORM.get(), ItemInit.ARBORED_LUNECAST.get());
+        lunecastPlatform(recipes, ItemInit.ERODED_LUNECAST_PLATFORM.get(), ItemInit.ERODED_LUNECAST.get());
+        lunecastPlatform(recipes, ItemInit.FRACTURED_LUNECAST_PLATFORM.get(), ItemInit.FRACTURED_LUNECAST.get());
+        lunecastPlatform(recipes, ItemInit.VINTAGE_LUNECAST_PLATFORM.get(), ItemInit.VINTAGE_LUNECAST.get());
+        blackplatePlatform(recipes, ItemInit.BLACKPLATE_PLATFORM.get(), ItemInit.BLACKPLATE.get());
+        blackplatePlatform(recipes, ItemInit.ARBORED_BLACKPLATE_PLATFORM.get(), ItemInit.ARBORED_BLACKPLATE.get());
+        blackplatePlatform(recipes, ItemInit.ERODED_BLACKPLATE_PLATFORM.get(), ItemInit.ERODED_BLACKPLATE.get());
+        blackplatePlatform(recipes, ItemInit.FRACTURED_BLACKPLATE_PLATFORM.get(), ItemInit.FRACTURED_BLACKPLATE.get());
+        blackplatePlatform(recipes, ItemInit.VINTAGE_BLACKPLATE_PLATFORM.get(), ItemInit.VINTAGE_BLACKPLATE.get());
 
-        ShapedRecipeBuilder.shaped(ItemInit.CHAMBER_LIGHTS.get(), 2)
-                .pattern("g#g").define('#', ItemInit.BLACKPLATE.get())
-                .pattern("g#g").define('g', Items.GLOWSTONE_DUST)
+        shaped(RecipeCategory.MISC, ItemInit.CHAMBER_LIGHTS.get(), 2)
+                .pattern("g#g")
+                .define('#', ItemInit.BLACKPLATE.get())
+                .pattern("g#g")
+                .define('g', Items.GLOWSTONE_DUST)
                 .unlockedBy("has_item", ROOT_CRITERION)
-                .save(c);
+                .save(recipes);
 
-        ShapedRecipeBuilder.shaped(ItemInit.WIRE_MESH.get())
-                .pattern("nnn").define('n', Items.IRON_NUGGET)
+        shaped(RecipeCategory.MISC, ItemInit.WIRE_MESH.get())
+                .pattern("nnn")
+                .define('n', Items.IRON_NUGGET)
                 .pattern("nnn")
                 .unlockedBy("has_item", HAS_CHAMBER_DECORATION)
                 .group("wire_mesh")
-                .save(c);
+                .save(recipes);
 
-        ShapelessRecipeBuilder.shapeless(ItemInit.WIRE_MESH.get(), 4)
+        shapeless(RecipeCategory.MISC, ItemInit.WIRE_MESH.get(), 4)
                 .requires(ItemInit.WIRE_MESH_BLOCK.get())
                 .unlockedBy("has_item", HAS_CHAMBER_DECORATION)
                 .group("wire_mesh")
-                .save(c, "portalmod:wire_mesh_from_block");
+                .save(recipes, "portalmod:wire_mesh_from_block");
 
-        ShapedRecipeBuilder.shaped(ItemInit.WIRE_MESH_BLOCK.get())
-                .pattern("ww").define('w', ItemInit.WIRE_MESH.get())
+        shaped(RecipeCategory.MISC, ItemInit.WIRE_MESH_BLOCK.get())
+                .pattern("ww")
+                .define('w', ItemInit.WIRE_MESH.get())
                 .pattern("ww")
                 .unlockedBy("has_item", HAS_CHAMBER_DECORATION)
-                .save(c);
+                .save(recipes);
 
-        ShapelessRecipeBuilder.shapeless(ItemInit.GOO_BUCKET.get())
+        shapeless(RecipeCategory.MISC, ItemInit.GOO_BUCKET.get())
                 .requires(Items.SOUL_SAND)
                 .requires(Items.DIRT)
                 .requires(Items.BUCKET)
                 .unlockedBy("has_item", HAS_CHAMBER_DECORATION)
-                .save(c);
+                .save(recipes);
 
-
-
-        ShapedRecipeBuilder.shaped(ItemInit.IRON_FRAME.get(), 8)
-                .pattern(" i ").define('i', Items.IRON_INGOT)
+        shaped(RecipeCategory.MISC, ItemInit.IRON_FRAME.get(), 8)
+                .pattern(" i ")
+                .define('i', Items.IRON_INGOT)
                 .pattern("i i")
                 .pattern(" i ")
                 .unlockedBy("has_item", ROOT_CRITERION)
                 .group("iron_frame")
-                .save(c);
+                .save(recipes);
 
-        ShapedRecipeBuilder.shaped(ItemInit.MESHED_IRON_FRAME.get(), 8)
-                .pattern(" i ").define('i', Items.IRON_INGOT)
-                .pattern("ixi").define('x', ItemInit.WIRE_MESH.get())
+        shaped(RecipeCategory.MISC, ItemInit.MESHED_IRON_FRAME.get(), 8)
+                .pattern(" i ")
+                .define('i', Items.IRON_INGOT)
+                .pattern("ixi")
+                .define('x', ItemInit.WIRE_MESH.get())
                 .pattern(" i ")
                 .unlockedBy("has_item", HAS_CHAMBER_DECORATION)
                 .group("iron_frame")
-                .save(c);
+                .save(recipes);
 
-        ShapedRecipeBuilder.shaped(ItemInit.BARRED_IRON_FRAME.get(), 8)
-                .pattern(" i ").define('i', Items.IRON_INGOT)
-                .pattern("ixi").define('x', Items.IRON_BARS)
+        shaped(RecipeCategory.MISC, ItemInit.BARRED_IRON_FRAME.get(), 8)
+                .pattern(" i ")
+                .define('i', Items.IRON_INGOT)
+                .pattern("ixi")
+                .define('x', Items.IRON_BARS)
                 .pattern(" i ")
                 .unlockedBy("has_item", HAS_CHAMBER_DECORATION)
                 .group("iron_frame")
-                .save(c);
+                .save(recipes);
 
-        ShapedRecipeBuilder.shaped(ItemInit.PLATFORM_BEAM.get(), 6)
-                .pattern("c").define('c', Items.CHAIN)
-                .pattern("i").define('i', Items.IRON_INGOT)
+        shaped(RecipeCategory.MISC, ItemInit.PLATFORM_BEAM.get(), 6)
+                .pattern("c")
+                .define('c', Items.IRON_CHAIN)
+                .pattern("i")
+                .define('i', Items.IRON_INGOT)
                 .pattern("i")
                 .unlockedBy("has_item", HAS_CHAMBER_DECORATION)
-                .save(c);
+                .save(recipes);
 
-        rustyVariant(c, ItemInit.RUSTY_IRON_FRAME.get(), ItemInit.IRON_FRAME.get(), "rusty_iron_frame");
-        rustyVariant(c, ItemInit.RUSTY_MESHED_IRON_FRAME.get(), ItemInit.MESHED_IRON_FRAME.get(), "rusty_iron_frame");
-        rustyVariant(c, ItemInit.RUSTY_BARRED_IRON_FRAME.get(), ItemInit.BARRED_IRON_FRAME.get(), "rusty_iron_frame");
-        rustyVariant(c, ItemInit.RUSTY_PLATFORM_BEAM.get(), ItemInit.PLATFORM_BEAM.get(), "rusty_beam");
-
-
+        rustyVariant(recipes, ItemInit.RUSTY_IRON_FRAME.get(), ItemInit.IRON_FRAME.get(), "rusty_iron_frame");
+        rustyVariant(
+                recipes, ItemInit.RUSTY_MESHED_IRON_FRAME.get(), ItemInit.MESHED_IRON_FRAME.get(), "rusty_iron_frame");
+        rustyVariant(
+                recipes, ItemInit.RUSTY_BARRED_IRON_FRAME.get(), ItemInit.BARRED_IRON_FRAME.get(), "rusty_iron_frame");
+        rustyVariant(recipes, ItemInit.RUSTY_PLATFORM_BEAM.get(), ItemInit.PLATFORM_BEAM.get(), "rusty_beam");
 
         // --- Stonecutter --- //
 
-        stonecutting(c, ItemInit.LUNECAST.get(), ItemInit.LUNECAST_SLAB.get(), 2);
-        stonecutting(c, ItemInit.LUNECAST.get(), ItemInit.LUNECAST_STAIRS.get());
-        stonecutting(c, ItemInit.BLACKPLATE.get(), ItemInit.BLACKPLATE_SLAB.get(), 2);
-        stonecutting(c, ItemInit.BLACKPLATE.get(), ItemInit.BLACKPLATE_STAIRS.get());
-        stonecutting(c, ItemInit.ARBORED_LUNECAST.get(), ItemInit.ARBORED_LUNECAST_SLAB.get(), 2);
-        stonecutting(c, ItemInit.ARBORED_LUNECAST.get(), ItemInit.ARBORED_LUNECAST_STAIRS.get());
-        stonecutting(c, ItemInit.ARBORED_BLACKPLATE.get(), ItemInit.ARBORED_BLACKPLATE_SLAB.get(), 2);
-        stonecutting(c, ItemInit.ARBORED_BLACKPLATE.get(), ItemInit.ARBORED_BLACKPLATE_STAIRS.get());
-        stonecutting(c, ItemInit.ERODED_LUNECAST.get(), ItemInit.ERODED_LUNECAST_SLAB.get(), 2);
-        stonecutting(c, ItemInit.ERODED_LUNECAST.get(), ItemInit.ERODED_LUNECAST_STAIRS.get());
-        stonecutting(c, ItemInit.ERODED_BLACKPLATE.get(), ItemInit.ERODED_BLACKPLATE_SLAB.get(), 2);
-        stonecutting(c, ItemInit.ERODED_BLACKPLATE.get(), ItemInit.ERODED_BLACKPLATE_STAIRS.get());
-        stonecutting(c, ItemInit.FRACTURED_LUNECAST.get(), ItemInit.FRACTURED_LUNECAST_SLAB.get(), 2);
-        stonecutting(c, ItemInit.FRACTURED_LUNECAST.get(), ItemInit.FRACTURED_LUNECAST_STAIRS.get());
-        stonecutting(c, ItemInit.FRACTURED_BLACKPLATE.get(), ItemInit.FRACTURED_BLACKPLATE_SLAB.get(), 2);
-        stonecutting(c, ItemInit.FRACTURED_BLACKPLATE.get(), ItemInit.FRACTURED_BLACKPLATE_STAIRS.get());
-        stonecutting(c, ItemInit.VINTAGE_LUNECAST.get(), ItemInit.VINTAGE_LUNECAST_SLAB.get(), 2);
-        stonecutting(c, ItemInit.VINTAGE_LUNECAST.get(), ItemInit.VINTAGE_LUNECAST_STAIRS.get());
-        stonecutting(c, ItemInit.VINTAGE_BLACKPLATE.get(), ItemInit.VINTAGE_BLACKPLATE_SLAB.get(), 2);
-        stonecutting(c, ItemInit.VINTAGE_BLACKPLATE.get(), ItemInit.VINTAGE_BLACKPLATE_STAIRS.get());
+        stonecutting(recipes, ItemInit.LUNECAST.get(), ItemInit.LUNECAST_SLAB.get(), 2);
+        stonecutting(recipes, ItemInit.LUNECAST.get(), ItemInit.LUNECAST_STAIRS.get());
+        stonecutting(recipes, ItemInit.BLACKPLATE.get(), ItemInit.BLACKPLATE_SLAB.get(), 2);
+        stonecutting(recipes, ItemInit.BLACKPLATE.get(), ItemInit.BLACKPLATE_STAIRS.get());
+        stonecutting(recipes, ItemInit.ARBORED_LUNECAST.get(), ItemInit.ARBORED_LUNECAST_SLAB.get(), 2);
+        stonecutting(recipes, ItemInit.ARBORED_LUNECAST.get(), ItemInit.ARBORED_LUNECAST_STAIRS.get());
+        stonecutting(recipes, ItemInit.ARBORED_BLACKPLATE.get(), ItemInit.ARBORED_BLACKPLATE_SLAB.get(), 2);
+        stonecutting(recipes, ItemInit.ARBORED_BLACKPLATE.get(), ItemInit.ARBORED_BLACKPLATE_STAIRS.get());
+        stonecutting(recipes, ItemInit.ERODED_LUNECAST.get(), ItemInit.ERODED_LUNECAST_SLAB.get(), 2);
+        stonecutting(recipes, ItemInit.ERODED_LUNECAST.get(), ItemInit.ERODED_LUNECAST_STAIRS.get());
+        stonecutting(recipes, ItemInit.ERODED_BLACKPLATE.get(), ItemInit.ERODED_BLACKPLATE_SLAB.get(), 2);
+        stonecutting(recipes, ItemInit.ERODED_BLACKPLATE.get(), ItemInit.ERODED_BLACKPLATE_STAIRS.get());
+        stonecutting(recipes, ItemInit.FRACTURED_LUNECAST.get(), ItemInit.FRACTURED_LUNECAST_SLAB.get(), 2);
+        stonecutting(recipes, ItemInit.FRACTURED_LUNECAST.get(), ItemInit.FRACTURED_LUNECAST_STAIRS.get());
+        stonecutting(recipes, ItemInit.FRACTURED_BLACKPLATE.get(), ItemInit.FRACTURED_BLACKPLATE_SLAB.get(), 2);
+        stonecutting(recipes, ItemInit.FRACTURED_BLACKPLATE.get(), ItemInit.FRACTURED_BLACKPLATE_STAIRS.get());
+        stonecutting(recipes, ItemInit.VINTAGE_LUNECAST.get(), ItemInit.VINTAGE_LUNECAST_SLAB.get(), 2);
+        stonecutting(recipes, ItemInit.VINTAGE_LUNECAST.get(), ItemInit.VINTAGE_LUNECAST_STAIRS.get());
+        stonecutting(recipes, ItemInit.VINTAGE_BLACKPLATE.get(), ItemInit.VINTAGE_BLACKPLATE_SLAB.get(), 2);
+        stonecutting(recipes, ItemInit.VINTAGE_BLACKPLATE.get(), ItemInit.VINTAGE_BLACKPLATE_STAIRS.get());
     }
 
-    public static void lunecastVariant(Consumer<IFinishedRecipe> c, IItemProvider variant, Ingredient ingredient) {
-        ShapelessRecipeBuilder.shapeless(variant)
+    public void lunecastVariant(RecipeOutput recipes, ItemLike variant, Ingredient ingredient) {
+        shapeless(RecipeCategory.MISC, variant)
                 .requires(ItemInit.LUNECAST.get())
                 .requires(ingredient)
                 .unlockedBy("has_item", HAS_LUNECAST)
                 .group("lunecast_variant")
-                .save(c);
+                .save(recipes);
     }
 
-    public static void blackplateVariant(Consumer<IFinishedRecipe> c, IItemProvider variant, Ingredient ingredient) {
-        ShapelessRecipeBuilder.shapeless(variant)
+    public void blackplateVariant(RecipeOutput recipes, ItemLike variant, Ingredient ingredient) {
+        shapeless(RecipeCategory.MISC, variant)
                 .requires(ItemInit.BLACKPLATE.get())
                 .requires(ingredient)
                 .unlockedBy("has_item", HAS_BLACKPLATE)
                 .group("blackplate_variant")
-                .save(c);
+                .save(recipes);
     }
 
-    public static void lunecastSlab(Consumer<IFinishedRecipe> c, IItemProvider slab, IItemProvider baseBlock) {
-        slab(c, slab, baseBlock, "lunecast_slab");
+    public void lunecastSlab(RecipeOutput recipes, ItemLike slab, ItemLike baseBlock) {
+        slab(recipes, slab, baseBlock, "lunecast_slab");
     }
 
-    public static void blackplateSlab(Consumer<IFinishedRecipe> c, IItemProvider slab, IItemProvider baseBlock) {
-        slab(c, slab, baseBlock, "blackplate_slab");
+    public void blackplateSlab(RecipeOutput recipes, ItemLike slab, ItemLike baseBlock) {
+        slab(recipes, slab, baseBlock, "blackplate_slab");
     }
 
-    public static void slab(Consumer<IFinishedRecipe> c, IItemProvider slab, IItemProvider baseBlock, String group) {
-        ShapedRecipeBuilder.shaped(slab, 6)
-                .pattern("###").define('#', baseBlock)
+    public void slab(RecipeOutput recipes, ItemLike slab, ItemLike baseBlock, String group) {
+        shaped(RecipeCategory.MISC, slab, 6)
+                .pattern("###")
+                .define('#', baseBlock)
                 .group(group)
                 .unlockedBy("has_item", has(baseBlock))
-                .save(c);
+                .save(recipes);
     }
 
-    public static void lunecastStairs(Consumer<IFinishedRecipe> c, IItemProvider stairs, IItemProvider baseBlock) {
-        stairs(c, stairs, baseBlock, "lunecast_stairs");
+    public void lunecastStairs(RecipeOutput recipes, ItemLike stairs, ItemLike baseBlock) {
+        stairs(recipes, stairs, baseBlock, "lunecast_stairs");
     }
 
-    public static void blackplateStairs(Consumer<IFinishedRecipe> c, IItemProvider stairs, IItemProvider baseBlock) {
-        stairs(c, stairs, baseBlock, "blackplate_stairs");
+    public void blackplateStairs(RecipeOutput recipes, ItemLike stairs, ItemLike baseBlock) {
+        stairs(recipes, stairs, baseBlock, "blackplate_stairs");
     }
 
-    public static void stairs(Consumer<IFinishedRecipe> c, IItemProvider stairs, IItemProvider baseBlock, String group) {
-        ShapedRecipeBuilder.shaped(stairs, 4)
-                .pattern("#  ").define('#', baseBlock)
+    public void stairs(RecipeOutput recipes, ItemLike stairs, ItemLike baseBlock, String group) {
+        shaped(RecipeCategory.MISC, stairs, 4)
+                .pattern("#  ")
+                .define('#', baseBlock)
                 .pattern("## ")
                 .pattern("###")
                 .group(group)
                 .unlockedBy("has_item", has(baseBlock))
-                .save(c);
+                .save(recipes);
     }
 
-    public static void lunecastPlatform(Consumer<IFinishedRecipe> c, IItemProvider platform, IItemProvider baseBlock) {
-        platform(c, platform, baseBlock, "lunecast_platform");
+    public void lunecastPlatform(RecipeOutput recipes, ItemLike platform, ItemLike baseBlock) {
+        platform(recipes, platform, baseBlock, "lunecast_platform");
     }
 
-    public static void blackplatePlatform(Consumer<IFinishedRecipe> c, IItemProvider platform, IItemProvider baseBlock) {
-        platform(c, platform, baseBlock, "blackplate_platform");
+    public void blackplatePlatform(RecipeOutput recipes, ItemLike platform, ItemLike baseBlock) {
+        platform(recipes, platform, baseBlock, "blackplate_platform");
     }
 
-    public static void platform(Consumer<IFinishedRecipe> c, IItemProvider platform, IItemProvider baseBlock, String group) {
-        ShapedRecipeBuilder.shaped(platform)
-                .pattern("s").define('s', baseBlock)
-                .pattern("i").define('i', ItemTagInit.IRON_FRAMES)
+    public void platform(RecipeOutput recipes, ItemLike platform, ItemLike baseBlock, String group) {
+        shaped(RecipeCategory.MISC, platform)
+                .pattern("s")
+                .define('s', baseBlock)
+                .pattern("i")
+                .define('i', ItemTagInit.IRON_FRAMES)
                 .group(group)
                 .unlockedBy("has_item", has(baseBlock))
-                .save(c);
+                .save(recipes);
     }
 
-    public static void rustyVariant(Consumer<IFinishedRecipe> c, IItemProvider rusty, IItemProvider regular, String group) {
-        ShapelessRecipeBuilder.shapeless(rusty, 8)
+    public void rustyVariant(RecipeOutput recipes, ItemLike rusty, ItemLike regular, String group) {
+        shapeless(RecipeCategory.MISC, rusty, 8)
                 .requires(regular)
                 .requires(regular)
                 .requires(regular)
@@ -522,16 +599,22 @@ public class RecipeGen extends RecipeProvider {
                 .requires(regular)
                 .unlockedBy("has_item", HAS_CHAMBER_DECORATION)
                 .group(group)
-                .save(c);
+                .save(recipes);
     }
 
-    public static void stonecutting(Consumer<IFinishedRecipe> c, IItemProvider ingredient, IItemProvider output) {
-        stonecutting(c, ingredient, output, 1);
+    public void stonecutting(RecipeOutput recipes, ItemLike ingredient, ItemLike output) {
+        stonecutting(recipes, ingredient, output, 1);
     }
 
-    public static void stonecutting(Consumer<IFinishedRecipe> c, IItemProvider ingredient, IItemProvider output, int amount) {
-        SingleItemRecipeBuilder.stonecutting(Ingredient.of(ingredient), output, amount)
-                .unlocks("has_item", RecipeProvider.has(ItemInit.LUNECAST.get()))
-                .save(c, "portalmod:" + output.asItem().getRegistryName().getPath() + "_from_" + ingredient.asItem().getRegistryName().getPath() + "_stonecutting");
+    public void stonecutting(RecipeOutput recipes, ItemLike ingredient, ItemLike output, int amount) {
+        SingleItemRecipeBuilder.stonecutting(Ingredient.of(ingredient), RecipeCategory.MISC, output, amount)
+                .unlockedBy("has_item", has(ItemInit.LUNECAST.get()))
+                .save(
+                        recipes,
+                        "portalmod:"
+                                + BuiltInRegistries.ITEM.getKey(output.asItem()).getPath()
+                                + "_from_"
+                                + BuiltInRegistries.ITEM.getKey(ingredient.asItem()).getPath()
+                                + "_stonecutting");
     }
 }

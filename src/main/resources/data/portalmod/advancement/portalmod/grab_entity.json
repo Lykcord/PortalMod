@@ -7,7 +7,7 @@
   },
   "display": {
     "icon": {
-      "item": "portalmod:storage_cube"
+      "id": "portalmod:storage_cube"
     },
     "title": {
       "translate": "advancements.portalmod.grab_entity.title"

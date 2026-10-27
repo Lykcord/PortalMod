@@ -4,25 +4,23 @@
     "requirement": {
       "trigger": "minecraft:inventory_changed",
       "conditions": {
-        "player": [
-          {
-            "condition": "minecraft:entity_properties",
-            "entity": "this",
-            "predicate": {
-              "equipment": {
-                "feet": {
-                  "item": "portalmod:longfall_boots"
-                }
+        "player": {
+          "entity": "this",
+          "predicate": {
+            "minecraft:equipment": {
+              "feet": {
+                "items": "portalmod:longfall_boots"
               }
             }
-          }
-        ]
+          },
+          "type": "minecraft:entity_properties"
+        }
       }
     }
   },
   "display": {
     "icon": {
-      "item": "portalmod:longfall_boots"
+      "id": "portalmod:longfall_boots"
     },
     "title": {
       "translate": "advancements.portalmod.obtain_fall_boots.title"

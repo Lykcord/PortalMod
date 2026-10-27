@@ -7,7 +7,7 @@
   },
   "display": {
     "icon": {
-      "item": "minecraft:netherite_chestplate"
+      "id": "minecraft:netherite_chestplate"
     },
     "title": {
       "translate": "advancements.portalmod.survive_turret.title"

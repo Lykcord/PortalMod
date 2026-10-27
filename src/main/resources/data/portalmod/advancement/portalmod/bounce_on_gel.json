@@ -7,7 +7,7 @@
   },
   "display": {
     "icon": {
-      "item": "portalmod:repulsion_gel"
+      "id": "portalmod:repulsion_gel"
     },
     "title": {
       "translate": "advancements.portalmod.bounce_on_gel.title"

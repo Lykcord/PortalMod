@@ -1,105 +1,87 @@
 package net.portalmod.core.datagen;
 
-import com.google.common.collect.ImmutableList;
-import com.mojang.datafixers.util.Pair;
-import net.minecraft.advancements.criterion.StatePropertiesPredicate;
-import net.minecraft.block.Block;
-import net.minecraft.block.DoorBlock;
-import net.minecraft.block.SlabBlock;
-import net.minecraft.data.DataGenerator;
-import net.minecraft.data.LootTableProvider;
-import net.minecraft.data.loot.BlockLootTables;
-import net.minecraft.item.Items;
-import net.minecraft.loot.*;
-import net.minecraft.loot.conditions.BlockStateProperty;
-import net.minecraft.state.Property;
-import net.minecraft.util.ResourceLocation;
-import net.minecraftforge.fml.RegistryObject;
+import net.fabricmc.fabric.api.datagen.v1.FabricPackOutput;
+import net.fabricmc.fabric.api.datagen.v1.provider.FabricBlockLootSubProvider;
+import net.minecraft.advancements.predicates.StatePropertiesPredicate;
+import net.minecraft.core.Holder;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.util.StringRepresentable;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.SlabBlock;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.level.storage.loot.LootPool;
+import net.minecraft.world.level.storage.loot.LootTable;
+import net.minecraft.world.level.storage.loot.entries.LootItem;
+import net.minecraft.world.level.storage.loot.predicates.MatchBlock;
+import net.minecraft.world.level.storage.loot.providers.number.ints.ConstantValue;
 import net.portalmod.common.blocks.ForestCakeBlock;
 import net.portalmod.common.blocks.MultiBlock;
 import net.portalmod.common.sorted.gel.AbstractGelBlock;
 import net.portalmod.core.init.BlockInit;
+import net.portalmod.core.util.Registry.Entry;
 
 import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
+import java.util.concurrent.CompletableFuture;
 
-public class LootTableGen extends LootTableProvider {
-    public LootTableGen(DataGenerator generator) {
-        super(generator);
+public class LootTableGen extends FabricBlockLootSubProvider {
+    public LootTableGen(FabricPackOutput output, CompletableFuture<HolderLookup.Provider> registries) {
+        super(output, registries);
     }
 
     @Override
-    protected List<Pair<Supplier<Consumer<BiConsumer<ResourceLocation, LootTable.Builder>>>, LootParameterSet>> getTables() {
-        return ImmutableList.of(Pair.of(PMBlockLootTables::new, LootParameterSets.BLOCK));
+    public void generate() {
+        for (Entry<Block> block : BlockInit.BLOCKS.getRegistry().values()) {
+            setLootTable(block.get());
+        }
     }
 
-    @Override
-    protected void validate(Map<ResourceLocation, LootTable> p_validate_1_, ValidationTracker p_validate_2_) {
+    public static boolean skipLootTable(Block block) {
+        return block.asItem() == Items.AIR || block instanceof AbstractGelBlock;
     }
 
-    public static class PMBlockLootTables extends BlockLootTables {
-
-        @Override
-        protected void addTables() {
-            for (RegistryObject<Block> block : BlockInit.BLOCKS.getEntries()) {
-                setLootTable(block.get());
-            }
+    public void setLootTable(Block block) {
+        if (skipLootTable(block)) {
+            excludeFromStrictValidation(block);
+            return;
         }
 
-        public static boolean skipLootTable(Block block) {
-            return block.asItem() == Items.AIR || block instanceof AbstractGelBlock;
+        if (block instanceof ForestCakeBlock) {
+            this.dropWhenSilkTouch(block);
+        } else if (block instanceof DoorBlock) {
+            this.add(block, createDoorTable(block));
+        } else if (block instanceof SlabBlock) {
+            this.add(block, createSlabItemTable(block));
+        } else if (block instanceof MultiBlock) {
+            this.add(block, multiBlockCondition((MultiBlock) block));
+        } else {
+            this.dropSelf(block);
         }
+    }
 
-        public void setLootTable(Block block) {
-            if (skipLootTable(block)) {
-                return;
-            }
+    public LootTable.Builder multiBlockCondition(MultiBlock block) {
+        StatePropertiesPredicate.Builder properties = StatePropertiesPredicate.Builder.properties();
+        HashMap<Property<?>, Comparable<?>> propertyMap = new HashMap<>();
 
-            if (block instanceof ForestCakeBlock) {
-                this.dropWhenSilkTouch(block);
-            }
-            else if (block instanceof DoorBlock) {
-                this.add(block, createDoorTable(block));
-            }
-            else if (block instanceof SlabBlock) {
-                this.add(block, createSlabItemTable(block));
-            }
-            else if (block instanceof MultiBlock) {
-                this.add(block, multiBlockCondition((MultiBlock) block));
-            }
-            else {
-                this.dropSelf(block);
-            }
-        }
+        block.addMainBlockProperties(propertyMap);
 
-        public LootTable.Builder multiBlockCondition(MultiBlock block) {
-            StatePropertiesPredicate.Builder properties = StatePropertiesPredicate.Builder.properties();
-            HashMap<Property<?>, Comparable<?>> propertyMap = new HashMap<>();
+        propertyMap.forEach(
+                (property, comparable) ->
+                        properties.hasProperty(
+                                property,
+                                comparable instanceof StringRepresentable value
+                                        ? value.getSerializedName()
+                                        : comparable.toString()));
 
-            block.addMainBlockProperties(propertyMap);
-
-            propertyMap.forEach((property, comparable) ->
-                    properties.hasProperty(property, comparable.toString()));
-
-            return LootTable.lootTable()
-                    .withPool(applyExplosionCondition(block, LootPool.lootPool()
-                            .setRolls(ConstantRange.exactly(1))
-                            .add(ItemLootEntry.lootTableItem(block)
-                                    .when(BlockStateProperty.hasBlockStateProperties(block)
-                                            .setProperties(properties)))));
-        }
-
-        @Override
-        protected Iterable<Block> getKnownBlocks() {
-            return BlockInit.BLOCKS.getEntries().stream()
-                    .map(RegistryObject::get)
-                    .filter(block -> !skipLootTable(block))
-                    .collect(Collectors.toList());
-        }
+        return LootTable.lootTable()
+                .withPool(
+                        applyExplosionCondition(
+                                block,
+                                LootPool.lootPool()
+                                        .setRolls(Holder.direct(new ConstantValue(1)))
+                                        .add(
+                                                LootItem.lootTableItem(block)
+                                                        .when(MatchBlock.blockMatches(blocks, block, properties)))));
     }
 }

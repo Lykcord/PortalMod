@@ -7,7 +7,7 @@
   },
   "display": {
     "icon": {
-      "item": "portalmod:lunecast"
+      "id": "portalmod:lunecast"
     },
     "title": {
       "translate": "advancements.portalmod.portal_surface.title"

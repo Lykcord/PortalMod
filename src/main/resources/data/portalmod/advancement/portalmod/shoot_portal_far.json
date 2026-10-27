@@ -7,7 +7,7 @@
   },
   "display": {
     "icon": {
-      "item": "minecraft:target"
+      "id": "minecraft:target"
     },
     "title": {
       "translate": "advancements.portalmod.shoot_portal_far.title"

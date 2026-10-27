@@ -7,7 +7,7 @@
   },
   "display": {
     "icon": {
-      "item": "portalmod:faithplate"
+      "id": "portalmod:faithplate"
     },
     "title": {
       "translate": "advancements.portalmod.faith_plate_elytra.title"

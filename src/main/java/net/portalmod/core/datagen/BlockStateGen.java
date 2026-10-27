@@ -1,31 +1,70 @@
 package net.portalmod.core.datagen;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.SlabBlock;
-import net.minecraft.block.StairsBlock;
-import net.minecraft.data.DataGenerator;
-import net.minecraft.util.Direction;
-import net.minecraft.util.ResourceLocation;
-import net.minecraftforge.client.model.generators.BlockStateProvider;
-import net.minecraftforge.client.model.generators.ConfiguredModel;
-import net.minecraftforge.client.model.generators.ModelFile;
-import net.minecraftforge.common.data.ExistingFileHelper;
+import com.mojang.math.Quadrant;
+
+import net.fabricmc.fabric.api.client.datagen.v1.provider.FabricModelProvider;
+import net.fabricmc.fabric.api.datagen.v1.FabricPackOutput;
+import net.minecraft.client.color.item.GrassColorSource;
+import net.minecraft.client.data.models.BlockModelGenerators;
+import net.minecraft.client.data.models.ItemModelGenerators;
+import net.minecraft.client.data.models.blockstates.MultiVariantGenerator;
+import net.minecraft.client.data.models.blockstates.PropertyDispatch;
+import net.minecraft.client.data.models.model.ItemModelUtils;
+import net.minecraft.client.data.models.model.ModelTemplate;
+import net.minecraft.client.data.models.model.ModelTemplates;
+import net.minecraft.client.data.models.model.TextureMapping;
+import net.minecraft.client.data.models.model.TextureSlot;
+import net.minecraft.client.renderer.block.dispatch.Variant;
+import net.minecraft.client.renderer.item.EmptyModel;
+import net.minecraft.client.resources.model.sprite.Material;
+import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.SlabBlock;
+import net.minecraft.world.level.block.StairBlock;
 import net.portalmod.PortalMod;
 import net.portalmod.common.sorted.panel.PanelBlock;
 import net.portalmod.common.sorted.panel.PanelState;
+import net.portalmod.common.sorted.portalgun.PortalGun;
 import net.portalmod.core.init.BlockInit;
+import net.portalmod.core.init.ItemInit;
 
-import javax.annotation.Nonnull;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
-public class BlockStateGen extends BlockStateProvider {
+public class BlockStateGen extends FabricModelProvider {
 
-    public BlockStateGen(DataGenerator gen, ExistingFileHelper exFileHelper) {
-        super(gen, PortalMod.MODID, exFileHelper);
+    private BlockModelGenerators models;
+
+    public BlockStateGen(FabricPackOutput output) {
+        super(output);
     }
 
     @Override
-    protected void registerStatesAndModels() {
+    public void generateItemModels(ItemModelGenerators items) {
+        ItemInit.ITEMS
+                .getRegistry()
+                .forEach(
+                        (name, entry) -> {
+                            var item = entry.get();
+                            if (item instanceof PortalGun) {
+                                items.itemModelOutput.accept(item, new EmptyModel.Unbaked());
+                                return;
+                            }
+                            var model = Identifier.fromNamespaceAndPath(PortalMod.MODID, "item/" + name);
+                            items.itemModelOutput.accept(
+                                    item,
+                                    name.startsWith("arbored_blackplate")
+                                            ? ItemModelUtils.tintedModel(model, new GrassColorSource(.5f, 1))
+                                            : ItemModelUtils.plainModel(model));
+                        });
+    }
+
+    @Override
+    public void generateBlockStateModels(BlockModelGenerators generators) {
+        models = generators;
         genPanel(BlockInit.LUNECAST.get(), false);
         genPanel(BlockInit.ARBORED_LUNECAST.get(), false);
         genPanel(BlockInit.ERODED_LUNECAST.get(), false);
@@ -46,7 +85,6 @@ public class BlockStateGen extends BlockStateProvider {
         genPanelSlab(BlockInit.VINTAGE_LUNECAST_SLAB.get(), "vintage_lunecast");
 
         genPanelSlab(BlockInit.BLACKPLATE_SLAB.get(), "blackplate");
-//        genPanelSlab(BlockInit.ARBORED_BLACKPLATE_SLAB.get(), "arbored_blackplate");
         genPanelSlab(BlockInit.ERODED_BLACKPLATE_SLAB.get(), "eroded_blackplate");
         genPanelSlab(BlockInit.FRACTURED_BLACKPLATE_SLAB.get(), "fractured_blackplate");
         genPanelSlab(BlockInit.VINTAGE_BLACKPLATE_SLAB.get(), "vintage_blackplate");
@@ -58,187 +96,344 @@ public class BlockStateGen extends BlockStateProvider {
         genPanelStairsFull(BlockInit.VINTAGE_LUNECAST_STAIRS.get(), "vintage_lunecast");
 
         genPanelStairs(BlockInit.BLACKPLATE_STAIRS.get(), "blackplate");
-//        genPanelStairs(BlockInit.ARBORED_BLACKPLATE_STAIRS.get(), "arbored_blackplate");
         genPanelStairs(BlockInit.ERODED_BLACKPLATE_STAIRS.get(), "eroded_blackplate");
         genPanelStairs(BlockInit.FRACTURED_BLACKPLATE_STAIRS.get(), "fractured_blackplate");
         genPanelStairs(BlockInit.VINTAGE_BLACKPLATE_STAIRS.get(), "vintage_blackplate");
-
     }
 
     public void genPanel(Block block, boolean blackplateYouBe) {
         this.genPanel(block, "", "", true, blackplateYouBe);
     }
 
-    public void genPanel(Block block, String suffix, String parentSuffix, boolean genBlockStateFile, boolean blackplateYouBe) {
-        String name = block.getRegistryName().getPath();
+    public void genPanel(
+            Block block, String suffix, String parentSuffix, boolean genBlockStateFile, boolean blackplateYouBe) {
+        String name = BuiltInRegistries.BLOCK.getKey(block).getPath();
 
         String parentPrefix = Objects.equals(parentSuffix, "") ? "minecraft:" : "portalmod:";
-        ModelFile singleModel = this.models().withExistingParent(name + suffix, parentPrefix + "block/cube_bottom_top" + parentSuffix)
-                .texture("side", blockPath(name + suffix))
-                .texture("top", blockPath(name + "_top" + suffix))
-                .texture("bottom", blockPath(name + "_bottom" + suffix));
+        Identifier singleModel =
+                model(
+                        name + suffix,
+                        parentPrefix + "block/cube_bottom_top" + parentSuffix,
+                        Map.of(
+                                "side",
+                                blockPath(name + suffix),
+                                "top",
+                                blockPath(name + "_top" + suffix),
+                                "bottom",
+                                blockPath(name + "_bottom" + suffix)));
 
         // Double
 
-        ModelFile topModel = this.models().withExistingParent(name + "_panel_top" + suffix, "portalmod:block/cube_part_top" + parentSuffix)
-                .texture("side", blockPath(name + "_panel_top" + suffix))
-                .texture("top", blockPath(name + "_top" + suffix));
+        Identifier topModel =
+                model(
+                        name + "_panel_top" + suffix,
+                        "portalmod:block/cube_part_top" + parentSuffix,
+                        Map.of(
+                                "side",
+                                blockPath(name + "_panel_top" + suffix),
+                                "top",
+                                blockPath(name + "_top" + suffix)));
 
-        ModelFile bottomModel = this.models().withExistingParent(name + "_panel_bottom" + suffix, "portalmod:block/cube_part_bottom" + parentSuffix)
-                .texture("side", blockPath(name + "_panel_bottom" + suffix))
-                .texture("bottom", blockPath(name + "_bottom" + suffix));
+        Identifier bottomModel =
+                model(
+                        name + "_panel_bottom" + suffix,
+                        "portalmod:block/cube_part_bottom" + parentSuffix,
+                        Map.of(
+                                "side",
+                                blockPath(name + "_panel_bottom" + suffix),
+                                "bottom",
+                                blockPath(name + "_bottom" + suffix)));
 
         // Wall
 
-        ModelFile cornerBottomModel = this.models().withExistingParent(name + "_panel_corner_bottom" + suffix, "portalmod:block/cube_corner_bottom" + parentSuffix)
-                .texture("bottom", blockPath(name + "_bottom" + suffix))
-                .texture("back", blockPath(name + "_panel_bottom" + suffix))
-                .texture("left", blockPath(name + "_panel_bottom_left" + suffix))
-                .texture("right", blockPath(name + "_panel_bottom_right" + suffix));
+        Identifier cornerBottomModel =
+                model(
+                        name + "_panel_corner_bottom" + suffix,
+                        "portalmod:block/cube_corner_bottom" + parentSuffix,
+                        Map.of(
+                                "bottom",
+                                blockPath(name + "_bottom" + suffix),
+                                "back",
+                                blockPath(name + "_panel_bottom" + suffix),
+                                "left",
+                                blockPath(name + "_panel_bottom_left" + suffix),
+                                "right",
+                                blockPath(name + "_panel_bottom_right" + suffix)));
 
-        ModelFile cornerTopModel = this.models().withExistingParent(name + "_panel_corner_top" + suffix, "portalmod:block/cube_corner_top" + parentSuffix)
-                .texture("top", blockPath(name + "_top" + suffix))
-                .texture("back", blockPath(name + "_panel_top" + suffix))
-                .texture("left", blockPath(name + "_panel_top_left" + suffix))
-                .texture("right", blockPath(name + "_panel_top_right" + suffix));
+        Identifier cornerTopModel =
+                model(
+                        name + "_panel_corner_top" + suffix,
+                        "portalmod:block/cube_corner_top" + parentSuffix,
+                        Map.of(
+                                "top",
+                                blockPath(name + "_top" + suffix),
+                                "back",
+                                blockPath(name + "_panel_top" + suffix),
+                                "left",
+                                blockPath(name + "_panel_top_left" + suffix),
+                                "right",
+                                blockPath(name + "_panel_top_right" + suffix)));
 
         // Floor
         if (blackplateYouBe) {
-            ModelFile floorBottomLeftModel = this.models().withExistingParent(name + "_panel_floor_bottom_left" + suffix, "portalmod:block/cube_corner_floor" + parentSuffix)
-                    .texture("top", blockPath(name + "_panel_floor_bottom_left" + suffix))
-                    .texture("bottom", blockPath(name + "_panel_ceiling_bottom_right" + suffix))
-                    .texture("side", blockPath(name + suffix));
+            Identifier floorBottomLeftModel =
+                    model(
+                            name + "_panel_floor_bottom_left" + suffix,
+                            "portalmod:block/cube_corner_floor" + parentSuffix,
+                            Map.of(
+                                    "top",
+                                    blockPath(name + "_panel_floor_bottom_left" + suffix),
+                                    "bottom",
+                                    blockPath(name + "_panel_ceiling_bottom_right" + suffix),
+                                    "side",
+                                    blockPath(name + suffix)));
 
-            ModelFile floorBottomRightModel = this.models().withExistingParent(name + "_panel_floor_bottom_right" + suffix, "portalmod:block/cube_corner_floor" + parentSuffix)
-                    .texture("top", blockPath(name + "_panel_floor_bottom_right" + suffix))
-                    .texture("bottom", blockPath(name + "_panel_ceiling_bottom_left" + suffix))
-                    .texture("side", blockPath(name + suffix));
+            Identifier floorBottomRightModel =
+                    model(
+                            name + "_panel_floor_bottom_right" + suffix,
+                            "portalmod:block/cube_corner_floor" + parentSuffix,
+                            Map.of(
+                                    "top",
+                                    blockPath(name + "_panel_floor_bottom_right" + suffix),
+                                    "bottom",
+                                    blockPath(name + "_panel_ceiling_bottom_left" + suffix),
+                                    "side",
+                                    blockPath(name + suffix)));
 
-            ModelFile floorTopLeftModel = this.models().withExistingParent(name + "_panel_floor_top_left" + suffix, "portalmod:block/cube_corner_floor" + parentSuffix)
-                    .texture("top", blockPath(name + "_panel_floor_top_left" + suffix))
-                    .texture("bottom", blockPath(name + "_panel_ceiling_top_right" + suffix))
-                    .texture("side", blockPath(name + suffix));
+            Identifier floorTopLeftModel =
+                    model(
+                            name + "_panel_floor_top_left" + suffix,
+                            "portalmod:block/cube_corner_floor" + parentSuffix,
+                            Map.of(
+                                    "top",
+                                    blockPath(name + "_panel_floor_top_left" + suffix),
+                                    "bottom",
+                                    blockPath(name + "_panel_ceiling_top_right" + suffix),
+                                    "side",
+                                    blockPath(name + suffix)));
 
-            ModelFile floorTopRightModel = this.models().withExistingParent(name + "_panel_floor_top_right" + suffix, "portalmod:block/cube_corner_floor" + parentSuffix)
-                    .texture("top", blockPath(name + "_panel_floor_top_right" + suffix))
-                    .texture("bottom", blockPath(name + "_panel_ceiling_top_left" + suffix))
-                    .texture("side", blockPath(name + suffix));
-
-            if (!genBlockStateFile) return;
-
-            this.getVariantBuilder(block)
-                    .partialState().with(PanelBlock.AXIS, Direction.Axis.X).with(PanelBlock.STATE, PanelState.FLOOR_BOTTOM_LEFT).addModels(new ConfiguredModel(floorBottomLeftModel, 0, 180, true))
-                    .partialState().with(PanelBlock.AXIS, Direction.Axis.X).with(PanelBlock.STATE, PanelState.FLOOR_BOTTOM_RIGHT).addModels(new ConfiguredModel(floorBottomRightModel, 0, 90, true))
-                    .partialState().with(PanelBlock.AXIS, Direction.Axis.X).with(PanelBlock.STATE, PanelState.FLOOR_TOP_LEFT).addModels(new ConfiguredModel(floorTopLeftModel, 0, 270, true))
-                    .partialState().with(PanelBlock.AXIS, Direction.Axis.X).with(PanelBlock.STATE, PanelState.FLOOR_TOP_RIGHT).addModels(new ConfiguredModel(floorTopRightModel, 0, 0, true))
-                    .partialState().with(PanelBlock.AXIS, Direction.Axis.Z).with(PanelBlock.STATE, PanelState.FLOOR_BOTTOM_LEFT).addModels(new ConfiguredModel(floorBottomLeftModel, 0, 180, true))
-                    .partialState().with(PanelBlock.AXIS, Direction.Axis.Z).with(PanelBlock.STATE, PanelState.FLOOR_BOTTOM_RIGHT).addModels(new ConfiguredModel(floorBottomRightModel, 0, 90, true))
-                    .partialState().with(PanelBlock.AXIS, Direction.Axis.Z).with(PanelBlock.STATE, PanelState.FLOOR_TOP_LEFT).addModels(new ConfiguredModel(floorTopLeftModel, 0, 270, true))
-                    .partialState().with(PanelBlock.AXIS, Direction.Axis.Z).with(PanelBlock.STATE, PanelState.FLOOR_TOP_RIGHT).addModels(new ConfiguredModel(floorTopRightModel, 0, 0, true));
+            Identifier floorTopRightModel =
+                    model(
+                            name + "_panel_floor_top_right" + suffix,
+                            "portalmod:block/cube_corner_floor" + parentSuffix,
+                            Map.of(
+                                    "top",
+                                    blockPath(name + "_panel_floor_top_right" + suffix),
+                                    "bottom",
+                                    blockPath(name + "_panel_ceiling_top_left" + suffix),
+                                    "side",
+                                    blockPath(name + suffix)));
         }
 
         if (!blackplateYouBe) {
-            ModelFile floorXBottomLeftModel = this.models().withExistingParent(name + "_panel_floor_x_bottom_left" + suffix, "portalmod:block/cube_corner_floor" + parentSuffix)
-                    .texture("top", blockPath(name + "_panel_floor_x_bottom_left" + suffix))
-                    .texture("bottom", blockPath(name + "_panel_ceiling_x_top_left" + suffix))
-                    .texture("side", blockPath(name + suffix));
+            Identifier floorXBottomLeftModel =
+                    model(
+                            name + "_panel_floor_x_bottom_left" + suffix,
+                            "portalmod:block/cube_corner_floor" + parentSuffix,
+                            Map.of(
+                                    "top",
+                                    blockPath(name + "_panel_floor_x_bottom_left" + suffix),
+                                    "bottom",
+                                    blockPath(name + "_panel_ceiling_x_top_left" + suffix),
+                                    "side",
+                                    blockPath(name + suffix)));
 
-            ModelFile floorZBottomLeftModel = this.models().withExistingParent(name + "_panel_floor_z_bottom_left" + suffix, "portalmod:block/cube_corner_floor" + parentSuffix)
-                    .texture("top", blockPath(name + "_panel_floor_z_bottom_left" + suffix))
-                    .texture("bottom", blockPath(name + "_panel_ceiling_z_top_left" + suffix))
-                    .texture("side", blockPath(name + suffix));
+            Identifier floorZBottomLeftModel =
+                    model(
+                            name + "_panel_floor_z_bottom_left" + suffix,
+                            "portalmod:block/cube_corner_floor" + parentSuffix,
+                            Map.of(
+                                    "top",
+                                    blockPath(name + "_panel_floor_z_bottom_left" + suffix),
+                                    "bottom",
+                                    blockPath(name + "_panel_ceiling_z_top_left" + suffix),
+                                    "side",
+                                    blockPath(name + suffix)));
 
-            ModelFile floorXBottomRightModel = this.models().withExistingParent(name + "_panel_floor_x_bottom_right" + suffix, "portalmod:block/cube_corner_floor" + parentSuffix)
-                    .texture("top", blockPath(name + "_panel_floor_x_bottom_right" + suffix))
-                    .texture("bottom", blockPath(name + "_panel_ceiling_x_top_right" + suffix))
-                    .texture("side", blockPath(name + suffix));
+            Identifier floorXBottomRightModel =
+                    model(
+                            name + "_panel_floor_x_bottom_right" + suffix,
+                            "portalmod:block/cube_corner_floor" + parentSuffix,
+                            Map.of(
+                                    "top",
+                                    blockPath(name + "_panel_floor_x_bottom_right" + suffix),
+                                    "bottom",
+                                    blockPath(name + "_panel_ceiling_x_top_right" + suffix),
+                                    "side",
+                                    blockPath(name + suffix)));
 
-            ModelFile floorZBottomRightModel = this.models().withExistingParent(name + "_panel_floor_z_bottom_right" + suffix, "portalmod:block/cube_corner_floor" + parentSuffix)
-                    .texture("top", blockPath(name + "_panel_floor_z_bottom_right" + suffix))
-                    .texture("bottom", blockPath(name + "_panel_ceiling_z_top_right" + suffix))
-                    .texture("side", blockPath(name + suffix));
+            Identifier floorZBottomRightModel =
+                    model(
+                            name + "_panel_floor_z_bottom_right" + suffix,
+                            "portalmod:block/cube_corner_floor" + parentSuffix,
+                            Map.of(
+                                    "top",
+                                    blockPath(name + "_panel_floor_z_bottom_right" + suffix),
+                                    "bottom",
+                                    blockPath(name + "_panel_ceiling_z_top_right" + suffix),
+                                    "side",
+                                    blockPath(name + suffix)));
 
-            ModelFile floorXTopLeftModel = this.models().withExistingParent(name + "_panel_floor_x_top_left" + suffix, "portalmod:block/cube_corner_floor" + parentSuffix)
-                    .texture("top", blockPath(name + "_panel_floor_x_top_left" + suffix))
-                    .texture("bottom", blockPath(name + "_panel_ceiling_x_bottom_left" + suffix))
-                    .texture("side", blockPath(name + suffix));
+            Identifier floorXTopLeftModel =
+                    model(
+                            name + "_panel_floor_x_top_left" + suffix,
+                            "portalmod:block/cube_corner_floor" + parentSuffix,
+                            Map.of(
+                                    "top",
+                                    blockPath(name + "_panel_floor_x_top_left" + suffix),
+                                    "bottom",
+                                    blockPath(name + "_panel_ceiling_x_bottom_left" + suffix),
+                                    "side",
+                                    blockPath(name + suffix)));
 
-            ModelFile floorZTopLeftModel = this.models().withExistingParent(name + "_panel_floor_z_top_left" + suffix, "portalmod:block/cube_corner_floor" + parentSuffix)
-                    .texture("top", blockPath(name + "_panel_floor_z_top_left" + suffix))
-                    .texture("bottom", blockPath(name + "_panel_ceiling_z_bottom_left" + suffix))
-                    .texture("side", blockPath(name + suffix));
+            Identifier floorZTopLeftModel =
+                    model(
+                            name + "_panel_floor_z_top_left" + suffix,
+                            "portalmod:block/cube_corner_floor" + parentSuffix,
+                            Map.of(
+                                    "top",
+                                    blockPath(name + "_panel_floor_z_top_left" + suffix),
+                                    "bottom",
+                                    blockPath(name + "_panel_ceiling_z_bottom_left" + suffix),
+                                    "side",
+                                    blockPath(name + suffix)));
 
-            ModelFile floorXTopRightModel = this.models().withExistingParent(name + "_panel_floor_x_top_right" + suffix, "portalmod:block/cube_corner_floor" + parentSuffix)
-                    .texture("top", blockPath(name + "_panel_floor_x_top_right" + suffix))
-                    .texture("bottom", blockPath(name + "_panel_ceiling_x_bottom_right" + suffix))
-                    .texture("side", blockPath(name + suffix));
+            Identifier floorXTopRightModel =
+                    model(
+                            name + "_panel_floor_x_top_right" + suffix,
+                            "portalmod:block/cube_corner_floor" + parentSuffix,
+                            Map.of(
+                                    "top",
+                                    blockPath(name + "_panel_floor_x_top_right" + suffix),
+                                    "bottom",
+                                    blockPath(name + "_panel_ceiling_x_bottom_right" + suffix),
+                                    "side",
+                                    blockPath(name + suffix)));
 
-            ModelFile floorZTopRightModel = this.models().withExistingParent(name + "_panel_floor_z_top_right" + suffix, "portalmod:block/cube_corner_floor" + parentSuffix)
-                    .texture("top", blockPath(name + "_panel_floor_z_top_right" + suffix))
-                    .texture("bottom", blockPath(name + "_panel_ceiling_z_bottom_right" + suffix))
-                    .texture("side", blockPath(name + suffix));
-
-            if (!genBlockStateFile) return;
-
-            this.getVariantBuilder(block)
-                    .partialState().with(PanelBlock.AXIS, Direction.Axis.X).with(PanelBlock.STATE, PanelState.FLOOR_BOTTOM_LEFT).addModels(new ConfiguredModel(floorXBottomLeftModel, 0, 180, true))
-                    .partialState().with(PanelBlock.AXIS, Direction.Axis.X).with(PanelBlock.STATE, PanelState.FLOOR_BOTTOM_RIGHT).addModels(new ConfiguredModel(floorXBottomRightModel, 0, 90, true))
-                    .partialState().with(PanelBlock.AXIS, Direction.Axis.X).with(PanelBlock.STATE, PanelState.FLOOR_TOP_LEFT).addModels(new ConfiguredModel(floorXTopLeftModel, 0, 270, true))
-                    .partialState().with(PanelBlock.AXIS, Direction.Axis.X).with(PanelBlock.STATE, PanelState.FLOOR_TOP_RIGHT).addModels(new ConfiguredModel(floorXTopRightModel, 0, 0, true))
-                    .partialState().with(PanelBlock.AXIS, Direction.Axis.Z).with(PanelBlock.STATE, PanelState.FLOOR_BOTTOM_LEFT).addModels(new ConfiguredModel(floorZBottomLeftModel, 0, 180, true))
-                    .partialState().with(PanelBlock.AXIS, Direction.Axis.Z).with(PanelBlock.STATE, PanelState.FLOOR_BOTTOM_RIGHT).addModels(new ConfiguredModel(floorZBottomRightModel, 0, 90, true))
-                    .partialState().with(PanelBlock.AXIS, Direction.Axis.Z).with(PanelBlock.STATE, PanelState.FLOOR_TOP_LEFT).addModels(new ConfiguredModel(floorZTopLeftModel, 0, 270, true))
-                    .partialState().with(PanelBlock.AXIS, Direction.Axis.Z).with(PanelBlock.STATE, PanelState.FLOOR_TOP_RIGHT).addModels(new ConfiguredModel(floorZTopRightModel, 0, 0, true));
+            Identifier floorZTopRightModel =
+                    model(
+                            name + "_panel_floor_z_top_right" + suffix,
+                            "portalmod:block/cube_corner_floor" + parentSuffix,
+                            Map.of(
+                                    "top",
+                                    blockPath(name + "_panel_floor_z_top_right" + suffix),
+                                    "bottom",
+                                    blockPath(name + "_panel_ceiling_z_bottom_right" + suffix),
+                                    "side",
+                                    blockPath(name + suffix)));
         }
 
-        this.getVariantBuilder(block)
-                .partialState().with(PanelBlock.STATE, PanelState.SINGLE).addModels(new ConfiguredModel(singleModel))
+        if (!genBlockStateFile) {
+            return;
+        }
+        models.blockStateOutput.accept(
+                MultiVariantGenerator.dispatch(block)
+                        .with(
+                                PropertyDispatch.initial(PanelBlock.AXIS, PanelBlock.STATE)
+                                        .generate(
+                                                (axis, state) ->
+                                                        BlockModelGenerators.variant(
+                                                                panelVariant(
+                                                                        name, suffix, blackplateYouBe, axis, state)))));
+    }
 
-                .partialState().with(PanelBlock.STATE, PanelState.TOP).addModels(new ConfiguredModel(topModel))
-                .partialState().with(PanelBlock.STATE, PanelState.BOTTOM).addModels(new ConfiguredModel(bottomModel))
+    static Variant panelVariant(String name, String suffix, boolean blackplate, Direction.Axis axis, PanelState state) {
+        String part;
+        int rotation = 0;
+        if (state == PanelState.SINGLE) {
+            part = "";
+        } else if (state == PanelState.TOP) {
+            part = "_panel_top";
+        } else if (state == PanelState.BOTTOM) {
+            part = "_panel_bottom";
+        } else if (state.isFloor()) {
+            String direction = blackplate ? "" : axis.getSerializedName() + "_";
+            part = "_panel_floor_" + direction + state.getSerializedName().substring(6);
+            rotation =
+                    switch (state) {
+                        case FLOOR_BOTTOM_LEFT -> 180;
+                        case FLOOR_BOTTOM_RIGHT -> 90;
+                        case FLOOR_TOP_LEFT -> 270;
+                        default -> 0;
+                    };
+        } else {
+            part = state.isBottom() ? "_panel_corner_bottom" : "_panel_corner_top";
+            rotation = (axis == Direction.Axis.X ? 90 : 0) + (state.isLeft() ? 0 : 180);
+        }
+        return new Variant(blockPath(name + part + suffix))
+                .withYRot(Quadrant.values()[rotation / 90])
+                .withUvLock(state.isFloor() || rotation != 0);
+    }
 
-                .partialState().with(PanelBlock.AXIS, Direction.Axis.Z).with(PanelBlock.STATE, PanelState.BOTTOM_LEFT).addModels(new ConfiguredModel(cornerBottomModel))
-                .partialState().with(PanelBlock.AXIS, Direction.Axis.Z).with(PanelBlock.STATE, PanelState.BOTTOM_RIGHT).addModels(new ConfiguredModel(cornerBottomModel, 0, 180, true))
-                .partialState().with(PanelBlock.AXIS, Direction.Axis.Z).with(PanelBlock.STATE, PanelState.TOP_LEFT).addModels(new ConfiguredModel(cornerTopModel))
-                .partialState().with(PanelBlock.AXIS, Direction.Axis.Z).with(PanelBlock.STATE, PanelState.TOP_RIGHT).addModels(new ConfiguredModel(cornerTopModel, 0, 180, true))
-                .partialState().with(PanelBlock.AXIS, Direction.Axis.X).with(PanelBlock.STATE, PanelState.BOTTOM_LEFT).addModels(new ConfiguredModel(cornerBottomModel, 0, 90, true))
-                .partialState().with(PanelBlock.AXIS, Direction.Axis.X).with(PanelBlock.STATE, PanelState.BOTTOM_RIGHT).addModels(new ConfiguredModel(cornerBottomModel, 0, 270, true))
-                .partialState().with(PanelBlock.AXIS, Direction.Axis.X).with(PanelBlock.STATE, PanelState.TOP_LEFT).addModels(new ConfiguredModel(cornerTopModel, 0, 90, true))
-                .partialState().with(PanelBlock.AXIS, Direction.Axis.X).with(PanelBlock.STATE, PanelState.TOP_RIGHT).addModels(new ConfiguredModel(cornerTopModel, 0, 270, true));
-
+    private Identifier model(String name, String parent, Map<String, Identifier> textures) {
+        var mapping = new TextureMapping();
+        var slots =
+                textures.entrySet().stream()
+                        .map(
+                                entry -> {
+                                    var slot = TextureSlot.create(entry.getKey());
+                                    mapping.put(slot, new Material(entry.getValue()));
+                                    return slot;
+                                })
+                        .toArray(TextureSlot[]::new);
+        return new ModelTemplate(Optional.of(Identifier.parse(parent)), Optional.empty(), slots)
+                .create(blockPath(name), mapping, models.modelOutput);
     }
 
     public void genPanelSlab(Block block, String name) {
         this.panelSlabBlock(
-                (SlabBlock) block, name,
+                (SlabBlock) block,
+                name,
                 blockPath(name + "_tiles"),
                 blockPath(name + "_slab_bottom"),
-                blockPath(name + "_slab_top")
-        );
+                blockPath(name + "_slab_top"));
     }
 
-    public void panelSlabBlock(SlabBlock block, String name, ResourceLocation side, ResourceLocation bottom, ResourceLocation top) {
-        this.slabBlock(block,
-                models().slab(name + "_slab", side, bottom, top),
-                models().slabTop(name + "_slab_top", side, bottom, top),
-                models().cubeBottomTop(name + "_slab_double", side, bottom, top));
+    public void panelSlabBlock(SlabBlock block, String name, Identifier side, Identifier bottom, Identifier top) {
+        var textures = panelTextures(side, bottom, top);
+        var lower = ModelTemplates.SLAB_BOTTOM.create(blockPath(name + "_slab"), textures, models.modelOutput);
+        var upper = ModelTemplates.SLAB_TOP.create(blockPath(name + "_slab_top"), textures, models.modelOutput);
+        var doubled =
+                ModelTemplates.CUBE_BOTTOM_TOP.create(blockPath(name + "_slab_double"), textures, models.modelOutput);
+        models.blockStateOutput.accept(
+                BlockModelGenerators.createSlab(
+                        block,
+                        BlockModelGenerators.plainVariant(lower),
+                        BlockModelGenerators.plainVariant(upper),
+                        BlockModelGenerators.plainVariant(doubled)));
+    }
+
+    private static TextureMapping panelTextures(Identifier side, Identifier bottom, Identifier top) {
+        return new TextureMapping()
+                .put(TextureSlot.SIDE, new Material(side))
+                .put(TextureSlot.BOTTOM, new Material(bottom))
+                .put(TextureSlot.TOP, new Material(top));
     }
 
     public void genPanelStairs(Block block, String name) {
-        this.stairsBlock(
-                (StairsBlock) block,
-                blockPath(name + "_tiles"),
-                blockPath(name + "_bottom"),
-                blockPath(name + "_top")
-        );
+        stairs(
+                (StairBlock) block,
+                panelTextures(blockPath(name + "_tiles"), blockPath(name + "_bottom"), blockPath(name + "_top")));
     }
 
     public void genPanelStairsFull(Block block, String name) {
-        this.stairsBlock((StairsBlock) block, blockPath(name + "_tiles"));
+        var texture = blockPath(name + "_tiles");
+        stairs((StairBlock) block, panelTextures(texture, texture, texture));
     }
 
-    @Nonnull
-    public static ResourceLocation blockPath(String name) {
-        return new ResourceLocation(PortalMod.MODID, "block/" + name);
+    private void stairs(StairBlock block, TextureMapping textures) {
+        var straight = ModelTemplates.STAIRS_STRAIGHT.create(block, textures, models.modelOutput);
+        var inner = ModelTemplates.STAIRS_INNER.create(block, textures, models.modelOutput);
+        var outer = ModelTemplates.STAIRS_OUTER.create(block, textures, models.modelOutput);
+        models.blockStateOutput.accept(
+                BlockModelGenerators.createStairs(
+                        block,
+                        BlockModelGenerators.plainVariant(straight),
+                        BlockModelGenerators.plainVariant(inner),
+                        BlockModelGenerators.plainVariant(outer)));
+    }
+
+    public static Identifier blockPath(String name) {
+        return Identifier.fromNamespaceAndPath(PortalMod.MODID, "block/" + name);
     }
 }

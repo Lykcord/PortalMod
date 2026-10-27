@@ -15,7 +15,7 @@
   },
   "display": {
     "icon": {
-      "item": "portalmod:radio"
+      "id": "portalmod:radio"
     },
     "title": {
       "translate": "advancements.portalmod.root.title"

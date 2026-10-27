@@ -7,7 +7,7 @@
   },
   "display": {
     "icon": {
-      "item": "minecraft:ender_pearl"
+      "id": "minecraft:ender_pearl"
     },
     "title": {
       "translate": "advancements.portalmod.ender_pearl_portals.title"
