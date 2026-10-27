@@ -9,6 +9,7 @@
       "net.portalmod.AntlineFeedbackServerTest"
     ],
     "fabric-client-gametest": [
+      "net.portalmod.AdvancementInteractionsClientTest",
       "net.portalmod.FirstPersonPoseClientTest",
       "net.portalmod.AntlineFacesClientTest",
       "net.portalmod.AntlineMemoryClientTest",
