@@ -1,0 +1,8 @@
+{
+  "sources": [
+    {"type": "minecraft:directory", "source": "antline", "prefix": "antline/"},
+    {"type": "minecraft:directory", "source": "entity/faithplate", "prefix": "entity/faithplate/"},
+    {"type": "minecraft:single", "resource": "portalmod:entity/autoportal"},
+    {"type": "minecraft:single", "resource": "portalmod:portalgun/default"}
+  ]
+}

@@ -6,7 +6,7 @@ LOCALE_MAP = {
     "cy-GB": "cy_gb",
     "da-DK": "da_dk",
     "de-DE": "de_de",
-    "en":    "_",
+    "en": "_",
     "en-CA": "en_ca",
     "en-GB": "en_gb",
     "es-ES": "es_es",
@@ -17,7 +17,7 @@ LOCALE_MAP = {
     "it-IT": "it_it",
     "ja-JP": "ja_jp",
     "ko-KR": "ko_kr",
-    "la":    "la_la",
+    "la": "la_la",
     "nl-NL": "nl_nl",
     "pl-PL": "pl_pl",
     "pt-BR": "pt_br",
@@ -28,15 +28,16 @@ LOCALE_MAP = {
     "th-TH": "th_th",
     "tr-TR": "tr_tr",
     "uk-UA": "uk_ua",
-    "vec":   "_",
+    "vec": "_",
     "zh-Hans-CN": "zh_cn",
 
     # Special/Custom Codes
-    "tkl": "tok",    # Toki Pona
-    "xxc": "lol_us", # LOLCAT
+    "tkl": "tok",  # Toki Pona
+    "xxc": "lol_us",  # LOLCAT
     "xxd": "en_pt",  # Pirate Speak
-    "xxe": "pm_ap"   # Full Aperture Terms
+    "xxe": "pm_ap",  # Full Aperture Terms
 }
+
 
 def process_translations():
     input_dir = "localazy_download"
@@ -50,12 +51,13 @@ def process_translations():
         source_path = os.path.join(input_dir, old_code, "lang.json")
 
         if os.path.exists(source_path):
-            with open(source_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            with open(source_path, "r", encoding="utf-8") as source_file:
+                translations = json.load(source_file)
 
             output_path = os.path.join(output_dir, f"{mc_code}.json")
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, sort_keys=True, ensure_ascii=False)
+            with open(output_path, "w", encoding="utf-8") as output_file:
+                json.dump(translations, output_file, indent=2, sort_keys=True, ensure_ascii=False)
+
 
 if __name__ == "__main__":
     process_translations()

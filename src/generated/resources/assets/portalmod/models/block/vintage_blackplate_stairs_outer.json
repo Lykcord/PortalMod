@@ -1,8 +1,8 @@
 {
   "parent": "minecraft:block/outer_stairs",
   "textures": {
-    "side": "portalmod:block/vintage_blackplate_tiles",
     "bottom": "portalmod:block/vintage_blackplate_bottom",
+    "side": "portalmod:block/vintage_blackplate_tiles",
     "top": "portalmod:block/vintage_blackplate_top"
   }
 }
