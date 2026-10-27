@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "portalmod_test",
+  "version": "1.0.0",
+  "environment": "*",
+  "entrypoints": {
+    "fabric-gametest": ["net.portalmod.PortalServerTest"],
+    "fabric-client-gametest": ["net.portalmod.FaithPlateConfigurationClientTest", "net.portalmod.PortalNetworkClientTest", "net.portalmod.LegacyChunkClientTest", "net.portalmod.common.sorted.radio.ChamberContentClientTest", "net.portalmod.PortalClientTest"]
+  },
+  "depends": {
+    "portalmod": "*"
+  }
+}

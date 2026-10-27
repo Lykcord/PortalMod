@@ -1,7 +1,7 @@
 package net.portalmod.common.sorted.portalgun;
 
 import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 public class PortalGunCrosshairRendererTest {
     @Test
