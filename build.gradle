@@ -110,3 +110,42 @@ curseforge {
     }
 }
 
+// Export the creative review world after the client tests.
+if (project.hasProperty('reviewWorld')) {
+    loom.runs.named('clientGameTest') {
+        vmArg "-Dportalmod.reviewWorldOutput=${file('run-review/saves/PortalMod 26.3 Review').absolutePath}"
+    }
+}
+
+if (project.hasProperty('walkCapture')) {
+    loom.runs.named('clientGameTest') {
+        vmArg "-Dportalmod.walkCaptureOutput=${file('build/reports/portal-walk/' + (project.hasProperty('performanceMods') ? 'performance' : 'vanilla')).absolutePath}"
+        if (project.hasProperty('walkCaptureDepth')) {
+            vmArg "-Dportalmod.walkCaptureDepth=${project.property('walkCaptureDepth')}"
+        }
+        if (project.hasProperty('walkCaptureFov')) {
+            vmArg "-Dportalmod.walkCaptureFov=${project.property('walkCaptureFov')}"
+        }
+    }
+}
+
+// Select client tests without editing the source manifest.
+tasks.named('processGametestResources') {
+    inputs.property('clientTest', project.findProperty('clientTest') ?: '')
+    doLast {
+        def selection = project.findProperty('clientTest')
+        if (selection) {
+            def manifest = file("${destinationDir}/fabric.mod.json")
+            def metadata = new groovy.json.JsonSlurper().parseText(manifest.text)
+            def requestedTests = selection.toString().split(',').collect { it.trim() }
+            def selectedTests = metadata.entrypoints['fabric-client-gametest'].findAll { entrypoint ->
+                requestedTests.any { testName -> testName == entrypoint || entrypoint.endsWith('.' + testName) }
+            }
+            if (selectedTests.size() != requestedTests.size()) {
+                throw new GradleException("Unknown or ambiguous client test: ${selection}")
+            }
+            metadata.entrypoints['fabric-client-gametest'] = selectedTests
+            manifest.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(metadata))
+        }
+    }
+}

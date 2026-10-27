@@ -1,0 +1,7 @@
+{
+  "required": true,
+  "package": "net.portalmod.capture.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": ["WalkCaptureMixin"],
+  "injectors": {"defaultRequire": 1}
+}
