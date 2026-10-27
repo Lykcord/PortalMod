@@ -413,8 +413,6 @@ public class AntlineBlock extends Block implements EntityBlock {
                 continue;
             }
 
-            // TODO placing a branch next to an antline that is next to an indicator still causes issues
-
             if (!hasNowConnection) {
                 recursiveSignalChain(level, side, pos, null, false, 0);
             }

@@ -44,9 +44,6 @@ public class TriggerBlock extends Block implements EntityBlock, BlockTooltip {
     public static final VoxelShape SHAPE_X = Shapes.or(SHAPE_BASE, Block.box(6, 5, 2, 10, 14, 14));
     public static final VoxelShape SHAPE_Z = Shapes.or(SHAPE_BASE, Block.box(2, 5, 6, 14, 14, 10));
 
-    // TODO
-    //  test multiplayer
-
     public TriggerBlock(Properties properties) {
         super(properties);
         this.registerDefaultState(

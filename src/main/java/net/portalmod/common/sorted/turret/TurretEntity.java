@@ -234,10 +234,7 @@ public class TurretEntity extends TestElementEntity {
         }
 
         // Do damage only sometimes
-        if (this.level() instanceof ServerLevel server
-                && new Random().nextFloat() < 0.6f
-                && !targetEntity.isBlocking()) {
-            this.targetEntity.setInvulnerableTime(0); // No mercy
+        if (this.level() instanceof ServerLevel server && this.rollBulletHit() && !targetEntity.isBlocking()) {
             DamageSource source = damageSource(this);
             boolean hurt = this.targetEntity.hurtServer(server, source, BULLET_DAMAGE);
             if (hurt) {
@@ -254,6 +251,10 @@ public class TurretEntity extends TestElementEntity {
                 CriteriaTriggerInit.TURRET_DEFENSE.get().trigger((ServerPlayer) nearestPlayer);
             }
         }
+    }
+
+    protected boolean rollBulletHit() {
+        return this.random.nextFloat() < 0.6F;
     }
 
     @Override

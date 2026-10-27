@@ -19,7 +19,9 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.EntityBlock;
@@ -30,6 +32,7 @@ import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec2;
 import net.portalmod.common.entities.TestElementEntity;
 import net.portalmod.common.sorted.antline.AntlineBlock;
@@ -61,6 +64,7 @@ import net.portalmod.common.sorted.sign.ChamberSignEntity;
 import net.portalmod.common.sorted.trigger.TriggerBlock;
 import net.portalmod.common.sorted.trigger.TriggerTileEntity;
 import net.portalmod.common.sorted.trigger.TriggerType;
+import net.portalmod.common.sorted.turret.TurretEntity;
 import net.portalmod.core.init.BlockInit;
 import net.portalmod.core.init.BlockTagInit;
 import net.portalmod.core.init.EntityInit;
@@ -75,6 +79,75 @@ import java.util.List;
 import java.util.UUID;
 
 public class PortalServerTest {
+    @GameTest(maxTicks = 110)
+    public void turretDamageCadenceMatchesOriginalWithoutExtraHurtCooldown(GameTestHelper test) {
+        for (int x = 1; x <= 5; x++) {
+            for (int z = 1; z <= 7; z++) {
+                test.setBlock(new BlockPos(x, 1, z), Blocks.STONE);
+            }
+        }
+        var turret =
+                new TurretEntity(EntityInit.TURRET.get(), test.getLevel()) {
+                    @Override
+                    protected boolean rollBulletHit() {
+                        return true;
+                    }
+                };
+        turret.snapTo(test.absoluteVec(new net.minecraft.world.phys.Vec3(3, 2, 2)), 0, 0);
+        turret.setSilent(true);
+        var target = test.spawn(EntityTypes.COW, 3, 2, 6);
+        target.setNoAi(true);
+        target.getAttribute(Attributes.MAX_HEALTH).setBaseValue(1000);
+        target.setHealth(1000);
+        turret.setYRot(0);
+        turret.targetEntity = target;
+        turret.setAmmo(40);
+        var targetPosition = target.position();
+        for (int i = 0; i < 40; i++) {
+            int shot = i;
+            test.runAfterDelay(
+                    i * 2 + 1,
+                    () -> {
+                        target.snapTo(targetPosition);
+                        turret.tickCount = shot * 2 + (turret.getId() & 1);
+                        turret.shoot();
+                        target.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+                    });
+        }
+        test.runAfterDelay(
+                82,
+                () -> {
+                    test.assertTrue(turret.getAmmo() == 0, "Original cadence consumes 40 rounds in 80 ticks");
+                    test.assertTrue(
+                            Math.abs(target.getHealth() - 980) < .001F,
+                            "Successful turret shots must bypass the ordinary hurt cooldown: health="
+                                    + target.getHealth());
+                    test.succeed();
+                });
+    }
+
+    @GameTest
+    public void fizzleDropsMatchTheOriginalProject(GameTestHelper test) {
+        for (boolean fromDropper : new boolean[] {false, true}) {
+            var cube = test.spawn(EntityInit.STORAGE_CUBE.get(), 3, 3, 3);
+            cube.setFromDropper(fromDropper);
+            var bounds = cube.getBoundingBox().inflate(2);
+            cube.fizzleKill();
+            var drops = test.getLevel().getEntitiesOfClass(ItemEntity.class, bounds);
+            test.assertTrue(
+                    drops.stream().anyMatch(item -> item.getItem().is(ItemInit.STORAGE_CUBE.get())) == !fromDropper,
+                    "Original fizzle behavior drops ordinary cubes and suppresses dropper cubes");
+            drops.forEach(Entity::discard);
+        }
+        var turret = test.spawn(EntityInit.TURRET.get(), 3, 3, 3);
+        var bounds = turret.getBoundingBox().inflate(2);
+        turret.fizzleKill();
+        test.assertTrue(
+                test.getLevel().getEntitiesOfClass(ItemEntity.class, bounds).isEmpty(),
+                "Original no-fizzle-drops turret tag remains effective");
+        test.succeed();
+    }
+
     @GameTest(maxTicks = 30)
     public void radioRespondsToManualAndRedstoneControl(GameTestHelper test) {
         var pos = test.absolutePos(new BlockPos(3, 2, 3));
@@ -419,6 +492,38 @@ public class PortalServerTest {
                     test.assertTrue(
                             level.getBlockState(doorPos).getValue(ChamberDoorBlock.OPEN),
                             "Button signal crosses wires and indicator to open the door");
+                    // Branch beside the segment adjacent to the indicator: it must not disconnect
+                    // the existing powered network or momentarily close its output.
+                    var branchSupport = test.absolutePos(new BlockPos(5, 1, 2));
+                    var branchPos = branchSupport.above();
+                    var player = test.makeMockPlayer(GameType.SURVIVAL);
+                    player.setShiftKeyDown(true);
+                    var stack = new ItemStack(ItemInit.ANTLINE.get());
+                    player.setItemInHand(InteractionHand.MAIN_HAND, stack);
+                    var hit =
+                            new BlockHitResult(
+                                    net.minecraft.world.phys.Vec3.atCenterOf(branchSupport).add(0, .5, 0),
+                                    Direction.UP,
+                                    branchSupport,
+                                    false);
+                    var item = (BlockItem) stack.getItem();
+                    test.assertTrue(
+                            item.place(new BlockPlaceContext(player, InteractionHand.MAIN_HAND, stack, hit))
+                                    .consumesAction(),
+                            "Shift placement must add a branch");
+                    test.assertTrue(
+                            ((AntlineTileEntity) level.getBlockEntity(branchPos))
+                                    .getSideMap()
+                                    .get(Direction.DOWN)
+                                    .isActive(),
+                            "New branch must inherit the powered network");
+                    test.assertTrue(
+                            level.getBlockState(doorPos).getValue(ChamberDoorBlock.OPEN),
+                            "Adding a branch next to the indicator must keep its output active");
+                    level.destroyBlock(branchPos, false);
+                    test.assertTrue(
+                            level.getBlockState(doorPos).getValue(ChamberDoorBlock.OPEN),
+                            "Removing a branch must preserve the original network");
                     cube.snapTo(
                             net.minecraft.world.phys.Vec3.atBottomCenterOf(test.absolutePos(new BlockPos(1, 3, 6))));
                     test.runAfterDelay(
