@@ -1,3 +1,9 @@
+# Version 1.3.1+26.3-fabric.8
+
+- Restored the Forest Cake and End radio advancements for normal block interactions on 26.3.
+- Kept held candles from replacing Forest Cake with a vanilla candle cake.
+- Added real-player checks for cake eating, the radio transmission, boots, inventory unlocks, and fizzling all three cube types.
+
 # Version 1.3.1+26.3-fabric.7
 
 - Hid Gabe from the creative inventory and creative search, matching the original mod.
