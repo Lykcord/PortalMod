@@ -1,24 +1,39 @@
 package net.portalmod.core.util;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
 public class Registry<T> {
-    public Registry() {}
+    private final BiConsumer<String, T> registrar;
 
-    private final Map<String, Entry<T>> REGISTRY = new HashMap<>();
+    public Registry() {
+        this((name, value) -> {});
+    }
+
+    public Registry(BiConsumer<String, T> registrar) {
+        this.registrar = registrar;
+    }
+
+    private final Map<String, Entry<T>> REGISTRY = new LinkedHashMap<>();
 
     public <S extends T> Entry<S> register(String path, Supplier<S> resource) {
-        Entry<S> entry = new Entry<>(resource);
-        REGISTRY.put(path, (Entry<T>)entry);
+        Entry<S> entry =
+                new Entry<>(
+                        () -> {
+                            S value = resource.get();
+                            registrar.accept(path, value);
+                            return value;
+                        });
+        REGISTRY.put(path, (Entry<T>) entry);
         return entry;
     }
 
     public void registerAll() {
         REGISTRY.forEach((name, supplier) -> supplier.get());
     }
-    
+
     public Map<String, Entry<T>> getRegistry() {
         return REGISTRY;
     }
@@ -33,8 +48,9 @@ public class Registry<T> {
 
         @Override
         public T get() {
-            if(value == null)
+            if (value == null) {
                 value = supplier.get();
+            }
             return value;
         }
     }

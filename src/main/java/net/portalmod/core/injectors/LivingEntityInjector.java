@@ -1,11 +1,11 @@
 package net.portalmod.core.injectors;
 
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.fluid.FluidState;
-import net.minecraft.potion.Effects;
-import net.minecraft.util.math.AxisAlignedBB;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.material.FluidState;
+import net.minecraft.world.phys.AABB;
 import net.portalmod.common.sorted.faithplate.Flingable;
 import net.portalmod.common.sorted.gel.IGelAffected;
 import net.portalmod.common.sorted.gel.PropulsionGelBlock;
@@ -19,46 +19,45 @@ public class LivingEntityInjector {
     public static void onPreTick(LivingEntity entity) {
         RepulsionGelBlock.onPreTick(entity);
         PropulsionGelBlock.onPreTick(entity);
-        if (effectsShouldBeReset(entity, true) && entity.getDeltaMovement().y < 0) ((Flingable) entity).setFlinging(false);
+        if (effectsShouldBeReset(entity, true) && entity.getDeltaMovement().y < 0) {
+            ((Flingable) entity).setFlinging(false);
+        }
     }
 
     public static void onPostTick(LivingEntity entity) {
         RepulsionGelBlock.onPostTick(entity);
         IGelAffected gelAffected = (IGelAffected) entity;
-        gelAffected.setWasOnGround(entity.isOnGround());
+        gelAffected.setWasOnGround(entity.onGround());
         gelAffected.setLastLastDeltaMovement(gelAffected.getLastDeltaMovement());
         gelAffected.setLastDeltaMovement(entity.getDeltaMovement());
         gelAffected.setHorizontalBounced(false);
     }
 
     public static boolean effectsShouldBeReset(LivingEntity entity, boolean includeOnGround) {
-        AxisAlignedBB aabb = entity.getBoundingBox().deflate(0.001);
+        AABB aabb = entity.getBoundingBox().deflate(0.001);
         List<BlockPos> blockPoses = AABBUtil.getBlocksWithin(aabb);
         boolean isInGoo = false;
 
-        for(BlockPos pos : blockPoses) {
-            FluidState fluidstate = entity.level.getFluidState(pos);
-            if(!fluidstate.is(FluidTagInit.GOO))
+        for (BlockPos pos : blockPoses) {
+            FluidState fluidstate = entity.level().getFluidState(pos);
+            if (!fluidstate.is(FluidTagInit.GOO)) {
                 continue;
+            }
 
-            float height = pos.getY() + fluidstate.getHeight(entity.level, pos);
-            if(height >= aabb.minY) {
+            float height = pos.getY() + fluidstate.getHeight(entity.level(), pos);
+            if (height >= aabb.minY) {
                 isInGoo = true;
                 break;
             }
         }
 
-        return (
-            (includeOnGround && entity.isOnGround()) ||
-            entity.isInWall() ||
-            entity.isInWater() ||
-            entity.isInLava() ||
-            isInGoo ||
-            entity.isNoGravity() ||
-            entity.hasEffect(Effects.LEVITATION) ||
-            (entity instanceof PlayerEntity &&
-                ((PlayerEntity) entity).abilities.flying
-            )
-        );
+        return ((includeOnGround && entity.onGround())
+                || entity.isInWall()
+                || entity.isInWater()
+                || entity.isInLava()
+                || isInGoo
+                || entity.isNoGravity()
+                || entity.hasEffect(MobEffects.LEVITATION)
+                || (entity instanceof Player && ((Player) entity).getAbilities().flying));
     }
 }

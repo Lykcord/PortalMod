@@ -1,23 +1,25 @@
 package net.portalmod.core.init;
 
-import net.minecraft.client.settings.KeyBinding;
-import net.minecraftforge.fml.client.registry.ClientRegistry;
+import com.mojang.blaze3d.platform.InputConstants;
+
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.resources.Identifier;
 import net.portalmod.PortalMod;
-import org.lwjgl.glfw.GLFW;
 
 public class KeyInit {
 
     private KeyInit() {}
 
-    public static KeyBinding PORTALGUN_INTERACT;
+    public static KeyMapping PORTALGUN_INTERACT;
 
     public static void init() {
-        PORTALGUN_INTERACT = new KeyBinding(
-                "key." + PortalMod.MODID + ".portalgun_interact",
-                GLFW.GLFW_KEY_E,
-                "key.category." + PortalMod.MODID
-        );
+        PORTALGUN_INTERACT =
+                new KeyMapping(
+                        "key." + PortalMod.MODID + ".portalgun_interact",
+                        InputConstants.KEY_E,
+                        KeyMapping.Category.register(Identifier.fromNamespaceAndPath(PortalMod.MODID, "main")));
 
-        ClientRegistry.registerKeyBinding(PORTALGUN_INTERACT);
+        KeyMappingHelper.registerKeyMapping(PORTALGUN_INTERACT);
     }
 }

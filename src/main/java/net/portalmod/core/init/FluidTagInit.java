@@ -1,15 +1,16 @@
 package net.portalmod.core.init;
 
-import net.minecraft.fluid.Fluid;
-import net.minecraft.tags.FluidTags;
-import net.minecraft.util.ResourceLocation;
-import net.minecraftforge.common.Tags;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.level.material.Fluid;
 import net.portalmod.PortalMod;
 
 public class FluidTagInit {
     private FluidTagInit() {}
+
     public static void init() {}
-    
-    public static final Tags.IOptionalNamedTag<Fluid> GOO = FluidTags.createOptional(
-            new ResourceLocation(PortalMod.MODID, "goo"));
+
+    public static final TagKey<Fluid> GOO =
+            TagKey.create(Registries.FLUID, Identifier.fromNamespaceAndPath(PortalMod.MODID, "goo"));
 }

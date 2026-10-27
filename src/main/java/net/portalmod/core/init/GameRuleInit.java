@@ -1,54 +1,66 @@
 package net.portalmod.core.init;
 
-import net.minecraft.entity.player.ServerPlayerEntity;
-import net.minecraft.world.GameRules;
-import net.minecraftforge.fml.network.PacketDistributor;
+import net.fabricmc.fabric.api.gamerule.v1.GameRuleBuilder;
+import net.fabricmc.fabric.api.gamerule.v1.GameRuleEvents;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.gamerules.GameRule;
+import net.minecraft.world.level.gamerules.GameRuleCategory;
+import net.portalmod.PortalMod;
 import net.portalmod.core.packet.SUpdateBooleanGameRulePacket;
-import net.portalmod.mixins.accessors.BooleanValueAccessor;
 
 import java.util.HashMap;
 import java.util.Map;
 
-public class GameRuleInit {
+public final class GameRuleInit {
+    private static final Map<String, GameRule<Boolean>> SYNCED_RULES = new HashMap<>();
+    private static final Map<GameRule<Boolean>, Boolean> CLIENT_VALUES = new HashMap<>();
+
+    public static final GameRule<Boolean> PORTAL_SLOWSHOT = register("portal_slow_shot", false, true);
+    public static final GameRule<Boolean> USE_PORTALABLE_BLACKLIST = register("use_portalable_blacklist", false, true);
+    public static final GameRule<Boolean> ALLOW_PORTAL_OVERWRITE = register("allow_portal_overwrite", true, false);
+
     private GameRuleInit() {}
 
-    public static final Map<String, GameRules.RuleKey<?>> REGISTRY = new HashMap<>();
+    public static void registerAll() {}
 
-    public static GameRules.RuleKey<GameRules.BooleanValue> PORTAL_SLOWSHOT;
-    public static GameRules.RuleKey<GameRules.BooleanValue> USE_PORTALABLE_BLACKLIST;
-    public static GameRules.RuleKey<GameRules.BooleanValue> ALLOW_PORTAL_OVERWRITE;
-
-    public static void registerAll() {
-        PORTAL_SLOWSHOT = registerBoolean("portalSlowShot", GameRules.Category.PLAYER, false);
-        USE_PORTALABLE_BLACKLIST = registerBoolean("usePortalableBlacklist", GameRules.Category.PLAYER, false);
-        // Server-only: the client does not need to know this value. The server consults it at
-        // portal-placement time and either evicts the foreign portal in the way or rejects the
-        // shot; no client-side behavior (rendering, UI, prediction) depends on it.
-        ALLOW_PORTAL_OVERWRITE = registerServerBoolean("allowPortalOverwrite", GameRules.Category.PLAYER, true);
+    private static GameRule<Boolean> register(String name, boolean defaultValue, boolean sync) {
+        GameRule<Boolean> rule =
+                GameRuleBuilder.forBoolean(defaultValue)
+                        .category(GameRuleCategory.PLAYER)
+                        .buildAndRegister(Identifier.fromNamespaceAndPath(PortalMod.MODID, name));
+        if (sync) {
+            SYNCED_RULES.put(rule.id(), rule);
+            GameRuleEvents.changeCallback(rule)
+                    .register(
+                            (value, server) ->
+                                    PacketInit.sendToAll(new SUpdateBooleanGameRulePacket(rule.id(), value)));
+        }
+        return rule;
     }
 
-    private static <T extends GameRules.RuleValue<T>> GameRules.RuleKey<T> register(String name, GameRules.Category category, GameRules.RuleType<T> rule) {
-        GameRules.RuleKey<T> key = GameRules.register(name, category, rule);
-        REGISTRY.put(name, key);
-        return key;
+    public static boolean getBoolean(Level level, GameRule<Boolean> rule) {
+        if (level instanceof ServerLevel serverLevel) {
+            return serverLevel.getGameRules().get(rule);
+        }
+        return CLIENT_VALUES.getOrDefault(rule, rule.defaultValue());
     }
 
-    private static GameRules.RuleKey<GameRules.BooleanValue> registerBoolean(String name, GameRules.Category category, boolean defaultValue) {
-        return register(name, category, BooleanValueAccessor.pmCreate(defaultValue, (server, value) ->
-                PacketInit.INSTANCE.send(PacketDistributor.ALL.noArg(), new SUpdateBooleanGameRulePacket(name, value.get()))));
+    public static void updateClientRule(String name, boolean value) {
+        GameRule<Boolean> rule = SYNCED_RULES.get(name);
+        if (rule != null) {
+            CLIENT_VALUES.put(rule, value);
+        }
     }
 
-    private static GameRules.RuleKey<GameRules.BooleanValue> registerServerBoolean(String name, GameRules.Category category, boolean defaultValue) {
-        return register(name, category, BooleanValueAccessor.pmCreate(defaultValue, (server, value) -> {}));
+    public static void clearClientRules() {
+        CLIENT_VALUES.clear();
     }
 
-    @SuppressWarnings("unchecked")
-    public static <T extends GameRules.RuleValue<T>> GameRules.RuleKey<T> getRule(String name) {
-        return (GameRules.RuleKey<T>)REGISTRY.get(name);
-    }
-
-    public static void sendBooleanRule(ServerPlayerEntity player, GameRules.RuleKey<GameRules.BooleanValue> key) {
-        PacketInit.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player),
-                new SUpdateBooleanGameRulePacket(key.getId(), player.level.getGameRules().getBoolean(key)));
+    public static void sendBooleanRule(ServerPlayer player, GameRule<Boolean> rule) {
+        PacketInit.sendToPlayer(
+                player, new SUpdateBooleanGameRulePacket(rule.id(), player.level().getGameRules().get(rule)));
     }
 }

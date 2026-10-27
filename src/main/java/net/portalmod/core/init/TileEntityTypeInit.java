@@ -1,10 +1,10 @@
 package net.portalmod.core.init;
 
-import net.minecraft.block.Block;
-import net.minecraft.tileentity.TileEntityType;
-import net.minecraftforge.fml.RegistryObject;
-import net.minecraftforge.registries.DeferredRegister;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.portalmod.PortalMod;
 import net.portalmod.common.sorted.antline.AntlineTileEntity;
 import net.portalmod.common.sorted.autoportal.AutoPortalTileEntity;
@@ -14,6 +14,8 @@ import net.portalmod.common.sorted.faithplate.FaithPlateTileEntity;
 import net.portalmod.common.sorted.fizzler.FizzlerEmitterTileEntity;
 import net.portalmod.common.sorted.radio.RadioBlockTileEntity;
 import net.portalmod.common.sorted.trigger.TriggerTileEntity;
+import net.portalmod.core.util.Registry;
+import net.portalmod.core.util.Registry.Entry;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -21,51 +23,85 @@ import java.util.function.UnaryOperator;
 
 @SuppressWarnings("DataFlowIssue")
 public class TileEntityTypeInit {
-    public static final DeferredRegister<TileEntityType<?>> TILE_ENTITY_TYPES = DeferredRegister.create(ForgeRegistries.TILE_ENTITIES, PortalMod.MODID);
+    public static final Registry<BlockEntityType<?>> TILE_ENTITY_TYPES =
+            new Registry<>(
+                    (id, value) ->
+                            net.minecraft.core.Registry.register(
+                                    BuiltInRegistries.BLOCK_ENTITY_TYPE,
+                                    Identifier.fromNamespaceAndPath(PortalMod.MODID, id),
+                                    value));
 
-    public static final RegistryObject<TileEntityType<RadioBlockTileEntity>> RADIO = TILE_ENTITY_TYPES.register("radio",
-            () -> TileEntityType.Builder.of(RadioBlockTileEntity::new,
-                    getBlocks(TileEntityTypeInit::getRadioBlocks)).build(null));
+    public static final Entry<BlockEntityType<RadioBlockTileEntity>> RADIO =
+            TILE_ENTITY_TYPES.register(
+                    "radio",
+                    () ->
+                            FabricBlockEntityTypeBuilder.create(
+                                            RadioBlockTileEntity::new, getBlocks(TileEntityTypeInit::getRadioBlocks))
+                                    .build());
 
+    public static final Entry<BlockEntityType<AntlineTileEntity>> ANTLINE =
+            TILE_ENTITY_TYPES.register(
+                    "antline",
+                    () ->
+                            FabricBlockEntityTypeBuilder.create(
+                                            AntlineTileEntity::new, getBlocks(TileEntityTypeInit::getAntlineBlocks))
+                                    .build());
 
-    public static final RegistryObject<TileEntityType<AntlineTileEntity>> ANTLINE = TILE_ENTITY_TYPES.register("antline",
-            () -> TileEntityType.Builder.of(AntlineTileEntity::new,
-                    getBlocks(TileEntityTypeInit::getAntlineBlocks)).build(null));
+    public static final Entry<BlockEntityType<FaithPlateTileEntity>> FAITHPLATE =
+            TILE_ENTITY_TYPES.register(
+                    "faithplate",
+                    () ->
+                            FabricBlockEntityTypeBuilder.create(
+                                            FaithPlateTileEntity::new,
+                                            getBlocks(TileEntityTypeInit::getFaithplateBlocks))
+                                    .build());
 
+    public static final Entry<BlockEntityType<ChamberDoorTileEntity>> CHAMBER_DOOR =
+            TILE_ENTITY_TYPES.register(
+                    "chamber_door",
+                    () ->
+                            FabricBlockEntityTypeBuilder.create(
+                                            ChamberDoorTileEntity::new,
+                                            getBlocks(TileEntityTypeInit::getChamberDoorBlocks))
+                                    .build());
 
-    public static final RegistryObject<TileEntityType<FaithPlateTileEntity>> FAITHPLATE = TILE_ENTITY_TYPES.register("faithplate",
-            () -> TileEntityType.Builder.of(FaithPlateTileEntity::new,
-                    getBlocks(TileEntityTypeInit::getFaithplateBlocks)).build(null));
+    public static final Entry<BlockEntityType<CubeDropperTileEntity>> CUBE_DROPPER =
+            TILE_ENTITY_TYPES.register(
+                    "cube_dropper",
+                    () ->
+                            FabricBlockEntityTypeBuilder.create(
+                                            CubeDropperTileEntity::new,
+                                            getBlocks(TileEntityTypeInit::getCubeDropperBlocks))
+                                    .build());
 
+    public static final Entry<BlockEntityType<FizzlerEmitterTileEntity>> FIZZLER_EMITTER =
+            TILE_ENTITY_TYPES.register(
+                    "fizzler_emitter",
+                    () ->
+                            FabricBlockEntityTypeBuilder.create(
+                                            FizzlerEmitterTileEntity::new,
+                                            getBlocks(TileEntityTypeInit::getFizzlerEmitterBlocks))
+                                    .build());
 
-    public static final RegistryObject<TileEntityType<ChamberDoorTileEntity>> CHAMBER_DOOR = TILE_ENTITY_TYPES.register("chamber_door",
-            () -> TileEntityType.Builder.of(ChamberDoorTileEntity::new,
-                    getBlocks(TileEntityTypeInit::getChamberDoorBlocks)).build(null));
+    public static final Entry<BlockEntityType<TriggerTileEntity>> TRIGGER =
+            TILE_ENTITY_TYPES.register(
+                    "trigger",
+                    () ->
+                            FabricBlockEntityTypeBuilder.create(
+                                            TriggerTileEntity::new, getBlocks(TileEntityTypeInit::getTriggerBlocks))
+                                    .build());
 
-
-    public static final RegistryObject<TileEntityType<CubeDropperTileEntity>> CUBE_DROPPER = TILE_ENTITY_TYPES.register("cube_dropper",
-            () -> TileEntityType.Builder.of(CubeDropperTileEntity::new,
-                    getBlocks(TileEntityTypeInit::getCubeDropperBlocks)).build(null));
-
-
-    public static final RegistryObject<TileEntityType<FizzlerEmitterTileEntity>> FIZZLER_EMITTER = TILE_ENTITY_TYPES.register("fizzler_emitter",
-            () -> TileEntityType.Builder.of(FizzlerEmitterTileEntity::new,
-                    getBlocks(TileEntityTypeInit::getFizzlerEmitterBlocks)).build(null));
-
-
-    public static final RegistryObject<TileEntityType<TriggerTileEntity>> TRIGGER = TILE_ENTITY_TYPES.register("trigger",
-            () -> TileEntityType.Builder.of(TriggerTileEntity::new,
-                    getBlocks(TileEntityTypeInit::getTriggerBlocks)).build(null));
-
-
-    public static final RegistryObject<TileEntityType<AutoPortalTileEntity>> AUTOPORTAL = TILE_ENTITY_TYPES.register("autoportal",
-            () -> TileEntityType.Builder.of(AutoPortalTileEntity::new,
-                    getBlocks(TileEntityTypeInit::getAutoPortalBlocks)).build(null));
-
-
+    public static final Entry<BlockEntityType<AutoPortalTileEntity>> AUTOPORTAL =
+            TILE_ENTITY_TYPES.register(
+                    "autoportal",
+                    () ->
+                            FabricBlockEntityTypeBuilder.create(
+                                            AutoPortalTileEntity::new,
+                                            getBlocks(TileEntityTypeInit::getAutoPortalBlocks))
+                                    .build());
 
     public static Block[] getBlocks(UnaryOperator<Set<Block>> function) {
-        return function.apply(new HashSet<>()).toArray(new Block[]{});
+        return function.apply(new HashSet<>()).toArray(new Block[] {});
     }
 
     public static Set<Block> getRadioBlocks(Set<Block> blocks) {

@@ -1,7 +1,8 @@
 package net.portalmod.core.math;
 
 import com.google.common.collect.Lists;
-import net.minecraft.util.Direction;
+
+import net.minecraft.core.Direction;
 
 import java.util.List;
 

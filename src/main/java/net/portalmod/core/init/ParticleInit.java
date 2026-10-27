@@ -1,49 +1,64 @@
 package net.portalmod.core.init;
 
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.particle.ParticleManager;
-import net.minecraft.particles.BasicParticleType;
-import net.minecraft.particles.ParticleType;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.client.event.ParticleFactoryRegisterEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.RegistryObject;
-import net.minecraftforge.fml.common.Mod.EventBusSubscriber;
-import net.minecraftforge.fml.common.Mod.EventBusSubscriber.Bus;
-import net.minecraftforge.registries.DeferredRegister;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
+import net.fabricmc.fabric.api.client.particle.v1.ParticleProviderRegistry;
+import net.fabricmc.fabric.api.particle.v1.FabricParticleTypes;
+import net.minecraft.core.particles.ParticleType;
+import net.minecraft.core.particles.SimpleParticleType;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.resources.Identifier;
 import net.portalmod.PortalMod;
 import net.portalmod.common.particles.*;
 import net.portalmod.common.sorted.portal.PortalParticle;
 import net.portalmod.common.sorted.portal.PortalPhotonParticle;
+import net.portalmod.core.util.Registry;
+import net.portalmod.core.util.Registry.Entry;
 
-@EventBusSubscriber(modid = PortalMod.MODID, bus = Bus.MOD, value = Dist.CLIENT)
 public class ParticleInit {
-    public static final DeferredRegister<ParticleType<?>> PARTICLE_TYPES = DeferredRegister.create(ForgeRegistries.PARTICLE_TYPES, PortalMod.MODID);
-    public static final RegistryObject<BasicParticleType> PORTAL_PARTICLE = PARTICLE_TYPES.register("portal_particle",
-            () -> new BasicParticleType(false));
-    public static final RegistryObject<BasicParticleType> PORTAL_PHOTON = PARTICLE_TYPES.register("portal_photon",
-            () -> new BasicParticleType(false));
-    public static final RegistryObject<BasicParticleType> FIZZLE_GLOW = PARTICLE_TYPES.register("fizzle_glow",
-            () -> new BasicParticleType(false));
-    public static final RegistryObject<BasicParticleType> FIZZLE_FLAKE_FALLING = PARTICLE_TYPES.register("fizzle_flake_falling",
-            () -> new BasicParticleType(false));
-    public static final RegistryObject<BasicParticleType> FIZZLE_FLAKE_LANDING = PARTICLE_TYPES.register("fizzle_flake_landing",
-            () -> new BasicParticleType(false));
-    public static final RegistryObject<BasicParticleType> PORTALGUN_SPARK = PARTICLE_TYPES.register("portalgun_spark",
-            () -> new BasicParticleType(false));
-    public static final RegistryObject<BasicParticleType> TURRET_SPARK = PARTICLE_TYPES.register("turret_spark",
-            () -> new BasicParticleType(false));
+    public static final Registry<ParticleType<?>> PARTICLE_TYPES =
+            new Registry<>(
+                    (id, value) ->
+                            net.minecraft.core.Registry.register(
+                                    BuiltInRegistries.PARTICLE_TYPE,
+                                    Identifier.fromNamespaceAndPath(PortalMod.MODID, id),
+                                    value));
+    public static final Entry<ParticleType<PortalParticleOptions>> PORTAL_PARTICLE =
+            PARTICLE_TYPES.register(
+                    "portal_particle",
+                    () ->
+                            FabricParticleTypes.complex(
+                                    PortalParticleOptions.CODEC,
+                                    ByteBufCodecs.fromCodecWithRegistries(PortalParticleOptions.CODEC.codec())));
+    public static final Entry<ParticleType<PortalPhotonOptions>> PORTAL_PHOTON =
+            PARTICLE_TYPES.register(
+                    "portal_photon",
+                    () ->
+                            FabricParticleTypes.complex(
+                                    PortalPhotonOptions.CODEC,
+                                    ByteBufCodecs.fromCodecWithRegistries(PortalPhotonOptions.CODEC.codec())));
+    public static final Entry<SimpleParticleType> FIZZLE_GLOW =
+            PARTICLE_TYPES.register("fizzle_glow", () -> FabricParticleTypes.simple(false));
+    public static final Entry<SimpleParticleType> FIZZLE_FLAKE_FALLING =
+            PARTICLE_TYPES.register("fizzle_flake_falling", () -> FabricParticleTypes.simple(false));
+    public static final Entry<SimpleParticleType> FIZZLE_FLAKE_LANDING =
+            PARTICLE_TYPES.register("fizzle_flake_landing", () -> FabricParticleTypes.simple(false));
+    public static final Entry<SimpleParticleType> PORTALGUN_SPARK =
+            PARTICLE_TYPES.register("portalgun_spark", () -> FabricParticleTypes.simple(false));
+    public static final Entry<SimpleParticleType> TURRET_SPARK =
+            PARTICLE_TYPES.register("turret_spark", () -> FabricParticleTypes.simple(false));
 
-    // Backport of the small flame for candles, this should get replaced with the vanilla one after porting to a newer version
-    public static final RegistryObject<BasicParticleType> SMALL_FLAME = PARTICLE_TYPES.register("small_flame",
-            () -> new BasicParticleType(false));
+    // Backport of the small flame for candles, this should get replaced with the vanilla one after porting to a newer
+    // version
+    public static final Entry<SimpleParticleType> SMALL_FLAME =
+            PARTICLE_TYPES.register("small_flame", () -> FabricParticleTypes.simple(false));
 
     private ParticleInit() {}
 
-    @SubscribeEvent
-    public static void registerParticleFactory(final ParticleFactoryRegisterEvent event) {
-        ParticleManager particleEngine = Minecraft.getInstance().particleEngine;
+    @Environment(EnvType.CLIENT)
+    public static void registerParticleFactory() {
+        ParticleProviderRegistry particleEngine = ParticleProviderRegistry.getInstance();
         particleEngine.register(ParticleInit.PORTAL_PARTICLE.get(), PortalParticle.Factory::new);
         particleEngine.register(ParticleInit.PORTAL_PHOTON.get(), PortalPhotonParticle.Factory::new);
         particleEngine.register(ParticleInit.FIZZLE_GLOW.get(), FizzleGlowParticle.Factory::new);

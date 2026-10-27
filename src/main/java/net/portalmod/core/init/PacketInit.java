@@ -1,11 +1,19 @@
 package net.portalmod.core.init;
 
-import net.minecraft.util.ResourceLocation;
-import net.minecraftforge.fml.network.NetworkDirection;
-import net.minecraftforge.fml.network.NetworkEvent;
-import net.minecraftforge.fml.network.NetworkRegistry;
-import net.minecraftforge.fml.network.simple.SimpleChannel;
-import net.portalmod.PortalMod;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
+import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.portalmod.common.entities.CTestElementHoldingPacket;
 import net.portalmod.common.sorted.antline.SAntlineUpdatePacket;
 import net.portalmod.common.sorted.faithplate.*;
@@ -26,62 +34,92 @@ import net.portalmod.common.sorted.trigger.CTriggerEndConfigPacket;
 import net.portalmod.common.sorted.trigger.STriggerStartConfigPacket;
 import net.portalmod.core.packet.*;
 
-import java.util.function.Supplier;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 
 public class PacketInit {
-    private static int id = 0;
-    private static final String PROTOCOL_VERSION = "1";
-    public static final SimpleChannel INSTANCE = NetworkRegistry.newSimpleChannel(
-            new ResourceLocation(PortalMod.MODID, "main"), () -> PROTOCOL_VERSION,
-                PROTOCOL_VERSION::equals, PROTOCOL_VERSION::equals);
-    
+    public static final List<CustomPacketPayload.Type<? extends AbstractPacket<?>>> CLIENT_TYPES = new ArrayList<>();
+    private static MinecraftServer server;
+
     private PacketInit() {}
-    
+
     public static void init() {
-        register(new SRadioUpdatePacket(),              NetworkDirection.PLAY_TO_CLIENT);
-        register(new SAntlineUpdatePacket(),            NetworkDirection.PLAY_TO_CLIENT);
-        register(new SFaithPlateLaunchPacket(),         NetworkDirection.PLAY_TO_CLIENT);
-        register(new SEntityPortalTeleportLerpPacket(), NetworkDirection.PLAY_TO_CLIENT);
-        register(new SPortalGunAnimationPacket(),       NetworkDirection.PLAY_TO_CLIENT);
-        register(new SPortalPairPacket(),               NetworkDirection.PLAY_TO_CLIENT);
-        register(new SForgetPortalPacket(),             NetworkDirection.PLAY_TO_CLIENT);
-        register(new SPortalShotPacket(),               NetworkDirection.PLAY_TO_CLIENT);
-        register(new SSetPlayerSkinPacket(),            NetworkDirection.PLAY_TO_CLIENT);
-        register(new SPortalGunFailShotPacket(),        NetworkDirection.PLAY_TO_CLIENT);
-        register(new SSpawnChamberSignPacket(),         NetworkDirection.PLAY_TO_CLIENT);
-        register(new SFaithPlateStartConfigPacket(),    NetworkDirection.PLAY_TO_CLIENT);
-        register(new STriggerStartConfigPacket(),       NetworkDirection.PLAY_TO_CLIENT);
-        register(new SUpdateBooleanGameRulePacket(),    NetworkDirection.PLAY_TO_CLIENT);
-
-        register(new CFaithPlateUpdatedPacket(),        NetworkDirection.PLAY_TO_SERVER);
-        register(new CFaithPlateLaunchPacket(),         NetworkDirection.PLAY_TO_SERVER);
-        register(new CPortalGunInteractionPacket(),     NetworkDirection.PLAY_TO_SERVER);
-        register(new CPlayerPortalTeleportPacket(),     NetworkDirection.PLAY_TO_SERVER);
-        register(new CSetPlayerSkinPacket(),            NetworkDirection.PLAY_TO_SERVER);
-        register(new CTestElementHoldingPacket(),       NetworkDirection.PLAY_TO_SERVER);
-        register(new CFaithPlateEndConfigPacket(),      NetworkDirection.PLAY_TO_SERVER);
-        register(new CTriggerEndConfigPacket(),         NetworkDirection.PLAY_TO_SERVER);
-        register(new CTriggerAbortConfigPacket(),       NetworkDirection.PLAY_TO_SERVER);
-        register(new CThroughPortalProofPacket(),       NetworkDirection.PLAY_TO_SERVER);
-        register(new CPlayerPortalTeleportLerpPacket(), NetworkDirection.PLAY_TO_SERVER);
-        register(new CPropulsionGelBoostTickPacket(),   NetworkDirection.PLAY_TO_SERVER);
-        register(new CRepulsionGelBouncePacket(),       NetworkDirection.PLAY_TO_SERVER);
-
-        // TODO use this below too
-        
-//        INSTANCE.messageBuilder(FaithPlateUpdatePacket.Client.class, ID++, NetworkDirection.PLAY_TO_CLIENT)
-//                .encoder(FaithPlateUpdatePacket.Client::encode)
-//                .decoder(FaithPlateUpdatePacket.Client::new)
-//                .consumer(FaithPlateUpdatePacket.Client::handle)
-//                .add();
+        ServerLifecycleEvents.SERVER_STARTING.register(value -> server = value);
+        ServerLifecycleEvents.SERVER_STOPPED.register(value -> server = null);
+        registerClient(new SRadioUpdatePacket());
+        registerClient(new SAntlineUpdatePacket());
+        registerClient(new SFaithPlateLaunchPacket());
+        registerClient(new SEntityPortalTeleportLerpPacket());
+        registerClient(new SPortalGunAnimationPacket());
+        registerClient(new SPortalPairPacket());
+        registerClient(new SForgetPortalPacket());
+        registerClient(new SPortalShotPacket());
+        registerClient(new SSetPlayerSkinPacket());
+        registerClient(new SPortalGunFailShotPacket());
+        registerClient(new SFaithPlateStartConfigPacket());
+        registerClient(new STriggerStartConfigPacket());
+        registerClient(new SUpdateBooleanGameRulePacket());
+        registerServer(new CFaithPlateUpdatedPacket());
+        registerServer(new CFaithPlateLaunchPacket());
+        registerServer(new CPortalGunInteractionPacket());
+        registerServer(new CPlayerPortalTeleportPacket());
+        registerServer(new CSetPlayerSkinPacket());
+        registerServer(new CTestElementHoldingPacket());
+        registerServer(new CFaithPlateEndConfigPacket());
+        registerServer(new CTriggerEndConfigPacket());
+        registerServer(new CTriggerAbortConfigPacket());
+        registerServer(new CThroughPortalProofPacket());
+        registerServer(new CPlayerPortalTeleportLerpPacket());
+        registerServer(new CPropulsionGelBoostTickPacket());
+        registerServer(new CRepulsionGelBouncePacket());
     }
-    
-    private static <T extends AbstractPacket<T>> void register(T inst, NetworkDirection direction) {
-        INSTANCE.messageBuilder((Class<T>)inst.getClass(), id++, direction)
-                .encoder(AbstractPacket::encode)
-                .decoder(inst::decode)
-                .consumer((SimpleChannel.MessageBuilder.ToBooleanBiFunction<T, Supplier<NetworkEvent.Context>>)
-                        AbstractPacket::handle)
-                .add();
+
+    private static <T extends AbstractPacket<T>> void registerClient(T packet) {
+        PayloadTypeRegistry.clientboundPlay().register(packet.type(), codec(packet));
+        CLIENT_TYPES.add(packet.type());
+    }
+
+    private static <T extends AbstractPacket<T>> void registerServer(T packet) {
+        PayloadTypeRegistry.serverboundPlay().register(packet.type(), codec(packet));
+        ServerPlayNetworking.registerGlobalReceiver(
+                packet.type(),
+                (payload, context) -> payload.handle(() -> new PacketContext(context.player(), context.server())));
+    }
+
+    private static <T extends AbstractPacket<T>> StreamCodec<FriendlyByteBuf, T> codec(T packet) {
+        return StreamCodec.of((buffer, value) -> value.encode(buffer), packet::decode);
+    }
+
+    public static void sendToPlayer(ServerPlayer player, CustomPacketPayload packet) {
+        ServerPlayNetworking.send(player, packet);
+    }
+
+    public static void sendToAll(CustomPacketPayload packet) {
+        PlayerLookup.all(Objects.requireNonNull(server, "Server is not running"))
+                .forEach(player -> sendToPlayer(player, packet));
+    }
+
+    public static void sendToDimension(ResourceKey<Level> dimension, CustomPacketPayload packet) {
+        ServerLevel level = Objects.requireNonNull(server, "Server is not running").getLevel(dimension);
+        if (level != null) {
+            PlayerLookup.level(level).forEach(player -> sendToPlayer(player, packet));
+        }
+    }
+
+    public static void sendToTrackingChunk(LevelChunk chunk, CustomPacketPayload packet) {
+        PlayerLookup.tracking((ServerLevel) chunk.getLevel(), chunk.getPos())
+                .forEach(player -> sendToPlayer(player, packet));
+    }
+
+    public static void sendToTrackingEntity(Entity entity, CustomPacketPayload packet) {
+        PlayerLookup.tracking(entity).forEach(player -> sendToPlayer(player, packet));
+    }
+
+    public static void sendToTrackingAndSelf(Entity entity, CustomPacketPayload packet) {
+        sendToTrackingEntity(entity, packet);
+        if (entity instanceof ServerPlayer player) {
+            sendToPlayer(player, packet);
+        }
     }
 }

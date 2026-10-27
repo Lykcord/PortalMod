@@ -1,61 +1,43 @@
 package net.portalmod.core.event;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
+import com.mojang.blaze3d.platform.InputConstants;
+import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.datafixers.util.Pair;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
+
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelExtractionEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
+import net.minecraft.client.Camera;
+import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.screen.MainMenuScreen;
-import net.minecraft.client.renderer.ActiveRenderInfo;
-import net.minecraft.client.renderer.IRenderTypeBuffer;
-import net.minecraft.client.renderer.entity.model.BipedModel;
-import net.minecraft.client.renderer.entity.model.BipedModel.ArmPose;
-import net.minecraft.client.settings.KeyBinding;
-import net.minecraft.client.util.InputMappings;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntitySize;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.item.ItemEntity;
-import net.minecraft.entity.monster.CreeperEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.entity.projectile.ProjectileHelper;
-import net.minecraft.inventory.EquipmentSlotType;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.Hand;
-import net.minecraft.util.HandSide;
-import net.minecraft.util.math.*;
-import net.minecraft.util.math.vector.Vector3d;
-import net.minecraft.util.math.vector.Vector3f;
-import net.minecraft.world.World;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.client.event.*;
-import net.minecraftforge.client.event.RenderGameOverlayEvent.ElementType;
-import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.event.TickEvent.Phase;
-import net.minecraftforge.event.TickEvent.PlayerTickEvent;
-import net.minecraftforge.event.entity.EntityEvent;
-import net.minecraftforge.event.entity.living.LivingDropsEvent;
-import net.minecraftforge.event.entity.living.LivingEvent.LivingUpdateEvent;
-import net.minecraftforge.event.entity.living.LivingFallEvent;
-import net.minecraftforge.event.entity.player.PlayerEvent;
-import net.minecraftforge.eventbus.api.EventPriority;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod.EventBusSubscriber;
-import net.minecraftforge.fml.common.Mod.EventBusSubscriber.Bus;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.client.renderer.fog.FogData;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.core.BlockPos;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.ProjectileUtil;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.EntityHitResult;
 import net.portalmod.PMState;
 import net.portalmod.PortalMod;
-import net.portalmod.client.render.PortalFirstPersonRenderer;
+import net.portalmod.client.render.PortalCamera;
 import net.portalmod.client.render.WatermarkRenderer;
 import net.portalmod.common.blocks.InteractKeyInteractable;
-import net.portalmod.common.entities.Fizzleable;
 import net.portalmod.common.entities.TestElementEntity;
-import net.portalmod.common.items.ModSpawnEggItem;
-import net.portalmod.common.sorted.creer.CreerRenderer;
-import net.portalmod.common.sorted.faithplate.CFaithPlateEndConfigPacket;
-import net.portalmod.common.sorted.faithplate.FaithPlateTER;
-import net.portalmod.common.sorted.faithplate.Flingable;
-import net.portalmod.common.sorted.fizzler.Fizzler;
 import net.portalmod.common.sorted.goo.GooBlock;
 import net.portalmod.common.sorted.portal.CameraAnimator;
 import net.portalmod.common.sorted.portal.PortalEntity;
@@ -64,367 +46,310 @@ import net.portalmod.common.sorted.portal.PortalRenderer;
 import net.portalmod.common.sorted.portalgun.*;
 import net.portalmod.common.sorted.portalgun.skins.ClientSkinManager;
 import net.portalmod.common.sorted.trigger.TriggerSelectionClient;
-import net.portalmod.common.sorted.trigger.TriggerTER;
 import net.portalmod.core.config.PortalModConfigManager;
-import net.portalmod.core.init.*;
-import net.portalmod.core.injectors.LivingEntityInjector;
+import net.portalmod.core.init.AttributeInit;
+import net.portalmod.core.init.FluidTagInit;
+import net.portalmod.core.init.KeyInit;
 import net.portalmod.core.injectors.MainMenuInjector;
 import net.portalmod.core.math.AABBUtil;
 import net.portalmod.core.math.Mat4;
 import net.portalmod.core.math.Vec3;
-import net.portalmod.core.util.ChangeDetector;
+import net.portalmod.core.packet.ClientNetworking;
 import net.portalmod.core.util.DebugRenderer;
 import net.portalmod.core.util.ModUtil;
 import net.portalmod.mixins.accessors.ActiveRenderInfoAccessor;
+import net.portalmod.mixins.accessors.GameRendererAccessor;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
-@EventBusSubscriber(modid = PortalMod.MODID, bus = Bus.FORGE, value = Dist.CLIENT)
 public class ClientEvents {
-
-    @SubscribeEvent
-    public static void onClientLogin(final ClientPlayerNetworkEvent.LoggedInEvent event) {
-        ClientSkinManager.getInstance().onClientLogin();
+    public static void init() {
+        ClientPlayConnectionEvents.JOIN.register(
+                (handler, sender, client) -> ClientSkinManager.getInstance().onClientLogin());
+        ClientTickEvents.START_CLIENT_TICK.register(client -> clientTick());
+        LevelRenderEvents.COLLECT_SUBMITS.register(DebugRenderer::renderAllShapes);
+        LevelExtractionEvents.END_EXTRACTION.register(context -> PortalRenderer.getInstance().extract(context));
+        LevelRenderEvents.COLLECT_SUBMITS.register(context -> PortalRenderer.getInstance().submit(context));
+        HudElementRegistry.attachElementAfter(
+                VanillaHudElements.CROSSHAIR,
+                Identifier.fromNamespaceAndPath(PortalMod.MODID, "crosshair"),
+                (graphics, delta) -> {
+                    PortalGunCrosshairRenderer.render(graphics);
+                    if (PortalMod.WATERMARK) {
+                        WatermarkRenderer.render(graphics);
+                    }
+                });
+        HudElementRegistry.attachElementAfter(
+                VanillaHudElements.SUBTITLES,
+                Identifier.fromNamespaceAndPath(PortalMod.MODID, "debug"),
+                (graphics, delta) -> {
+                    var font = Minecraft.getInstance().font;
+                    for (int i = 0; i < debugStrings.size(); i++) {
+                        graphics.text(font, debugStrings.get(i), 2, 2 + font.lineHeight * i, 0xFFFFAA00);
+                    }
+                    debugStrings.clear();
+                });
     }
 
-    @SubscribeEvent
-    public static void onPlayerRender(final RenderPlayerEvent.Pre event) {
-        BipedModel.ArmPose mainHand;
-        BipedModel.ArmPose offHand;
-        
-        if(event.getEntityLiving().getMainArm() == HandSide.RIGHT) {
-            mainHand = event.getRenderer().getModel().rightArmPose;
-            offHand = event.getRenderer().getModel().leftArmPose;
-        } else {
-            offHand = event.getRenderer().getModel().rightArmPose;
-            mainHand = event.getRenderer().getModel().leftArmPose;
+    public static Screen screenOpen(Screen screen) {
+        if (!(screen instanceof TitleScreen)) {
+            return screen;
         }
-        
-        if(event.getPlayer().getItemInHand(Hand.MAIN_HAND).getItem() instanceof PortalGun)
-            mainHand = ArmPose.BOW_AND_ARROW;
-        if(event.getPlayer().getItemInHand(Hand.OFF_HAND).getItem() instanceof PortalGun)
-            offHand = ArmPose.BOW_AND_ARROW;
-        
-        if(mainHand.isTwoHanded())
-            offHand = event.getEntityLiving().getOffhandItem().isEmpty() ? BipedModel.ArmPose.EMPTY : BipedModel.ArmPose.ITEM;
-        
-        if(event.getEntityLiving().getMainArm() == HandSide.RIGHT) {
-            event.getRenderer().getModel().rightArmPose = mainHand;
-            event.getRenderer().getModel().leftArmPose = offHand;
-        } else {
-            event.getRenderer().getModel().rightArmPose = offHand;
-            event.getRenderer().getModel().leftArmPose = mainHand;
-        }
-    }
-
-    @SubscribeEvent
-    public static void screenOpen(final GuiOpenEvent event) {
-        if(!(event.getGui() instanceof MainMenuScreen)) return;
-
-        event.setGui(MainMenuInjector.getInjectedMenu(PortalModConfigManager.MENU.get(), MainMenuInjector.fading));
-        MainMenuInjector.needsUpdate = false;
+        var title = MainMenuInjector.getInjectedMenu(PortalModConfigManager.MENU.get(), MainMenuInjector.fading);
         MainMenuInjector.fading = false;
-    }
-    
-    private static final ChangeDetector creerNameDetector = new ChangeDetector();
-    
-    @SubscribeEvent
-    public static void renderLiving(final RenderLivingEvent.Pre<?, ?> event) {
-        if(event.getRenderer() instanceof CreerRenderer)
-            return;
-        
-        if(!CreerRenderer.isCreer(event.getEntity())) {
-            creerNameDetector.trigger(false);
-            return;
-        }
-        
-        creerNameDetector.trigger(true);
-        
-        CreeperEntity entity = (CreeperEntity)event.getEntity();
-        float partialTicks = event.getPartialRenderTick();
-        MatrixStack matrixStack = event.getMatrixStack();
-        int light = event.getLight();
-        IRenderTypeBuffer renderTypeBuffer = event.getBuffers();
-        
-        if(creerNameDetector.get())
-            entity.refreshDimensions();
-        
-        event.setCanceled(true);
-        CreerRenderer.INSTANCE.get().render(entity, 0, partialTicks, matrixStack, renderTypeBuffer, light);
+        return title;
     }
 
-    @SubscribeEvent
-    public static void fogDensity(final EntityViewRenderEvent.FogDensity event) {
-        ActiveRenderInfo info = event.getInfo();
-        if (info.getFluidInCamera().is(FluidTagInit.GOO)) {
-            event.setDensity(GooBlock.getFogDensity(info.getEntity()));
-            event.setCanceled(true);
-        }
-    }
-
-    @SubscribeEvent
-    public static void fogColor(final EntityViewRenderEvent.FogColors event) {
-        ActiveRenderInfo info = event.getInfo();
-        if (info.getFluidInCamera().is(FluidTagInit.GOO)) {
-            Vector3f color = GooBlock.getFogColor().to3f();
-            event.setRed(color.x());
-            event.setGreen(color.y());
-            event.setBlue(color.z());
-        }
-    }
-
-    @SubscribeEvent
-    public static void entitySize(final EntityEvent.Size event) {
-        if(!CreerRenderer.isCreer(event.getEntity()))
-            return;
-        
-        EntitySize size = event.getOldSize();
-        event.setNewSize(EntitySize.scalable(size.width, 1f), true);
-    }
-    
     private static boolean wasPressed = false;
-    
-    @SubscribeEvent
-    public static void clientTick(final TickEvent.ClientTickEvent event) {
-        if(event.phase == TickEvent.Phase.END) {
-            PortalFirstPersonRenderer.updateSwingTime();
-        }
 
-        if(event.phase != TickEvent.Phase.START) {
-            return;
-        }
-
+    public static void clientTick() {
         ClientSkinManager.getInstance().tick();
 
         // STIK ER IN
         // 🔥
 
         Minecraft mc = Minecraft.getInstance();
-        PlayerEntity player = Minecraft.getInstance().player;
-        World level = Minecraft.getInstance().level;
+        Player player = Minecraft.getInstance().player;
+        Level level = Minecraft.getInstance().level;
 
-        if(player != null && level != null && Minecraft.getInstance().gameMode != null) {
-            if(TriggerSelectionClient.isSelecting()) {
-                float rayLength = Minecraft.getInstance().gameMode.getPickRange();
-                Vector3d rayPath = player.getViewVector(0).scale(rayLength);
-                Vector3d from = player.getEyePosition(0);
-                Vector3d to = from.add(rayPath);
+        if (player != null && level != null && Minecraft.getInstance().gameMode != null) {
+            if (TriggerSelectionClient.isSelecting()) {
+                float rayLength = (float) player.blockInteractionRange();
+                net.minecraft.world.phys.Vec3 rayPath = player.getViewVector(0).scale(rayLength);
+                net.minecraft.world.phys.Vec3 from = player.getEyePosition(0);
+                net.minecraft.world.phys.Vec3 to = from.add(rayPath);
 
-                RayTraceContext rayCtx = new RayTraceContext(from, to, RayTraceContext.BlockMode.OUTLINE, RayTraceContext.FluidMode.NONE, null);
-                BlockRayTraceResult rayHit = Minecraft.getInstance().level.clip(rayCtx);
+                ClipContext rayCtx =
+                        new ClipContext(from, to, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, player);
+                BlockHitResult rayHit = Minecraft.getInstance().level.clip(rayCtx);
 
                 BlockPos pos = rayHit.getBlockPos();
                 BlockState state = level.getBlockState(pos);
 
-                if (state.isFaceSturdy(level, pos, rayHit.getDirection()))
+                if (state.isFaceSturdy(level, pos, rayHit.getDirection())) {
                     pos = pos.relative(rayHit.getDirection());
+                }
 
                 TriggerSelectionClient.updateSelectedPos(pos);
             }
-
-            if(mc.overlay != null || mc.screen != null) {
-                if(player.getMainHandItem().getItem() instanceof PortalGun) {
-                    PortalGunClient.getInstance().resetPresses();
-                }
-            }
         }
 
+        if (player == null
+                || level == null
+                || mc.gui.overlay() != null
+                || mc.gui.screen() != null
+                || !(player.getMainHandItem().getItem() instanceof PortalGun)) {
+            PortalGunClient.getInstance().resetPresses();
+        }
         PortalGunClient.getInstance().tick();
         handleInteractKey();
     }
 
     public static void handleInteractKey() {
+        var client = Minecraft.getInstance();
+        if (client.gui.screen() != null
+                || client.gui.overlay() != null
+                || client.level == null
+                || client.gameMode == null) {
+            wasPressed = false;
+            return;
+        }
         if (!KeyInit.PORTALGUN_INTERACT.isDown()) {
             wasPressed = false;
             return;
         }
 
-        if (wasPressed) return;
+        if (wasPressed) {
+            return;
+        }
         wasPressed = true;
 
-        PlayerEntity player = Minecraft.getInstance().player;
-        if (player == null) return;
+        Player player = Minecraft.getInstance().player;
+        if (player == null) {
+            return;
+        }
 
-        if (player.isSpectator()) return;
+        if (player.isSpectator()) {
+            return;
+        }
 
-        float rayLength = Minecraft.getInstance().gameMode.getPickRange();
-        Vector3d playerRotation = player.getViewVector(0);
-        Vector3d rayPath = playerRotation.scale(rayLength);
+        float rayLength = (float) player.blockInteractionRange();
+        net.minecraft.world.phys.Vec3 playerRotation = player.getViewVector(0);
+        net.minecraft.world.phys.Vec3 rayPath = playerRotation.scale(rayLength);
 
-        Vector3d from = player.getEyePosition(0);
-        Vector3d to = from.add(rayPath);
+        net.minecraft.world.phys.Vec3 from = player.getEyePosition(0);
+        net.minecraft.world.phys.Vec3 to = from.add(rayPath);
 
-        RayTraceContext rayCtx = new RayTraceContext(from, to, RayTraceContext.BlockMode.OUTLINE, RayTraceContext.FluidMode.NONE, null);
-        BlockRayTraceResult rayHit = Minecraft.getInstance().level.clip(rayCtx);
+        ClipContext rayCtx = new ClipContext(from, to, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, player);
+        BlockHitResult rayHit = Minecraft.getInstance().level.clip(rayCtx);
 
         // Drop entity
         ItemStack itemStack = player.getMainHandItem();
-        if (player.hasPassenger(TestElementEntity.class)) {
+        if (player.getPassengers().stream().anyMatch(TestElementEntity.class::isInstance)) {
             TestElementEntity.dropHeldEntities(player, false, false, itemStack);
-            PacketInit.INSTANCE.sendToServer(new CPortalGunInteractionPacket.Builder(PortalGunInteraction.DROP_ENTITY).build());
+            ClientNetworking.sendToServer(
+                    new CPortalGunInteractionPacket.Builder(PortalGunInteraction.DROP_ENTITY).build());
 
-            consumeAllKeyPresses(KeyInit.PORTALGUN_INTERACT.getKey());
+            consumeAllKeyPresses(KeyMappingHelper.getBoundKeyOf(KeyInit.PORTALGUN_INTERACT));
             return;
         }
 
         // Press block
         Block block = Minecraft.getInstance().level.getBlockState(rayHit.getBlockPos()).getBlock();
-        if (block instanceof InteractKeyInteractable && ((InteractKeyInteractable) block).interactKeyInteract(player, rayHit)) {
-            consumeAllKeyPresses(KeyInit.PORTALGUN_INTERACT.getKey());
+        if (block instanceof InteractKeyInteractable
+                && ((InteractKeyInteractable) block).interactKeyInteract(player, rayHit)) {
+            consumeAllKeyPresses(KeyMappingHelper.getBoundKeyOf(KeyInit.PORTALGUN_INTERACT));
             return;
         }
 
         // Pick up entity
         try {
-//            Entity entity = Minecraft.getInstance().crosshairPickEntity;
 
             // Use collision shapes to target the entity instead of visual shapes
             // todo: this increases the throwing lag even more ugh
-//            RayTraceContext collisionRayCtx = new RayTraceContext(from, to, RayTraceContext.BlockMode.COLLIDER, RayTraceContext.FluidMode.NONE, null);
-//            BlockRayTraceResult collisionRayHit = Minecraft.getInstance().level.clip(collisionRayCtx);
+            //            ClipContext collisionRayCtx = new ClipContext(from, to, ClipContext.Block.COLLIDER,
 
-            List<PortalEntity> portalChain = ModUtil.getPortalsAlongRay(player.level, new Vec3(from), new Vec3(to), portal -> true);
+            List<PortalEntity> portalChain =
+                    ModUtil.getPortalsAlongRay(player.level(), new Vec3(from), new Vec3(to), portal -> true);
             Mat4 portalMatrix = ModUtil.getMatrixFromPortalChain(portalChain);
-            Pair<Vector3d, Vector3d> ray = ModUtil.teleportRay(portalChain, from, to);
-            AxisAlignedBB aabb = player.getBoundingBox().expandTowards(rayPath);
+            Pair<net.minecraft.world.phys.Vec3, net.minecraft.world.phys.Vec3> ray =
+                    ModUtil.teleportRay(portalChain, from, to);
+            AABB aabb = player.getBoundingBox().expandTowards(rayPath);
             aabb = AABBUtil.transform(aabb, portalMatrix);
 
-            EntityRayTraceResult realWorldEntityRayTraceResult = ProjectileHelper.getEntityHitResult(player, from, to, player.getBoundingBox().expandTowards(rayPath), TestElementEntity::isHoldable, rayLength * rayLength);
-            EntityRayTraceResult teleportedEntityRayTraceResult = ProjectileHelper.getEntityHitResult(player, ray.getFirst(), ray.getSecond(), aabb, TestElementEntity::isHoldable, rayLength * rayLength);
-            EntityRayTraceResult entityRayTraceResult;
+            EntityHitResult realWorldEntityRayTraceResult =
+                    ProjectileUtil.getEntityHitResult(
+                            player,
+                            from,
+                            to,
+                            player.getBoundingBox().expandTowards(rayPath),
+                            TestElementEntity::isHoldable,
+                            rayLength * rayLength);
+            EntityHitResult teleportedEntityRayTraceResult =
+                    ProjectileUtil.getEntityHitResult(
+                            player,
+                            ray.getFirst(),
+                            ray.getSecond(),
+                            aabb,
+                            TestElementEntity::isHoldable,
+                            rayLength * rayLength);
+            EntityHitResult entityRayTraceResult;
 
-            if(realWorldEntityRayTraceResult == null && teleportedEntityRayTraceResult == null) {
+            if (realWorldEntityRayTraceResult == null && teleportedEntityRayTraceResult == null) {
                 return;
             }
 
             boolean realWorld = true;
 
-            if(teleportedEntityRayTraceResult == null) {
+            if (teleportedEntityRayTraceResult == null) {
                 entityRayTraceResult = realWorldEntityRayTraceResult;
 
-            } else if(realWorldEntityRayTraceResult == null) {
+            } else if (realWorldEntityRayTraceResult == null) {
                 entityRayTraceResult = teleportedEntityRayTraceResult;
                 realWorld = false;
 
             } else {
-                Vector3d teleportedFrom = new Vec3(from).transform(portalMatrix).to3d();
+                net.minecraft.world.phys.Vec3 teleportedFrom = new Vec3(from).transform(portalMatrix).to3d();
                 double realWorldDistance = realWorldEntityRayTraceResult.getLocation().subtract(from).lengthSqr();
-                double teleportedDistance = teleportedEntityRayTraceResult.getLocation().subtract(teleportedFrom).lengthSqr();
-                entityRayTraceResult = realWorldDistance <= teleportedDistance ? realWorldEntityRayTraceResult : teleportedEntityRayTraceResult;
+                double teleportedDistance =
+                        teleportedEntityRayTraceResult.getLocation().subtract(teleportedFrom).lengthSqr();
+                entityRayTraceResult =
+                        realWorldDistance <= teleportedDistance
+                                ? realWorldEntityRayTraceResult
+                                : teleportedEntityRayTraceResult;
                 realWorld = realWorldDistance <= teleportedDistance;
             }
 
             Entity entity = entityRayTraceResult.getEntity();
 
             // Set reach origin to feet so it is possible to pick things up from above further than from below
-            Vector3d reachPosition = player.position().add(0, 0.2, 0);
+            net.minecraft.world.phys.Vec3 reachPosition = player.position().add(0, 0.2, 0);
             double grabReach = player.getAttributeValue(AttributeInit.GRAB_REACH.get());
-            Vec3 distance = new Vec3(entity.position()).sub(new Vec3(reachPosition).transform(realWorld ? Mat4.identity() : portalMatrix));
+            Vec3 distance =
+                    new Vec3(entity.position())
+                            .sub(new Vec3(reachPosition).transform(realWorld ? Mat4.identity() : portalMatrix));
 
             if (entity instanceof TestElementEntity && distance.magnitude() < grabReach + entity.getBbWidth() / 2) {
                 ((TestElementEntity) entity).pickUp(player);
 
-                consumeAllKeyPresses(KeyInit.PORTALGUN_INTERACT.getKey());
+                consumeAllKeyPresses(KeyMappingHelper.getBoundKeyOf(KeyInit.PORTALGUN_INTERACT));
             }
-        } catch (Exception e) {
-            PortalMod.LOGGER.error("Error while picking up entity", e);
+        } catch (Exception error) {
+            PortalMod.LOGGER.error("Error while picking up entity", error);
         }
     }
 
-    private static void consumeAllKeyPresses(InputMappings.Input k) {
-        KeyBinding[] keys = Minecraft.getInstance().options.keyMappings;
-        for(KeyBinding key : keys)
-            if(key.getKey() == k)
-                while(key.consumeClick());
-    }
-
-    @SubscribeEvent
-    public static void onMouseClick(final InputEvent.RawMouseEvent event) {
-        Minecraft mc = Minecraft.getInstance();
-        PlayerEntity player = mc.player;
-        if(player == null)
-            return;
-
-        if(mc.overlay == null && mc.screen == null) {
-            if(player.getMainHandItem().getItem() instanceof PortalGun) {
-                boolean handled = PortalGunClient.getInstance().handleMouseButtons(event.getButton(), event.getAction());
-
-                if(handled) {
-                    event.setCanceled(true);
-                }
-            } else {
-                PortalGunClient.getInstance().resetPresses();
+    private static void consumeAllKeyPresses(InputConstants.Key k) {
+        KeyMapping[] keys = Minecraft.getInstance().options.keyMappings;
+        for (KeyMapping key : keys) {
+            if (key.matches(k)) {
+                while (key.consumeClick())
+                    ;
             }
         }
     }
-    
-    @SubscribeEvent
-    public static void onRenderBlockOverlay(final RenderBlockOverlayEvent event) {
-        if(!PortalEntity.shouldRenderBlockOverlay(event.getPlayer().level, event.getBlockPos()))
-            event.setCanceled(true);
+
+    public static boolean onMouseClick(int button, int action) {
+        var mc = Minecraft.getInstance();
+        if (mc.player != null
+                && mc.gui.overlay() == null
+                && mc.gui.screen() == null
+                && mc.player.getMainHandItem().getItem() instanceof PortalGun) {
+            return PortalGunClient.getInstance().handleMouseButtons(button, action);
+        }
+        PortalGunClient.getInstance().resetPresses();
+        return false;
     }
 
-    @SubscribeEvent
-    public static void onRenderWorldLast(final RenderWorldLastEvent event) {
-        DebugRenderer.renderAllShapes(event.getMatrixStack());
-    }
-
-    @SubscribeEvent(priority = EventPriority.LOWEST)
-    public static void onCameraSetup(final EntityViewRenderEvent.CameraSetup event) {
+    public static void onCameraSetup(Camera camera, DeltaTracker delta) {
         PMState.cameraPosOverrideForRenderingSelf = null;
-
-        if(Minecraft.getInstance().options.getCameraType().isFirstPerson()) {
-            Optional<Float> optionalPitch = CameraAnimator.getInstance().getRelativePitch();
-            optionalPitch.ifPresent(relativePitch -> event.setPitch(event.getPitch() + relativePitch));
-
-            Optional<Float> optionalYaw = CameraAnimator.getInstance().getRelativeYaw();
-            optionalYaw.ifPresent(relativeYaw -> event.setYaw(event.getYaw() + relativeYaw));
-
-            Optional<Float> optionalRoll = CameraAnimator.getInstance().getRelativeRoll();
-            optionalRoll.ifPresent(relativeRoll -> event.setRoll(event.getRoll() + relativeRoll));
-
-            Optional<Vec3> optionalPos = CameraAnimator.getInstance().getRelativePos();
-            optionalPos.ifPresent(pos -> {
-                PMState.cameraPosOverrideForRenderingSelf = new Vec3(event.getInfo().getPosition());
-                ((ActiveRenderInfoAccessor)event.getInfo()).pmSetPosition(event.getInfo().getPosition().add(pos.to3d()));
-            });
+        if (camera.entity() == null || Minecraft.getInstance().level == null) {
+            return;
         }
-
-        PortalEntityClient.teleportCameraAndApply(event);
-
-        PMState.cameraRoll = event.getRoll();
+        float partialTicks = camera.getCameraEntityPartialTicks(delta);
+        var animated = new PortalCamera(camera, partialTicks);
+        if (Minecraft.getInstance().options.getCameraType().isFirstPerson()) {
+            var animator = CameraAnimator.getInstance();
+            animator.getRelativePitch().ifPresent(value -> animated.setPitch(animated.xRot() + value));
+            animator.getRelativeYaw().ifPresent(value -> animated.setYaw(animated.yRot() + value));
+            animator.getRelativeRoll().ifPresent(animated::setRoll);
+            animator.getRelativePos()
+                    .ifPresent(
+                            value -> {
+                                PMState.cameraPosOverrideForRenderingSelf = new Vec3(camera.position());
+                                ((ActiveRenderInfoAccessor) animated)
+                                        .pmSetPosition(animated.position().add(value.to3d()));
+                            });
+        }
+        var state = new CameraRenderState();
+        camera.extractRenderState(state, delta);
+        var bob = new PoseStack();
+        var renderer = (GameRendererAccessor) Minecraft.getInstance().gameRenderer;
+        renderer.pmBobHurt(state, bob);
+        if (Minecraft.getInstance().options.bobView().get()) {
+            renderer.pmBobView(state, bob);
+        }
+        PortalEntityClient.teleportCameraAndApply(camera, animated, partialTicks, new Mat4(bob.last().pose()));
     }
 
-    @SubscribeEvent
-    public static void onFogSetup(final EntityViewRenderEvent.FogColors event) {
-        PortalRenderer.getInstance().clearColor = new Vec3(event.getRed(), event.getGreen(), event.getBlue());
+    public static void onFogSetup(Camera camera, FogData data) {
+        var entity = camera.entity();
+        if (entity != null) {
+            var level = entity.level();
+            var pos = BlockPos.containing(camera.position());
+            var fluid = level.getFluidState(pos);
+            if (fluid.is(FluidTagInit.GOO) && camera.position().y < pos.getY() + fluid.getHeight(level, pos)) {
+                var color = GooBlock.getFogColor();
+                data.color.set((float) color.x, (float) color.y, (float) color.z, 1);
+                data.environmentalStart = 0;
+                data.environmentalEnd = GooBlock.getFogVisibilityDistance(GooBlock.getFogDensity(entity));
+                data.skyEnd = data.environmentalEnd;
+                data.cloudEnd = data.environmentalEnd;
+            }
+        }
+        PortalRenderer.getInstance().clearColor = new Vec3(data.color.x, data.color.y, data.color.z);
     }
 
     public static final List<String> debugStrings = new ArrayList<>();
-    
-    @SubscribeEvent
-    public static void onRenderOverlay(final RenderGameOverlayEvent.Post event) {
-        Minecraft minecraft = Minecraft.getInstance();
-        FontRenderer fontRenderer = minecraft.font;
-
-        if(event.getType() == ElementType.CROSSHAIRS) {
-            PortalGunCrosshairRenderer.render(event.getMatrixStack());
-
-            if(PortalMod.WATERMARK) {
-                WatermarkRenderer.render(event.getMatrixStack());
-            }
-            
-        } else if(event.getType() == ElementType.SUBTITLES) {
-            int x = 2;
-            int y = 2;
-            int index = 0;
-            for(String text : debugStrings) {
-                fontRenderer.drawShadow(event.getMatrixStack(), text, x, y + fontRenderer.lineHeight * index++, 0xFFFFAA00);
-            }
-
-            debugStrings.clear();
-        }
-    }
 }

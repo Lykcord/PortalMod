@@ -1,6 +1,6 @@
 package net.portalmod.core.util;
 
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.Mth;
 import net.portalmod.core.math.Vec3;
 
 public class Colour {
@@ -11,14 +11,14 @@ public class Colour {
     private int g;
     private int b;
     private int a;
-    
+
     public Colour(int r, int g, int b, int a) {
         this.r = r;
         this.g = g;
         this.b = b;
         this.a = a;
     }
-    
+
     public Colour(float r, float g, float b, float a) {
         this(Math.round(r * 255), Math.round(g * 255), Math.round(b * 255), Math.round(a * 255));
     }
@@ -26,18 +26,18 @@ public class Colour {
     public Colour(float[] rgb) {
         this(rgb[0], rgb[1], rgb[2], 1);
     }
-    
+
     public Colour(int argb) {
         this.a = (argb >> 24) & 0xFF;
         this.r = (argb >> 16) & 0xFF;
-        this.g = (argb >> 8)  & 0xFF;
+        this.g = (argb >> 8) & 0xFF;
         this.b = argb & 0xFF;
     }
 
     public void lighten(float amount) {
-        this.r = (int) MathHelper.clamp(this.r + amount * 255, 0, 255);
-        this.g = (int) MathHelper.clamp(this.g + amount * 255, 0, 255);
-        this.b = (int) MathHelper.clamp(this.b + amount * 255, 0, 255);
+        this.r = (int) Mth.clamp(this.r + amount * 255, 0, 255);
+        this.g = (int) Mth.clamp(this.g + amount * 255, 0, 255);
+        this.b = (int) Mth.clamp(this.b + amount * 255, 0, 255);
     }
 
     public void darken(float amount) {
@@ -58,19 +58,19 @@ public class Colour {
         float gg = 0;
         float bb = 0;
 
-        if(h < 60) {
+        if (h < 60) {
             rr = c;
             gg = x;
-        } else if(h < 120) {
+        } else if (h < 120) {
             rr = x;
             gg = c;
-        } else if(h < 180) {
+        } else if (h < 180) {
             gg = c;
             bb = x;
-        } else if(h < 240) {
+        } else if (h < 240) {
             gg = x;
             bb = c;
-        } else if(h < 300) {
+        } else if (h < 300) {
             bb = c;
             rr = x;
         } else {
@@ -91,19 +91,19 @@ public class Colour {
         float delta = max - min;
 
         float h = 0;
-        if(delta == 0) {
+        if (delta == 0) {
             h = 0;
-        } else if(max == rr) {
+        } else if (max == rr) {
             h = 60 * ((gg - bb) / delta % 6);
-        } else if(max == gg) {
+        } else if (max == gg) {
             h = 60 * ((bb - rr) / delta + 2);
-        } else if(max == bb) {
+        } else if (max == bb) {
             h = 60 * ((rr - gg) / delta + 4);
         }
 
         return new Vec3(h, (max == 0) ? 0 : (delta / max), max);
     }
-    
+
     public int getValue() {
         return (a & 0xFF << 24) | (r & 0xFF << 16) | (g & 0xFF << 8) | (b & 0xFF);
     }
@@ -111,14 +111,36 @@ public class Colour {
     public int getRGBValue() {
         return ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | (b & 0xFF);
     }
-    
-    public int getIntR() { return r; }
-    public int getIntG() { return g; }
-    public int getIntB() { return b; }
-    public int getIntA() { return a; }
-    
-    public float getFloatR() { return r / 255f; }
-    public float getFloatG() { return g / 255f; }
-    public float getFloatB() { return b / 255f; }
-    public float getFloatA() { return a / 255f; }
+
+    public int getIntR() {
+        return r;
+    }
+
+    public int getIntG() {
+        return g;
+    }
+
+    public int getIntB() {
+        return b;
+    }
+
+    public int getIntA() {
+        return a;
+    }
+
+    public float getFloatR() {
+        return r / 255f;
+    }
+
+    public float getFloatG() {
+        return g / 255f;
+    }
+
+    public float getFloatB() {
+        return b / 255f;
+    }
+
+    public float getFloatA() {
+        return a / 255f;
+    }
 }

@@ -1,12 +1,15 @@
 package net.portalmod.core.interfaces;
 
-import net.minecraft.util.Tuple;
-import net.minecraft.util.math.vector.Vector3d;
+import com.mojang.datafixers.util.Pair;
+
+import net.minecraft.world.phys.Vec3;
 
 import java.util.Deque;
 
 public interface ITeleportLerpable {
-    Deque<Tuple<Vector3d, Vector3d>> getLerpPositions();
+    Deque<Pair<Vec3, Vec3>> getLerpPositions();
+
     boolean hasUsedPortal();
+
     void setHasUsedPortal(boolean hasUsedPortal);
 }

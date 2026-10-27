@@ -1,9 +1,9 @@
 package net.portalmod.core.math;
 
-import net.minecraft.util.math.vector.Vector3d;
-import net.minecraft.util.math.vector.Vector3f;
-import net.minecraft.util.math.vector.Vector3i;
-import net.minecraft.util.math.vector.Vector4f;
+import net.minecraft.core.Vec3i;
+
+import org.joml.Vector3f;
+import org.joml.Vector4f;
 
 public class Vec4 {
     public double x, y, z, w;
@@ -23,7 +23,7 @@ public class Vec4 {
         this(v.x(), v.y(), v.z(), v.w());
     }
 
-    public Vec4(Vector3d v) {
+    public Vec4(net.minecraft.world.phys.Vec3 v) {
         this(new Vec3(v));
     }
 
@@ -31,24 +31,21 @@ public class Vec4 {
         this(new Vec3(v));
     }
 
-    public Vec4(Vector3i v) {
+    public Vec4(Vec3i v) {
         this(new Vec3(v));
     }
-
-    //
 
     public Vec4 clone() {
         return new Vec4(this.x, this.y, this.z, this.w);
     }
 
     public boolean equals(Object o) {
-        if(!(o instanceof Vec4))
+        if (!(o instanceof Vec4)) {
             return false;
-        Vec4 v = (Vec4)o;
+        }
+        Vec4 v = (Vec4) o;
         return this.x == v.x && this.y == v.y && this.z == v.z && this.w == v.w;
     }
-    
-    //
 
     public Vec4 transform(Mat4 m) {
         double x = m.m00 * this.x + m.m01 * this.y + m.m02 * this.z + m.m03 * this.w;
@@ -61,7 +58,7 @@ public class Vec4 {
         this.w = w;
         return this;
     }
-    
+
     public Vec3 toVec3() {
         return new Vec3(this.x, this.y, this.z);
     }

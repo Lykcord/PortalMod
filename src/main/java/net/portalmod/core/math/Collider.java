@@ -1,10 +1,12 @@
 package net.portalmod.core.math;
 
 import com.google.common.collect.Lists;
-import net.minecraft.util.Direction;
-import net.minecraft.util.math.AxisAlignedBB;
 
-import javax.annotation.Nullable;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.AABB;
+
+import org.jspecify.annotations.Nullable;
+
 import java.util.List;
 import java.util.Optional;
 import java.util.Stack;
@@ -12,16 +14,17 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class Collider {
-    public static Optional<Vec3> collide(Direction.Axis axis, AxisAlignedBB collider, AxisAlignedBB colliding) {
+    public static Optional<Vec3> collide(Direction.Axis axis, AABB collider, AABB colliding) {
         double collision1 = colliding.max(axis) - collider.min(axis);
         double collision2 = collider.max(axis) - colliding.min(axis);
 
-        if(collision1 <= 0 || collision2 <= 0)
+        if (collision1 <= 0 || collision2 <= 0) {
             return Optional.empty();
+        }
 
         Vec3 reaction = Vec3.fromAxis(axis);
 
-        if(collision1 < collision2) {
+        if (collision1 < collision2) {
             reaction.negate().mul(collision1);
         } else {
             reaction.mul(collision2);
@@ -30,45 +33,51 @@ public class Collider {
         return Optional.of(reaction);
     }
 
-    public static Optional<List<Vec3>> collideExceptAxis(@Nullable Direction.Axis axis, AxisAlignedBB collider, AxisAlignedBB colliding) {
+    public static Optional<List<Vec3>> collideExceptAxis(Direction.@Nullable Axis axis, AABB collider, AABB colliding) {
         List<Vec3> reactions = Lists.newArrayList();
-        for(Direction.Axis a : Direction.Axis.values()) {
-            if(a == axis)
+        for (Direction.Axis a : Direction.Axis.values()) {
+            if (a == axis) {
                 continue;
+            }
 
             Optional<Vec3> reaction = Collider.collide(a, collider, colliding);
-            if(!reaction.isPresent())
+            if (!reaction.isPresent()) {
                 return Optional.empty();
+            }
             reactions.add(reaction.get());
         }
         return Optional.of(reactions);
     }
 
-    public static boolean intersect(Direction.Axis axis, AxisAlignedBB collider, AxisAlignedBB colliding) {
+    public static boolean intersect(Direction.Axis axis, AABB collider, AABB colliding) {
         return collider.min(axis) < colliding.max(axis) && collider.max(axis) > colliding.min(axis);
     }
 
-    public static boolean intersectExceptAxis(@Nullable Direction.Axis axis, AxisAlignedBB collider, AxisAlignedBB colliding) {
-        for(Direction.Axis a : Direction.Axis.values()) {
-            if(a == axis)
+    public static boolean intersectExceptAxis(Direction.@Nullable Axis axis, AABB collider, AABB colliding) {
+        for (Direction.Axis a : Direction.Axis.values()) {
+            if (a == axis) {
                 continue;
+            }
 
-            if(!intersect(a, collider, colliding))
+            if (!intersect(a, collider, colliding)) {
                 return false;
+            }
         }
         return true;
     }
 
-    public static boolean pointInBox(Direction.Axis axis, AxisAlignedBB collider, Vec3 point) {
+    public static boolean pointInBox(Direction.Axis axis, AABB collider, Vec3 point) {
         return point.choose(axis) > collider.min(axis) && point.choose(axis) < collider.max(axis);
     }
 
-    public static boolean pointInBoxExceptAxis(Direction.Axis axis, AxisAlignedBB collider, Vec3 point) {
-        for(Direction.Axis a : Direction.Axis.values()) {
-            if(a == axis)
+    public static boolean pointInBoxExceptAxis(Direction.Axis axis, AABB collider, Vec3 point) {
+        for (Direction.Axis a : Direction.Axis.values()) {
+            if (a == axis) {
                 continue;
-            if(!pointInBox(a, collider, point))
+            }
+            if (!pointInBox(a, collider, point)) {
                 return false;
+            }
         }
         return true;
     }
@@ -79,10 +88,11 @@ public class Collider {
         return combinations;
     }
 
-    private static void recurseCombinations(List<List<Integer>> combinations, int base, int digits, int depth, Stack<Integer> currentCombination) {
-        for(int i = 0; i < base; i++) {
+    private static void recurseCombinations(
+            List<List<Integer>> combinations, int base, int digits, int depth, Stack<Integer> currentCombination) {
+        for (int i = 0; i < base; i++) {
             currentCombination.push(i);
-            if(depth < digits - 1) {
+            if (depth < digits - 1) {
                 recurseCombinations(combinations, base, digits, depth + 1, currentCombination);
             } else {
                 combinations.add(currentCombination);
@@ -95,9 +105,9 @@ public class Collider {
         List<List<Integer>> combinations = listCombinations(fs.length, as.length);
         List<R> combined = Lists.newArrayList();
 
-        for(List<Integer> combination : combinations) {
-            B[] bs = (B[])(new Object[as.length]);
-            for(int j = 0; j < as.length; j++) {
+        for (List<Integer> combination : combinations) {
+            B[] bs = (B[]) (new Object[as.length]);
+            for (int j = 0; j < as.length; j++) {
                 A a = as[j];
                 B b = fs[combination.get(j)].apply(a);
                 bs[j] = b;
@@ -108,15 +118,11 @@ public class Collider {
         return combined;
     }
 
-    public static List<AABBVertex> getVertices(AxisAlignedBB box) {
-//        return Collider.<Direction.Axis, Double, Vec3>combineFunctions(
-//                Direction.Axis.values(),
-//                new Function[] {
-//                        axis -> box.min((Direction.Axis)axis),
-//                        axis -> box.max((Direction.Axis)axis)
-//                },
-//                x -> new Vec3(x[0], x[1], x[2])
-//        );
+    public static List<AABBVertex> getVertices(AABB box) {
+        //                Direction.Axis.values(),
+        //                        axis -> box.min((Direction.Axis)axis),
+        //                        axis -> box.max((Direction.Axis)axis)
+        //                x -> new Vec3(x[0], x[1], x[2])
 
         return Lists.newArrayList(
                 new AABBVertex(new Vec3(box.minX, box.minY, box.minZ), AABBVertex.Corner.LEFT_DOWN_FORWARDS),
@@ -126,12 +132,13 @@ public class Collider {
                 new AABBVertex(new Vec3(box.minX, box.minY, box.maxZ), AABBVertex.Corner.LEFT_DOWN_BACKWARDS),
                 new AABBVertex(new Vec3(box.maxX, box.minY, box.maxZ), AABBVertex.Corner.RIGHT_DOWN_BACKWARDS),
                 new AABBVertex(new Vec3(box.minX, box.maxY, box.maxZ), AABBVertex.Corner.LEFT_UP_BACKWARDS),
-                new AABBVertex(new Vec3(box.maxX, box.maxY, box.maxZ), AABBVertex.Corner.RIGHT_UP_BACKWARDS)
-        );
+                new AABBVertex(new Vec3(box.maxX, box.maxY, box.maxZ), AABBVertex.Corner.RIGHT_UP_BACKWARDS));
     }
 
-    public static List<AABBVertex> getFaceCorners(Direction direction, AxisAlignedBB box) {
+    public static List<AABBVertex> getFaceCorners(Direction direction, AABB box) {
         Direction.Axis axis = direction.getAxis();
-        return getVertices(box).stream().filter(v -> v.getPosition().choose(axis) == AABBUtil.getSide(box, direction)).collect(Collectors.toList());
+        return getVertices(box).stream()
+                .filter(v -> v.getPosition().choose(axis) == AABBUtil.getSide(box, direction))
+                .collect(Collectors.toList());
     }
 }

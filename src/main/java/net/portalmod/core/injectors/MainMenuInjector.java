@@ -1,56 +1,27 @@
 package net.portalmod.core.injectors;
 
-import java.util.List;
+import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.resources.Identifier;
 
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screen.MainMenuScreen;
-import net.minecraft.client.renderer.RenderSkyboxCube;
-import net.minecraft.client.util.Splashes;
-import net.minecraft.util.ResourceLocation;
-import net.portalmod.PortalMod;
-import net.portalmod.mixins.accessors.MainMenuScreenAccessor;
-import net.portalmod.mixins.accessors.MinecraftAccessor;
-import net.portalmod.mixins.accessors.SplashesAccessor;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class MainMenuInjector {
-    private static final int NO_PANORAMAS = 7;
-    private static final ResourceLocation EDITION = new ResourceLocation(PortalMod.MODID, "textures/gui/title/edition.png");
-    private static final ResourceLocation SPLASHES = new ResourceLocation(PortalMod.MODID, "texts/splashes.txt");
-    private static ResourceLocation prevEdition;
-    private static RenderSkyboxCube prevCubeMap;
-    private static ResourceLocation prevSplashes;
+    public static final int NO_PANORAMAS = 7;
     public static boolean fading = true;
-    public static boolean needsUpdate = true;
-    
-    public static MainMenuScreen getInjectedMenu(boolean custom, boolean fadeIn) {
-        if(prevEdition == null)
-            prevEdition = MainMenuScreenAccessor.pmGetEdition();
-        if(prevCubeMap == null)
-            prevCubeMap = MainMenuScreenAccessor.pmGetCubeMap();
-        if(prevSplashes == null)
-            prevSplashes = SplashesAccessor.pmGetLocation();
+    private static Identifier panorama = panorama(0);
 
-        RenderSkyboxCube CUBEMAP = new RenderSkyboxCube(new ResourceLocation(PortalMod.MODID,
-                "textures/gui/title/background/panorama" + (long)(Math.random() * NO_PANORAMAS)));
+    public static Identifier panorama(int index) {
+        return Identifier.fromNamespaceAndPath("portalmod", "textures/gui/title/background/panorama" + index);
+    }
 
-        MainMenuScreenAccessor.pmSetCubeMap(custom ? CUBEMAP : prevCubeMap);
+    public static Identifier selectedPanorama() {
+        return panorama;
+    }
 
-        if(!needsUpdate) return new MainMenuScreen(false);
-
-        MainMenuScreenAccessor.pmSetEdition(custom ? EDITION : prevEdition);
-        SplashesAccessor.pmSetLocation(custom ? SPLASHES : prevSplashes);
-
-        try {
-            Minecraft minecraft = Minecraft.getInstance();
-            Splashes splashes = new Splashes(Minecraft.getInstance().getUser());
-
-            List<String> splashList = ((SplashesAccessor)splashes).pmPrepare(minecraft.getResourceManager(), minecraft.getProfiler());
-            ((SplashesAccessor)splashes).pmApply(splashList, minecraft.getResourceManager(), minecraft.getProfiler());
-            ((MinecraftAccessor)Minecraft.getInstance()).pmSetSplashManager(splashes);
-        } catch(Exception e) {
-            e.printStackTrace();
+    public static TitleScreen getInjectedMenu(boolean custom, boolean fadeIn) {
+        if (custom) {
+            panorama = panorama(ThreadLocalRandom.current().nextInt(NO_PANORAMAS));
         }
-        
-        return new MainMenuScreen(false);
+        return new TitleScreen(fadeIn);
     }
 }

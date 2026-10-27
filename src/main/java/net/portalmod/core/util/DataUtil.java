@@ -15,7 +15,7 @@ public class DataUtil {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
 
         int readCount;
-        while((readCount = is.read(data, 0, data.length)) != -1) {
+        while ((readCount = is.read(data, 0, data.length)) != -1) {
             buffer.write(data, 0, readCount);
         }
 
@@ -27,8 +27,9 @@ public class DataUtil {
     }
 
     public static File tryCreateFolder(File folder) throws IOException {
-        if(!(folder.exists() || folder.mkdirs()))
+        if (!(folder.exists() || folder.mkdirs())) {
             throw new IOException("Failed to create folder: " + folder.getName());
+        }
         return folder;
     }
 
@@ -39,7 +40,7 @@ public class DataUtil {
     public static byte[] loadFile(File file) throws IOException {
         byte[] data;
 
-        try(FileInputStream fis = new FileInputStream(file)) {
+        try (FileInputStream fis = new FileInputStream(file)) {
             data = readInputStream(fis);
         }
 
@@ -51,7 +52,7 @@ public class DataUtil {
     }
 
     public static void writeFile(File file, byte[] data) throws IOException {
-        try(FileOutputStream fos = new FileOutputStream(file)) {
+        try (FileOutputStream fos = new FileOutputStream(file)) {
             fos.write(data);
         }
     }
@@ -71,14 +72,14 @@ public class DataUtil {
 
         try {
             connection.connect();
-            if(connection.getResponseCode() != 200) {
+            if (connection.getResponseCode() != 200) {
                 throw new HttpRetryException(connection.getResponseMessage(), connection.getResponseCode());
             }
 
             is = connection.getInputStream();
             data = readInputStream(is);
         } finally {
-            if(is != null) {
+            if (is != null) {
                 is.close();
             }
         }

@@ -1,11 +1,12 @@
 package net.portalmod.core.chunkviewer;
 
-import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.level.ChunkPos;
 
-import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
+
+import javax.swing.*;
 
 public class ChunkViewer {
     private static final ChunkViewer INSTANCE = new ChunkViewer();
@@ -20,17 +21,13 @@ public class ChunkViewer {
         window.getContentPane().setPreferredSize(new Dimension(300, 300));
         window.pack();
         window.setResizable(false);
-
-//        chunks.add(new ChunkPos(0, 0));
-//        chunks.add(new ChunkPos(10, 10));
-//        chunks.add(new ChunkPos(-3, -5));
     }
 
     private class ChunkViewPane extends JPanel {
         @Override
         protected void paintComponent(Graphics g) {
-            for(ChunkPos pos : chunks.toArray(new ChunkPos[0])) {
-                g.fillRect(pos.x * 1 + 150, pos.z * 1 + 150, 1, 1);
+            for (ChunkPos pos : chunks.toArray(new ChunkPos[0])) {
+                g.fillRect(pos.x() + 150, pos.z() + 150, 1, 1);
             }
         }
     }
