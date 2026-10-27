@@ -7,9 +7,12 @@ import io.netty.handler.codec.DecoderException;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
+import net.portalmod.common.entities.TestElementEntity;
 import net.portalmod.core.interfaces.ITeleportLerpable;
 import net.portalmod.core.util.ClientExecution;
 
@@ -32,7 +35,8 @@ public class SEntityPortalTeleportLerpPacket implements AbstractPacket<SEntityPo
         this.xRot = xRot;
         this.yRot = yRot;
         this.isOnGround = isOnGround;
-        this.lerpPositions = lerpPositions;
+        // Encoding happens on the network thread, after the server clears its history.
+        this.lerpPositions = new ArrayDeque<>(lerpPositions);
     }
 
     @Override
@@ -93,12 +97,22 @@ public class SEntityPortalTeleportLerpPacket implements AbstractPacket<SEntityPo
             if (entity != null && entity != Minecraft.getInstance().player) {
                 Vec3 lastPos = packet.lerpPositions.peekLast().getSecond();
                 entity.syncPacketPositionCodec(lastPos.x, lastPos.y, lastPos.z);
+                if (entity instanceof TestElementEntity && entity.getVehicle() instanceof LocalPlayer) {
+                    entity.getInterpolation().cancel();
+                    ((ITeleportLerpable) entity).getLerpPositions().clear();
+                    return;
+                }
 
                 float yRot = (float) (packet.yRot * 360) / 256.0F;
                 float xRot = (float) (packet.xRot * 360) / 256.0F;
-                // todo replace with proper invocation of setRot
                 entity.setYRot(xRot % 360.0F);
                 entity.setXRot(yRot % 360.0F);
+                entity.yRotO = entity.getYRot();
+                entity.xRotO = entity.getXRot();
+                if (entity instanceof LivingEntity living) {
+                    living.yBodyRot = living.yBodyRotO = entity.getYRot();
+                    living.yHeadRot = living.yHeadRotO = entity.getYRot();
+                }
                 entity.setOnGround(packet.isOnGround);
 
                 Deque<Pair<Vec3, Vec3>> lerpPositions = ((ITeleportLerpable) entity).getLerpPositions();

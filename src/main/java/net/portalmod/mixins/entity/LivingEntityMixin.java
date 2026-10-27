@@ -3,7 +3,6 @@ package net.portalmod.mixins.entity;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
-import com.mojang.datafixers.util.Pair;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -35,7 +34,6 @@ import net.portalmod.core.init.ItemInit;
 import net.portalmod.core.init.SoundInit;
 import net.portalmod.core.injectors.LivingEntityInjector;
 import net.portalmod.core.interfaces.IDragCancelable;
-import net.portalmod.core.interfaces.ITeleportLerpable;
 import net.portalmod.core.util.ClientExecution;
 import net.portalmod.core.util.ModUtil;
 
@@ -47,8 +45,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-
-import java.util.Deque;
 
 @Mixin(LivingEntity.class)
 public abstract class LivingEntityMixin extends Entity implements Flingable, IDragCancelable, IGelAffected {
@@ -85,24 +81,6 @@ public abstract class LivingEntityMixin extends Entity implements Flingable, IDr
     @Inject(method = "tick", at = @At("HEAD"))
     private void pmPreTick(CallbackInfo ci) {
         LivingEntityInjector.onPreTick((LivingEntity) (Object) this);
-    }
-
-    @Inject(method = "aiStep", at = @At("HEAD"))
-    private void pmLerpPosWithPortal(CallbackInfo info) {
-        Deque<Pair<Vec3, Vec3>> lerpPositions = ((ITeleportLerpable) this).getLerpPositions();
-        if (lerpPositions.isEmpty() || !this.level().isClientSide()) {
-            return;
-        }
-
-        Pair<Vec3, Vec3> currentLerpPos = lerpPositions.pop();
-        this.setPos(currentLerpPos.getSecond().x, currentLerpPos.getSecond().y, currentLerpPos.getSecond().z);
-        this.xo = currentLerpPos.getFirst().x;
-        this.yo = currentLerpPos.getFirst().y;
-        this.zo = currentLerpPos.getFirst().z;
-        this.xOld = currentLerpPos.getFirst().x;
-        this.yOld = currentLerpPos.getFirst().y;
-        this.zOld = currentLerpPos.getFirst().z;
-        ((LivingEntity) (Object) this).getInterpolation().cancel();
     }
 
     @Redirect(

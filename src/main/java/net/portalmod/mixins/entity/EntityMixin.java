@@ -1,6 +1,8 @@
 package net.portalmod.mixins.entity;
 
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
 import com.mojang.datafixers.util.Pair;
 
@@ -164,8 +166,24 @@ public abstract class EntityMixin
         this.justUsedPortal = -1;
     }
 
-    // TODO this causes the player to not be able to swim
-    // this may cause the player not to be able to swim, however it is required for the portals to work
+    @Inject(method = "commonTick", at = @At("RETURN"))
+    private void pmReplayPortalMovement(CallbackInfo info) {
+        Entity entity = (Entity) (Object) this;
+        if (!entity.level().isClientSide() || lerpPositions.isEmpty()) {
+            return;
+        }
+        // commonTick runs once for every entity. Applying this in both living and
+        // remote-player aiStep consumed two history samples for remote players.
+        var sample = lerpPositions.removeFirst();
+        entity.getInterpolation().cancel();
+        entity.setPos(sample.getSecond());
+        entity.xo = entity.xOld = sample.getFirst().x;
+        entity.yo = entity.yOld = sample.getFirst().y;
+        entity.zo = entity.zOld = sample.getFirst().z;
+    }
+
+    // Transform crossings before vanilla edge handling; ordinary movement (including swimming)
+    // still goes through the original movement path.
     @Redirect(
             method = "move",
             at =
@@ -230,15 +248,16 @@ public abstract class EntityMixin
         return hitbox;
     }
 
-    @Redirect(
+    @WrapOperation(
             method = "collide(Lnet/minecraft/world/phys/Vec3;)Lnet/minecraft/world/phys/Vec3;",
             at =
                     @At(
                             value = "INVOKE",
                             target =
                                     "Lnet/minecraft/world/level/Level;getEntityCollisions(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/phys/AABB;)Ljava/util/List;"))
-    private List<VoxelShape> pmAddAdditionalCollisions(Level level, Entity mover, AABB sweptBounds) {
-        List<VoxelShape> collisions = new ArrayList<>(level.getEntityCollisions(mover, sweptBounds));
+    private List<VoxelShape> pmAddAdditionalCollisions(
+            Level level, Entity mover, AABB sweptBounds, Operation<List<VoxelShape>> original) {
+        List<VoxelShape> collisions = new ArrayList<>(original.call(level, mover, sweptBounds));
         AABB bounds = mover.getBoundingBox();
         for (Entity entity :
                 level.getEntities(

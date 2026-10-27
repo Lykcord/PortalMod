@@ -39,7 +39,8 @@ public class TrackedEntityMixin {
         if (victim.hasUsedPortal() && (this.entity instanceof LivingEntity)) {
             byte xRot = (byte) Mth.floor(this.entity.getYRot() * 256.0F / 360.0F);
             byte yRot = (byte) Mth.floor(this.entity.getXRot() * 256.0F / 360.0F);
-            PacketInit.sendToAll(
+            PacketInit.sendToTrackingEntity(
+                    this.entity,
                     new SEntityPortalTeleportLerpPacket(
                             this.entity.getId(), xRot, yRot, this.entity.onGround(), victim.getLerpPositions()));
         } else {

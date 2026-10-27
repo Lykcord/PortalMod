@@ -41,10 +41,12 @@ import net.portalmod.core.init.DamageTypeInit;
 import net.portalmod.core.init.EntityTagInit;
 import net.portalmod.core.init.GameRuleInit;
 import net.portalmod.core.init.SoundInit;
+import net.portalmod.core.interfaces.ITeleportLerpable;
 import net.portalmod.core.math.AABBUtil;
 import net.portalmod.core.math.Mat4;
 import net.portalmod.core.math.Vec3;
 import net.portalmod.core.packet.ClientNetworking;
+import net.portalmod.core.util.HeldObjectPositioning;
 import net.portalmod.core.util.ModUtil;
 
 import org.joml.Vector3f;
@@ -79,6 +81,7 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
     private Mat4 holderJustTeleportedMatrix;
     private Integer oldPortalChainLength;
     private Float eyeHeightOld;
+    private Double holdingOffsetOld;
 
     public TestElementEntity(EntityType<? extends LivingEntity> entityType, Level level) {
         super(entityType, level);
@@ -220,6 +223,8 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
         }
 
         if (player.level().isClientSide()) {
+            this.getInterpolation().cancel();
+            ((ITeleportLerpable) this).getLerpPositions().clear();
             ClientNetworking.sendToServer(
                     new CPortalGunInteractionPacket.Builder(PortalGunInteraction.PICK_ENTITY)
                             .data(this.getId())
@@ -259,9 +264,14 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
             }
 
             this.checkForFizzlers(this);
-        } else {
-            Vec3 eyePos = new Vec3(player.getEyePosition(1).add(0, -0.4, 0));
-            Vec3 eyeOldPos = new Vec3(player.getEyePosition(0).add(0, -0.4, 0));
+        } else if (player.isLocalPlayer()) {
+            double holdingOffset =
+                    HeldObjectPositioning.eyeOffset(this.getBbHeight(), player.getEyeHeight(), player.getBbHeight());
+            Vec3 eyePos = new Vec3(player.getEyePosition(1).add(0, -holdingOffset, 0));
+            Vec3 eyeOldPos =
+                    new Vec3(
+                            player.getEyePosition(0)
+                                    .add(0, -(holdingOffsetOld == null ? holdingOffset : holdingOffsetOld), 0));
             Vec3 originalEyePos = eyePos.clone();
 
             // account for eye height
@@ -270,6 +280,7 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
                 eyeOldPos.add(0, eyeHeightOld, 0);
             }
             eyeHeightOld = player.getEyeHeight();
+            holdingOffsetOld = holdingOffset;
             Vec3 originalEyeOldPos = eyeOldPos.clone();
 
             Vec3 ridingVersor =
@@ -492,6 +503,8 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
         this.oldRidingVec = null;
         this.oldPortalChainLength = null;
         this.serverOldPos = null;
+        this.eyeHeightOld = null;
+        this.holdingOffsetOld = null;
         return super.startRiding(entity, force, sendEvent);
     }
 
