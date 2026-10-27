@@ -22,5 +22,5 @@ void main() {
     portalClipDistance = dot(PortalClipPlane, PortalModelView * position);
     // Keep the opening across the eye plane; the fragment shader restores its depth.
     gl_Position.z = 0.0;
-    portalUv = uv;
+    portalUv = vec2(1.0) - uv;
 }

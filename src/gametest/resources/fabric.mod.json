@@ -12,6 +12,7 @@
       "net.portalmod.FirstPersonPoseClientTest",
       "net.portalmod.AntlineFacesClientTest",
       "net.portalmod.PortalCloudsClientTest",
+      "net.portalmod.PortalBackToBackClientTest",
       "net.portalmod.PortalBoundaryVisibilityClientTest",
       "net.portalmod.PortalOptionsLayoutClientTest",
       "net.portalmod.TurretDamageClientTest",

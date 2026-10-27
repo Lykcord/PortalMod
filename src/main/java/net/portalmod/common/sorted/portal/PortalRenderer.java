@@ -356,7 +356,6 @@ public class PortalRenderer {
             PROFILE.push("render");
             activeSurfaces = prepare(view, allocator, projection, target, sky, borrowed);
             mainRender.run();
-            drawHighlights(view, target, projection);
         } finally {
             scenes.endFrame();
             for (var resource : borrowed) {
@@ -383,6 +382,12 @@ public class PortalRenderer {
                             projection, view.clip(), RenderSystem.getDevice().getDeviceInfo().isZZeroToOne());
         }
         var surfaces = new ArrayList<PortalQuadRenderer.Surface>();
+        // Portal views cover highlights behind them, just as the old stencil mask did.
+        for (var highlight : view.highlights()) {
+            surfaces.add(
+                    PortalQuadRenderer.prepareHighlight(
+                            highlight.modelView(), projection, view.clip(), highlight.texture(), highlight.distance()));
+        }
         for (var opening : view.openings()) {
             RenderTarget target = null;
             var child = opening.child();
@@ -415,7 +420,6 @@ public class PortalRenderer {
                             skyProjection,
                             child.scene().state().blockOutlineRenderState != null,
                             sky);
-                    drawHighlights(child, target, childProjection);
                 } finally {
                     for (var resource : children) {
                         allocator.release(resource.descriptor(), resource.target());
@@ -450,21 +454,6 @@ public class PortalRenderer {
             context.submitNodeCollector().submitCustom(SubmitRenderPhases.SOLID, surface);
         }
         DuplicateEntityRenderer.submit(context);
-    }
-
-    private static void drawHighlights(View view, RenderTarget target, Matrix4f projection) {
-        for (var highlight : view.highlights()) {
-            PortalQuadRenderer.drawFrame(
-                    target,
-                    highlight.modelView(),
-                    projection,
-                    view.clip(),
-                    highlight.texture(),
-                    0,
-                    1,
-                    true,
-                    highlight.distance());
-        }
     }
 
     private static Identifier texture(String name) {

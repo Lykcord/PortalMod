@@ -183,6 +183,11 @@ public final class PortalQuadRenderer {
         return prepare(FRAME, modelView, projection, clip, texture, null, index, count, 0, new Vector4f(1));
     }
 
+    public static Surface prepareHighlight(
+            Matrix4fc modelView, Matrix4fc projection, Vector4fc clip, Identifier texture, float distance) {
+        return prepare(HIGHLIGHT, modelView, projection, clip, texture, null, 0, 1, distance, new Vector4f(1));
+    }
+
     private static Surface prepare(
             RenderPipeline pipeline,
             Matrix4fc modelView,
