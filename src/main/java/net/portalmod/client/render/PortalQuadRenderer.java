@@ -230,6 +230,7 @@ public final class PortalQuadRenderer {
                                 GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE);
         try (data) {
             writeUniforms(data.data(), modelView, projection, clip, index, count, intensity, color);
+            data.data().putFloat(156, device.getDeviceInfo().isZZeroToOne() ? 1 : 0);
             sceneUv.get(176, data.data());
         }
         return new Surface(

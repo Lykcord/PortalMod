@@ -28,6 +28,11 @@ void main() {
     if (portalClipDistance < 0.0) {
         discard;
     }
+    float depth = portalScreenPosition.z / portalScreenPosition.w;
+    if (PortalAnimation.w < 0.5) {
+        depth = depth * 0.5 + 0.5;
+    }
+    gl_FragDepth = clamp(depth, 0.0, 1.0);
 #ifdef PORTAL_FRAME
 #ifdef PORTAL_HIGHLIGHT
     fragColor = texture(FrameTexture, portalUv);

@@ -20,7 +20,7 @@ void main() {
     gl_Position = PortalMvp * position;
     portalScreenPosition = gl_Position;
     portalClipDistance = dot(PortalClipPlane, PortalModelView * position);
-    // Retain the near-plane depth clamp while the player's eye crosses the opening.
-    gl_Position.z = min(gl_Position.z, gl_Position.w * 0.999999);
+    // Keep the opening across the eye plane; the fragment shader restores its depth.
+    gl_Position.z = 0.0;
     portalUv = uv;
 }
