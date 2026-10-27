@@ -1,50 +1,45 @@
 package net.portalmod.common.sorted.autoportal;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
-import com.mojang.blaze3d.vertex.IVertexBuilder;
-import net.minecraft.client.renderer.entity.model.EntityModel;
-import net.minecraft.client.renderer.model.ModelRenderer;
-import net.minecraft.entity.Entity;
+import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.model.geom.PartPose;
+import net.minecraft.client.model.geom.builders.CubeListBuilder;
+import net.minecraft.client.model.geom.builders.LayerDefinition;
+import net.minecraft.client.model.geom.builders.MeshDefinition;
 
-public class AutoPortalModel extends EntityModel<Entity> {
-	public final ModelRenderer wawas;
-	public final ModelRenderer frame;
+public final class AutoPortalModel {
+    public final ModelPart wawas;
+    public final ModelPart frame;
 
-	public AutoPortalModel() {
-		texWidth = 64;
-		texHeight = 64;
+    public AutoPortalModel() {
+        var root = createLayer().bakeRoot();
+        wawas = root.getChild("lights");
+        frame = root.getChild("frame");
+    }
 
-		wawas = new ModelRenderer(this);
-		wawas.setPos(0.0F, 24.0F, 0.0F);
-		wawas.texOffs(17, 1).addBox(7.0F, -14.0F, 0.0F, 4.0F, 2.0F, 0.0F, 0.0F, true);
-		wawas.texOffs(17, 4).addBox(7.0F, -9.0F, 0.0F, 4.0F, 2.0F, 0.0F, 0.0F, true);
-		wawas.texOffs(17, 7).addBox(7.0F, -4.0F, 0.0F, 4.0F, 2.0F, 0.0F, 0.0F, true);
-		wawas.texOffs(17, 7).addBox(7.0F, 2.0F, 0.0F, 4.0F, 2.0F, 0.0F, 0.0F, true);
-		wawas.texOffs(17, 10).addBox(7.0F, 7.0F, 0.0F, 4.0F, 2.0F, 0.0F, 0.0F, true);
-		wawas.texOffs(17, 13).addBox(7.0F, 12.0F, 0.0F, 4.0F, 2.0F, 0.0F, 0.0F, true);
-		wawas.texOffs(17, 1).addBox(-11.0F, -14.0F, 0.0F, 4.0F, 2.0F, 0.0F, 0.0F, false);
-		wawas.texOffs(17, 4).addBox(-11.0F, -9.0F, 0.0F, 4.0F, 2.0F, 0.0F, 0.0F, false);
-		wawas.texOffs(17, 7).addBox(-11.0F, -4.0F, 0.0F, 4.0F, 2.0F, 0.0F, 0.0F, false);
-		wawas.texOffs(17, 7).addBox(-11.0F, 2.0F, 0.0F, 4.0F, 2.0F, 0.0F, 0.0F, false);
-		wawas.texOffs(17, 10).addBox(-11.0F, 7.0F, 0.0F, 4.0F, 2.0F, 0.0F, 0.0F, false);
-		wawas.texOffs(17, 13).addBox(-11.0F, 12.0F, 0.0F, 4.0F, 2.0F, 0.0F, 0.0F, false);
-
-		frame = new ModelRenderer(this);
-		frame.setPos(-11.0F, 40.0F, 1.05F);
-		frame.texOffs(1, 1).addBox(-2.0F, -32.0F, -1.05F, 2.0F, 32.0F, 1.0F, 0.0F, false);
-		frame.texOffs(8, 1).addBox(0.0F, -32.0F, -1.05F, 1.0F, 32.0F, 1.0F, 0.0F, false);
-		frame.texOffs(1, 1).addBox(22.0F, -32.0F, -1.05F, 2.0F, 32.0F, 1.0F, 0.0F, true);
-		frame.texOffs(8, 1).addBox(21.0F, -32.0F, -1.05F, 1.0F, 32.0F, 1.0F, 0.0F, true);
-	}
-
-	@Override
-	public void setupAnim(Entity entity, float limbSwing, float limbSwingAmount, float ageInTicks, float netHeadYaw, float headPitch){
-		//previously the render function, render code was moved to a method below
-	}
-
-	@Override
-	public void renderToBuffer(MatrixStack matrixStack, IVertexBuilder buffer, int packedLight, int packedOverlay, float red, float green, float blue, float alpha){
-		wawas.render(matrixStack, buffer, packedLight, packedOverlay, red, green, blue, alpha);
-		frame.render(matrixStack, buffer, packedLight, packedOverlay, red, green, blue, alpha);
-	}
+    public static LayerDefinition createLayer() {
+        var mesh = new MeshDefinition();
+        var lights = CubeListBuilder.create();
+        int[] ys = {-14, -9, -4, 2, 7, 12};
+        int[] vs = {1, 4, 7, 7, 10, 13};
+        for (int i = 0; i < ys.length; i++) {
+            lights.texOffs(17, vs[i]).mirror().addBox(7, ys[i], 0, 4, 2, 0);
+            lights.texOffs(17, vs[i]).mirror(false).addBox(-11, ys[i], 0, 4, 2, 0);
+        }
+        mesh.getRoot().addOrReplaceChild("lights", lights, PartPose.offset(0, 24, 0));
+        mesh.getRoot()
+                .addOrReplaceChild(
+                        "frame",
+                        CubeListBuilder.create()
+                                .texOffs(1, 1)
+                                .addBox(-2, -32, -1.05F, 2, 32, 1)
+                                .texOffs(8, 1)
+                                .addBox(0, -32, -1.05F, 1, 32, 1)
+                                .texOffs(1, 1)
+                                .mirror()
+                                .addBox(22, -32, -1.05F, 2, 32, 1)
+                                .texOffs(8, 1)
+                                .addBox(21, -32, -1.05F, 1, 32, 1),
+                        PartPose.offset(-11, 40, 1.05F));
+        return LayerDefinition.create(mesh, 64, 64);
+    }
 }

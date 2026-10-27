@@ -1,23 +1,26 @@
 package net.portalmod.mixins.accessors;
 
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.client.Camera;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.Vec3;
+
+import org.joml.Matrix4f;
+import org.joml.Matrix4fc;
+import org.joml.Vector3f;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
-
-import net.minecraft.client.renderer.ActiveRenderInfo;
-import net.minecraft.util.math.vector.Vector3d;
 import org.spongepowered.asm.mixin.gen.Invoker;
 
-@Mixin(ActiveRenderInfo.class)
+@Mixin(Camera.class)
 public interface ActiveRenderInfoAccessor {
+    @Invoker(value = "setPosition")
+    void pmSetPosition(Vec3 value);
+
     @Accessor(value = "position")
-    void pmSetPosition(Vector3d value);
-    
-    @Accessor(value = "position")
-    Vector3d pmGetPosition();
+    Vec3 pmGetPosition();
 
     @Accessor(value = "blockPosition")
-    BlockPos.Mutable pmGetBlockPosition();
+    BlockPos.MutableBlockPos pmGetBlockPosition();
 
     @Accessor(value = "eyeHeight")
     float pmGetEyeHeight();
@@ -27,4 +30,37 @@ public interface ActiveRenderInfoAccessor {
 
     @Invoker(value = "setRotation")
     void pmSetRotation(float yaw, float pitch);
+
+    @Accessor("initialized")
+    void pmSetInitialized(boolean initialized);
+
+    @Accessor("fov")
+    void pmSetFov(float fov);
+
+    @Accessor("hudFov")
+    float pmGetHudFov();
+
+    @Accessor("hudFov")
+    void pmSetHudFov(float fov);
+
+    @Accessor("depthFar")
+    float pmGetDepthFar();
+
+    @Accessor("depthFar")
+    void pmSetDepthFar(float distance);
+
+    @Accessor("up")
+    Vector3f pmGetUp();
+
+    @Accessor("left")
+    Vector3f pmGetLeft();
+
+    @Invoker("setupPerspective")
+    void pmSetupPerspective(float near, float far, float fov, float width, float height);
+
+    @Invoker("createProjectionMatrixForCulling")
+    Matrix4f pmProjectionForCulling();
+
+    @Invoker("prepareCullFrustum")
+    void pmPrepareCullFrustum(Matrix4fc view, Matrix4f projection, Vec3 position);
 }

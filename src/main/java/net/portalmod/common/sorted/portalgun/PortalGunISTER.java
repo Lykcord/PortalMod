@@ -1,207 +1,216 @@
 package net.portalmod.common.sorted.portalgun;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
-import com.mojang.blaze3d.vertex.IVertexBuilder;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.IRenderTypeBuffer;
-import net.minecraft.client.renderer.LightTexture;
-import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.model.ItemCameraTransforms.TransformType;
-import net.minecraft.client.renderer.model.RenderMaterial;
-import net.minecraft.client.renderer.texture.AtlasTexture;
-import net.minecraft.client.renderer.tileentity.ItemStackTileEntityRenderer;
-import net.minecraft.item.DyeColor;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.util.math.vector.Vector3f;
-import net.portalmod.client.animation.PortalGunAnimatedTexture;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Axis;
+
+import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.client.renderer.special.SpecialModelRenderer;
+import net.minecraft.client.renderer.texture.UvMapping;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.resources.Identifier;
+import net.minecraft.util.LightCoordsUtil;
+import net.minecraft.world.entity.ItemOwner;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.DyeColor;
+import net.minecraft.world.item.ItemDisplayContext;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.CustomData;
+import net.portalmod.client.animation.AnimatedModel;
 import net.portalmod.common.sorted.portalgun.skins.ClientSkinManager;
 import net.portalmod.core.init.AnimationInit;
 import net.portalmod.core.util.Colour;
 
+import org.joml.Matrix4f;
+import org.joml.Vector3fc;
+
 import java.util.UUID;
+import java.util.function.Consumer;
 
-public class PortalGunISTER extends ItemStackTileEntityRenderer {
-    public static UUID renderingPortalGunOwner;
+public final class PortalGunISTER implements SpecialModelRenderer<PortalGunISTER.State> {
+    public record State(
+            PortalGunModel model,
+            AnimatedModel.State animation,
+            Identifier texture,
+            UvMapping frame,
+            int bodyColor,
+            int stripeColor,
+            int lightColor,
+            boolean lightOn) {}
 
-    public PortalGunISTER() {}
-    
-    @Override
-    public void renderByItem(ItemStack itemStack, TransformType transformType, MatrixStack matrixStack, IRenderTypeBuffer renderTypeBuffer, int packedLight, int packedOverlay) {
-        matrixStack.pushPose();
-        
-        switch(transformType) {
-        case FIRST_PERSON_LEFT_HAND:
-            matrixStack.translate(.2, .1, 0);
-            matrixStack.scale(1.5f, 1.5f, 1.5f);
-            break;
-            
-        case FIRST_PERSON_RIGHT_HAND:
-            matrixStack.translate(.8, .1, 0);
-            matrixStack.scale(1.5f, 1.5f, 1.5f);
-            break;
-            
-        case GROUND:
-            matrixStack.translate(.5, .35, .5);
-            matrixStack.scale(.75f, .75f, .75f);
-            break;
-            
-        case GUI:
-            matrixStack.translate(.55, .3, 0);
-            matrixStack.mulPose(Vector3f.XP.rotationDegrees(30));
-            matrixStack.mulPose(Vector3f.YP.rotationDegrees(-135));
-            break;
-            
-        case HEAD:
-            matrixStack.translate(.5, .5, 0);
-            matrixStack.scale(1.5f, 1.5f, 1.5f);
-            break;
-            
-        case THIRD_PERSON_LEFT_HAND:
-            matrixStack.translate(.5, .2, .1);
-            break;
-            
-        case THIRD_PERSON_RIGHT_HAND:
-            matrixStack.translate(.5, .2, .1);
-            break;
-            
-        case FIXED:
-            matrixStack.translate(.5, .3, .45);
-//            matrixStack.mulPose(Vector3f.XP.rotationDegrees(30));
-            matrixStack.mulPose(Vector3f.YP.rotationDegrees(90));
-            matrixStack.scale(1.3f, 1.3f, 1.3f);
-            break;
-            
-        default:
-            break;
+    public State extractArgument(ItemStack stack, ItemDisplayContext context, ItemOwner owner) {
+        var data = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
+        UUID uuid = PortalGun.getUUID(stack).orElse(null);
+        var model = PortalGunModelManager.getInstance().getModel(uuid);
+        UUID player = owner != null && owner.asLivingEntity() instanceof Player entity ? entity.getUUID() : null;
+        var skins = ClientSkinManager.getInstance();
+        String skin =
+                switch (context) {
+                    case FIRST_PERSON_LEFT_HAND,
+                            FIRST_PERSON_RIGHT_HAND,
+                            THIRD_PERSON_LEFT_HAND,
+                            THIRD_PERSON_RIGHT_HAND,
+                            HEAD ->
+                            skins.getSelectedSkinForPlayer(player);
+                    case GUI -> skins.hasUUID() ? skins.getSelectedSkinForPlayer(null) : "default";
+                    default -> "default";
+                };
+        if (context == ItemDisplayContext.GUI) {
+            player = null;
         }
-        
-        boolean animate = true;
-        
-        if (transformType == TransformType.FIRST_PERSON_RIGHT_HAND || transformType == TransformType.FIRST_PERSON_LEFT_HAND) {
-//            if (InputMappings.isKeyDown(Minecraft.getInstance().getWindow().getWindow(), GLFW.GLFW_KEY_G)) {
-//                PORTALGUN_MODEL.startAnimation(itemStack, "shoot");
-//                AnimationInit.RECOIL_X.start();
-//                AnimationInit.RECOIL_Y.start();
-//            }
-            
-//            if(InputMappings.isKeyDown(Minecraft.getInstance().getWindow().getWindow(), GLFW.GLFW_KEY_H)) {
-//                AnimationInit.FIZZLE_BODY.start();
-//            }
-            
-            float xRot = (float) ((float) AnimationInit.RECOIL_X.compute(System.currentTimeMillis())
-                    + 1.5 * AnimationInit.LIFT.compute(System.currentTimeMillis()));
-            float yRot = (float) ((float) AnimationInit.RECOIL_Y.compute(System.currentTimeMillis())
-                    + AnimationInit.LIFT.compute(System.currentTimeMillis()));
-            float zRot = (float) ((float) AnimationInit.FIZZLE_BODY.compute(System.currentTimeMillis())
-                    + .5 * AnimationInit.LIFT.compute(System.currentTimeMillis()));
-            
-            matrixStack.translate(0, 0, .5);
-            matrixStack.mulPose(Vector3f.YP.rotationDegrees(yRot));
-            matrixStack.mulPose(Vector3f.XP.rotationDegrees(xRot));
-            matrixStack.mulPose(Vector3f.ZP.rotationDegrees(zRot));
-            matrixStack.translate(0, 0, -.5);
-        } else {
-            animate = false;
+        boolean preview = context == ItemDisplayContext.GUI && data.contains("PreviewSkin");
+        if (preview) {
+            skin = data.getStringOr("PreviewSkin", "default");
         }
-
-        Colour colour = new Colour(255, 0, 0, 255);
-        Colour oppositeColour = new Colour(255, 0, 0, 255);
-        Colour lastPortalColor = new Colour(64, 59, 75, 255);
-        Colour stripeColour = new Colour(255, 255, 255, 0);
-
-        boolean gunLightOn = false;
-
-        CompoundNBT nbt = itemStack.getOrCreateTag();
-//        if(nbt.contains("portalHue")) {
-//            int color = DyeColor.valueOf(nbt.getString("portalHue").toUpperCase()).getColorValue();
-//            float[] hsv = new float[3];
-//            Color.RGBtoHSB((color >> 16) & 0xFF, (color >> 8) & 0xFF, color & 0xFF, hsv);
-//
-//            colour = new Colour(Color.HSBtoRGB(hsv[0], .8f, 1));
-//            oppositeColour = new Colour(Color.HSBtoRGB(hsv[0] + .5f, .8f, 1));
-//        }
-//        if(nbt.contains("color")) {
-//            lastPortalColor = nbt.getByte("color") == 1 ? colour : oppositeColour;
-//        }
-//        if(nbt.contains("gunHue")) {
-//            int color = DyeColor.valueOf(nbt.getString("gunHue").toUpperCase()).getColorValue();
-//            float[] hsv = new float[3];
-//            Color.RGBtoHSB((color >> 16) & 0xFF, (color >> 8) & 0xFF, color & 0xFF, hsv);
-//        }
-        if(nbt.contains("AccentColor")) {
-            if (nbt.getString("AccentColor").equals("none")) {
-                stripeColour = new Colour(255, 255, 255, 0);
-            } else stripeColour = new Colour(DyeColor.byName(nbt.getString("AccentColor"), DyeColor.RED).getTextureDiffuseColors());
+        var texture = skins.getSkinTexture(skin);
+        if (texture == null) {
+            return null;
         }
-        if(nbt.contains("LastPortal")) {
-            int lastPortal = nbt.getInt("LastPortal");
-            gunLightOn = true;
-
-            if(lastPortal == -1) {
-                lastPortalColor = PortalGun.getLeftColour(nbt);
-            } else if(lastPortal == 1) {
-                lastPortalColor = PortalGun.getRightColour(nbt);
-            } else {
-                gunLightOn = false;
-            }
-
-            if(gunLightOn) {
-                lastPortalColor.darken(0.15f + 0.05f * (float) Math.sin((System.currentTimeMillis() / 10.0 % 360) * Math.PI / 180));
-            }
+        int tint = preview ? data.getIntOr("PreviewTint", 0) : skins.getTintForPlayerOnSkin(player, skin);
+        int stripe = 0x00FFFFFF;
+        String accent = data.getStringOr("AccentColor", "none");
+        if (!accent.equals("none")) {
+            stripe = 0xFF000000 | DyeColor.byName(accent, DyeColor.RED).getTextureDiffuseColor();
         }
-
-        UUID gunUUID = PortalGun.getUUID(itemStack).orElse(null);
-        PortalGunModel model = PortalGunModelManager.getInstance().getModel(gunUUID);
-
-        UUID actualRenderingPortalGunOwner = renderingPortalGunOwner;
-        String skin = "default";
-        switch(transformType) {
-            case FIRST_PERSON_LEFT_HAND:
-            case FIRST_PERSON_RIGHT_HAND:
-            case THIRD_PERSON_LEFT_HAND:
-            case THIRD_PERSON_RIGHT_HAND:
-            case HEAD:
-                skin = ClientSkinManager.getInstance().getSelectedSkinForPlayer(actualRenderingPortalGunOwner);
-                break;
-
-            case GUI:
-                if(ClientSkinManager.getInstance().hasUUID()) {
-                    skin = ClientSkinManager.getInstance().getSelectedSkinForPlayer(null);
-                }
-                actualRenderingPortalGunOwner = null;
-                break;
+        int last = data.getIntOr("LastPortal", 0);
+        boolean lightOn = last == -1 || last == 1;
+        Colour light =
+                last == -1
+                        ? PortalGun.getLeftColour(data)
+                        : last == 1 ? PortalGun.getRightColour(data) : new Colour(64, 59, 75, 255);
+        if (lightOn) {
+            light.darken(.15f + .05f * (float) Math.sin(Math.toRadians(System.currentTimeMillis() / 10.0 % 360)));
         }
-
-        int intTint = ClientSkinManager.getInstance().getTintForPlayerOnSkin(actualRenderingPortalGunOwner, skin);
-        Colour tint = intTint == 0 ? Colour.WHITE : new Colour(intTint).opaque();
-
-        renderGun(matrixStack, gunUUID, model, renderTypeBuffer,
-                ClientSkinManager.getInstance().getSkinTexture(skin),
-                stripeColour, lastPortalColor, tint, gunLightOn, animate, packedLight, packedOverlay);
-
-        matrixStack.popPose();
+        return new State(
+                model,
+                model.extractAnimation(uuid, context.firstPerson()),
+                texture.getTextureLocation(),
+                texture.frameMapping(),
+                tint == 0 ? 0xFFFFFFFF : tint | 0xFF000000,
+                stripe,
+                argb(light),
+                lightOn);
     }
 
-    public static void renderGun(MatrixStack matrixStack, UUID gunUUID, PortalGunModel model, IRenderTypeBuffer renderTypeBuffer, PortalGunAnimatedTexture texture, Colour stripeColour, Colour lastPortalColor, Colour tint, boolean gunLightOn, boolean animate, int packedLight, int packedOverlay) {
-        matrixStack.pushPose();
+    @Override
+    public State extractArgument(ItemStack stack) {
+        return extractArgument(stack, ItemDisplayContext.NONE, null);
+    }
 
-        matrixStack.mulPose(Vector3f.ZP.rotationDegrees(180));
-        matrixStack.translate(0, -1.5, 0);
+    static Matrix4f displayTransform(ItemStack stack, ItemDisplayContext context) {
+        var poses = new PoseStack();
+        switch (context) {
+            case FIRST_PERSON_LEFT_HAND -> {
+                poses.translate(.2, .1, 0);
+                poses.scale(1.5f, 1.5f, 1.5f);
+            }
+            case FIRST_PERSON_RIGHT_HAND -> {
+                poses.translate(.8, .1, 0);
+                poses.scale(1.5f, 1.5f, 1.5f);
+            }
+            case GROUND -> {
+                poses.translate(.5, .35, .5);
+                poses.scale(.75f, .75f, .75f);
+            }
+            case GUI -> {
+                var data = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
+                if (data.contains("PreviewSkin")) {
+                    poses.translate(.5, .5, .5);
+                    poses.rotateDegrees(Axis.XP, data.getFloatOr("PreviewX", 30));
+                    poses.rotateDegrees(Axis.YP, data.getFloatOr("PreviewY", -135));
+                    poses.rotateDegrees(Axis.ZP, data.getFloatOr("PreviewZ", 0));
+                    poses.translate(0, -.2, 0);
+                } else {
+                    poses.translate(.55, .3, 0);
+                    poses.rotateDegrees(Axis.XP, 30);
+                    poses.rotateDegrees(Axis.YP, -135);
+                }
+            }
+            case HEAD -> {
+                poses.translate(.5, .5, 0);
+                poses.scale(1.5f, 1.5f, 1.5f);
+            }
+            case THIRD_PERSON_LEFT_HAND, THIRD_PERSON_RIGHT_HAND -> poses.translate(.5, .2, .1);
+            case FIXED, ON_SHELF -> {
+                poses.translate(.5, .3, .45);
+                poses.rotateDegrees(Axis.YP, 90);
+                poses.scale(1.3f, 1.3f, 1.3f);
+            }
+            default -> {}
+        }
+        if (context.firstPerson()) {
+            long now = System.currentTimeMillis();
+            double lift = AnimationInit.LIFT.compute(now);
+            poses.translate(0, 0, .5);
+            poses.rotateDegrees(Axis.YP, (float) (AnimationInit.RECOIL_Y.compute(now) + lift));
+            poses.rotateDegrees(Axis.XP, (float) (AnimationInit.RECOIL_X.compute(now) + 1.5 * lift));
+            poses.rotateDegrees(Axis.ZP, (float) (AnimationInit.FIZZLE_BODY.compute(now) + .5 * lift));
+            poses.translate(0, 0, -.5);
+        }
+        return new Matrix4f(poses.last().pose());
+    }
 
-        IRenderTypeBuffer.Impl irendertypebuffer$impl = Minecraft.getInstance().levelRenderer.renderBuffers.bufferSource();
-        irendertypebuffer$impl.endBatch();
+    @Override
+    public void submit(
+            State state,
+            PoseStack poses,
+            SubmitNodeCollector collector,
+            int light,
+            int overlay,
+            boolean foil,
+            int outline) {
+        if (state == null) {
+            return;
+        }
+        poses.pushPose();
+        poses.rotateDegrees(Axis.ZP, 180);
+        poses.translate(0, -1.5, 0);
+        var type = RenderTypes.entityCutout(state.texture);
+        collector.submitModel(
+                state.model.bodyLayer,
+                state.animation,
+                poses,
+                type,
+                light,
+                overlay,
+                state.bodyColor,
+                state.frame,
+                outline);
+        if ((state.stripeColor >>> 24) != 0) {
+            collector.submitModel(
+                    state.model.stripeLayer,
+                    state.animation,
+                    poses,
+                    type,
+                    light,
+                    overlay,
+                    state.stripeColor,
+                    state.frame,
+                    outline);
+        }
+        collector.submitModel(
+                state.model.colourLayer,
+                state.animation,
+                poses,
+                type,
+                state.lightOn ? LightCoordsUtil.FULL_BRIGHT : light,
+                overlay,
+                state.lightColor,
+                state.frame,
+                outline);
+        poses.popPose();
+    }
 
-        IVertexBuilder ivertexbuilder = renderTypeBuffer.getBuffer(RenderType.entityCutoutNoCull(texture.getTextureLocation()));
+    @Override
+    public void getExtents(Consumer<Vector3fc> consumer) {
+        var poses = new PoseStack();
+        poses.rotateDegrees(Axis.ZP, 180);
+        poses.translate(0, -1.5, 0);
+        new PortalGunModel().root().getExtentsForGui(poses, consumer);
+    }
 
-        texture.setupAnimation();
-        model.render(gunUUID, model.gun, matrixStack, ivertexbuilder, packedLight, packedOverlay, tint, !animate);
-        model.render(gunUUID, model.stripes, matrixStack, ivertexbuilder, packedLight, packedOverlay, stripeColour, !animate);
-        model.render(gunUUID, model.colour, matrixStack, ivertexbuilder, gunLightOn ? LightTexture.pack(15, 15) : packedLight, packedOverlay, lastPortalColor, !animate);
-        irendertypebuffer$impl.endBatch();
-        texture.endAnimation();
-
-        matrixStack.popPose();
+    private static int argb(Colour c) {
+        return c.getIntA() << 24 | c.getIntR() << 16 | c.getIntG() << 8 | c.getIntB();
     }
 
     public static void startShootAnimation(UUID gunUUID) {

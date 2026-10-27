@@ -1,38 +1,32 @@
 package net.portalmod.client.screens.widgets;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
-import com.mojang.blaze3d.systems.RenderSystem;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.widget.button.Button;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.text.ITextComponent;
-import net.minecraft.util.text.StringTextComponent;
-import net.minecraft.util.text.TextFormatting;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.input.InputWithModifiers;
+import net.minecraft.network.chat.Component;
 
-public class ToggleButton extends Button {
+public class ToggleButton extends Button.Plain {
     private boolean value;
 
-    public ToggleButton(int x, int y, int width, int height, ITextComponent text, IPressable pressable, boolean value) {
-        super(x, y, width, height, text, ($1) -> {});
-        this.value = value;
-    }
-
-    public ToggleButton(int x, int y, int width, int height, ITextComponent text, IPressable pressable, boolean value, ITooltip tooltip) {
-        super(x, y, width, height, text, ($1) -> {}, tooltip);
+    public ToggleButton(int x, int y, int width, int height, Component text, OnPress pressable, boolean value) {
+        super(x, y, width, height, text, pressable, DEFAULT_NARRATION);
         this.value = value;
     }
 
     @Override
-    public void onClick(double p_230982_1_, double p_230982_3_) {
-        super.onClick(p_230982_1_, p_230982_3_);
+    public void onPress(InputWithModifiers input) {
         value = !value;
+        super.onPress(input);
     }
 
     @Override
-    public ITextComponent getMessage() {
-        return new StringTextComponent(super.getMessage().getString() + ": "
-                + (value ? TextFormatting.GREEN + "ON" : TextFormatting.RED + "OFF"));
+    public Component getMessage() {
+        return Component.empty()
+                .append(super.getMessage())
+                .append(": ")
+                .append(
+                        Component.translatable(value ? "options.on" : "options.off")
+                                .withStyle(value ? ChatFormatting.GREEN : ChatFormatting.RED));
     }
 
     public boolean getValue() {

@@ -1,24 +1,22 @@
 package net.portalmod.common.sorted.portalgun;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
-import com.mojang.blaze3d.systems.RenderSystem;
-import net.minecraft.client.MainWindow;
+import com.mojang.blaze3d.platform.Window;
+
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.BufferBuilder;
-import net.minecraft.client.renderer.Tessellator;
-import net.minecraft.client.renderer.WorldVertexBufferUploader;
-import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.DyeColor;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.math.BlockRayTraceResult;
-import net.minecraft.util.math.RayTraceContext;
-import net.minecraft.util.math.vector.Matrix4f;
-import net.minecraft.util.math.vector.Vector3d;
-import net.minecraft.world.GameType;
-import net.minecraft.world.World;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.DyeColor;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 import net.portalmod.PortalMod;
 import net.portalmod.common.blocks.PortalableBlock;
 import net.portalmod.common.sorted.portal.ClientPortalManager;
@@ -32,11 +30,12 @@ public class PortalGunCrosshairRenderer {
     private static final String BASE = "textures/gui/crosshair/portalgun_crosshair_";
     private static final int CROSSHAIR_SIZE = 33;
 
-    public static void render(MatrixStack matrixStack) {
+    public static void render(GuiGraphicsExtractor graphics) {
         Minecraft mc = Minecraft.getInstance();
 
-        if(mc.level == null || mc.player == null || mc.gameMode == null)
+        if (mc.level == null || mc.player == null || mc.gameMode == null) {
             return;
+        }
 
         ItemStack itemStack = mc.player.getMainHandItem();
         Optional<UUID> uuid = PortalGun.getUUID(itemStack);
@@ -44,24 +43,27 @@ public class PortalGunCrosshairRenderer {
         boolean isFirstPerson = mc.options.getCameraType().isFirstPerson();
         boolean isSpectator = mc.gameMode.getPlayerMode() == GameType.SPECTATOR;
 
-        if(!(itemStack.getItem() instanceof PortalGun) || !isFirstPerson || isSpectator || !uuid.isPresent())
+        if (!(itemStack.getItem() instanceof PortalGun) || !isFirstPerson || isSpectator || !uuid.isPresent()) {
             return;
+        }
 
         boolean primaryFilled;
         boolean secondaryFilled;
 
-        if(isClassicCrosshair) {
-            PlayerEntity player = mc.player;
-            World level = mc.level;
+        if (isClassicCrosshair) {
+            Player player = mc.player;
+            Level level = mc.level;
 
-            Vector3d rayPath = player.getViewVector(0).scale(mc.gameRenderer.getRenderDistance());
-            Vector3d from = player.getEyePosition(0);
-            Vector3d to = from.add(rayPath);
+            Vec3 rayPath = player.getViewVector(0).scale(mc.options.getEffectiveRenderDistance() * 16.0);
+            Vec3 from = player.getEyePosition(0);
+            Vec3 to = from.add(rayPath);
 
-            RayTraceContext rayCtx = new RayTraceContext(from, to, RayTraceContext.BlockMode.COLLIDER, RayTraceContext.FluidMode.ANY, null);
-            BlockRayTraceResult rayTrace = PortalGun.customClip(level, rayCtx);
+            ClipContext rayCtx = new ClipContext(from, to, ClipContext.Block.COLLIDER, ClipContext.Fluid.ANY, player);
+            BlockHitResult rayTrace = PortalGun.customClip(level, rayCtx);
 
-            boolean isPortalable = PortalableBlock.isPortalable(mc.level.getBlockState(rayTrace.getBlockPos()), rayTrace.getDirection(), level);
+            boolean isPortalable =
+                    PortalableBlock.isPortalable(
+                            mc.level.getBlockState(rayTrace.getBlockPos()), rayTrace.getDirection(), level);
             primaryFilled = isPortalable;
             secondaryFilled = isPortalable;
             // todo actually figure out whether the portal is placeable there
@@ -69,97 +71,82 @@ public class PortalGunCrosshairRenderer {
             primaryFilled = ClientPortalManager.getInstance().hasFullOrPartial(uuid.get(), PortalEnd.PRIMARY);
             secondaryFilled = ClientPortalManager.getInstance().hasFullOrPartial(uuid.get(), PortalEnd.SECONDARY);
 
-            CompoundNBT tag = itemStack.getTag();
-            if(tag != null && (tag.contains("Locked") && !tag.getString("Locked").equals("None"))) {
-                if(tag.getString("Locked").equals("Right")) {
+            CompoundTag tag = itemStack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
+            if (tag != null && (tag.contains("Locked") && !tag.getStringOr("Locked", "").equals("None"))) {
+                if (tag.getStringOr("Locked", "").equals("Right")) {
                     secondaryFilled = primaryFilled;
                 }
 
-                if(tag.getString("Locked").equals("Left")) {
+                if (tag.getStringOr("Locked", "").equals("Left")) {
                     primaryFilled = secondaryFilled;
                 }
             }
         }
 
-        CompoundNBT nbt = itemStack.getOrCreateTag();
+        CompoundTag nbt = itemStack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
         DyeColor primaryColor = PortalGun.getLeftDyeColour(nbt);
         DyeColor secondaryColor = PortalGun.getRightDyeColour(nbt);
-        renderCrosshairPart(matrixStack, PortalEnd.PRIMARY, primaryColor, primaryFilled);
-        renderCrosshairPart(matrixStack, PortalEnd.SECONDARY, secondaryColor, secondaryFilled);
+        renderCrosshairPart(graphics, PortalEnd.PRIMARY, primaryColor, primaryFilled);
+        renderCrosshairPart(graphics, PortalEnd.SECONDARY, secondaryColor, secondaryFilled);
 
-        if(isClassicCrosshair) {
-            CompoundNBT tag = itemStack.getTag();
-            if(tag != null) {
-                if(tag.contains("LastPortal") && (!tag.contains("Locked") || tag.getString("Locked").equals("None"))) {
-                    int lastPortal = tag.getInt("LastPortal");
-                    if(lastPortal == -1) {
-                        renderCrosshairDot(matrixStack, PortalEnd.PRIMARY, primaryColor);
+        if (isClassicCrosshair) {
+            CompoundTag tag = itemStack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
+            if (tag != null) {
+                if (tag.contains("LastPortal")
+                        && (!tag.contains("Locked") || tag.getStringOr("Locked", "").equals("None"))) {
+                    int lastPortal = tag.getIntOr("LastPortal", 0);
+                    if (lastPortal == -1) {
+                        renderCrosshairDot(graphics, PortalEnd.PRIMARY, primaryColor);
                     }
-                    if(lastPortal == 1) {
-                        renderCrosshairDot(matrixStack, PortalEnd.SECONDARY, secondaryColor);
+                    if (lastPortal == 1) {
+                        renderCrosshairDot(graphics, PortalEnd.SECONDARY, secondaryColor);
                     }
                 }
             }
         }
     }
 
-    private static void renderCrosshairPart(MatrixStack matrixStack, PortalEnd end, DyeColor color, boolean filled) {
-        ResourceLocation texture = new ResourceLocation(PortalMod.MODID, BASE + color.getName() + ".png");
-        MainWindow window = Minecraft.getInstance().getWindow();
+    private static void renderCrosshairPart(
+            GuiGraphicsExtractor graphics, PortalEnd end, DyeColor color, boolean filled) {
+        Identifier texture = Identifier.fromNamespaceAndPath(PortalMod.MODID, BASE + color.getName() + ".png");
+        Window window = Minecraft.getInstance().getWindow();
         int x = centeredCrosshairOrigin(window.getGuiScaledWidth(), CROSSHAIR_SIZE);
         int y = centeredCrosshairOrigin(window.getGuiScaledHeight(), CROSSHAIR_SIZE);
 
-        RenderSystem.disableBlend();
-        Minecraft.getInstance().getTextureManager().bind(texture);
-        blit(matrixStack, x, y, 0,
-                filled ? CROSSHAIR_SIZE : 0, end == PortalEnd.PRIMARY ? 0 : CROSSHAIR_SIZE, CROSSHAIR_SIZE, CROSSHAIR_SIZE, CROSSHAIR_SIZE * 2, CROSSHAIR_SIZE * 2);
-        RenderSystem.enableBlend();
+        graphics.blit(
+                RenderPipelines.GUI_TEXTURED,
+                texture,
+                x,
+                y,
+                filled ? CROSSHAIR_SIZE : 0,
+                end == PortalEnd.PRIMARY ? 0 : CROSSHAIR_SIZE,
+                CROSSHAIR_SIZE,
+                CROSSHAIR_SIZE,
+                CROSSHAIR_SIZE * 2,
+                CROSSHAIR_SIZE * 2);
     }
 
-    private static void renderCrosshairDot(MatrixStack matrixStack, PortalEnd end, DyeColor color) {
-        ResourceLocation texture = new ResourceLocation(PortalMod.MODID, BASE + "dots_" + color.getName() + ".png");
-        MainWindow window = Minecraft.getInstance().getWindow();
+    private static void renderCrosshairDot(GuiGraphicsExtractor graphics, PortalEnd end, DyeColor color) {
+        Identifier texture =
+                Identifier.fromNamespaceAndPath(PortalMod.MODID, BASE + "dots_" + color.getName() + ".png");
+        Window window = Minecraft.getInstance().getWindow();
         int x = centeredCrosshairOrigin(window.getGuiScaledWidth(), CROSSHAIR_SIZE);
         int y = centeredCrosshairOrigin(window.getGuiScaledHeight(), CROSSHAIR_SIZE);
 
-        RenderSystem.disableBlend();
-        Minecraft.getInstance().getTextureManager().bind(texture);
-        blit(matrixStack, x, y, 0,
-                0, end == PortalEnd.PRIMARY ? 0 : CROSSHAIR_SIZE, CROSSHAIR_SIZE, CROSSHAIR_SIZE, CROSSHAIR_SIZE, CROSSHAIR_SIZE * 2);
-        RenderSystem.enableBlend();
+        graphics.blit(
+                RenderPipelines.GUI_TEXTURED,
+                texture,
+                x,
+                y,
+                0,
+                end == PortalEnd.PRIMARY ? 0 : CROSSHAIR_SIZE,
+                CROSSHAIR_SIZE,
+                CROSSHAIR_SIZE,
+                CROSSHAIR_SIZE,
+                CROSSHAIR_SIZE * 2);
     }
 
     static int centeredCrosshairOrigin(int guiSize, int spriteSize) {
         return (guiSize - spriteSize) / 2;
-    }
-
-    private static void blit(MatrixStack matrixStack, int x, int y, int z, float u0, float v0, int uw, int uh, int width, int height) {
-        innerBlit(matrixStack,
-                x, x + uw,
-                y, y + uh,
-                z,
-                uw, uh, u0, v0,
-                width, height);
-    }
-    
-    private static void innerBlit(MatrixStack matrixStack, int x0, int x1, int y0, int y1, int z, int uw, int uh, float u0, float v0, int width, int height) {
-        innerBlit(matrixStack.last().pose(),
-                x0, x1, y0, y1, z,
-                (u0 + 0) / (float)width,
-                (u0 + uw) / (float)width,
-                (v0 + 0) / (float)height,
-                (v0 + uh) / (float)height);
-    }
-    
-    private static void innerBlit(Matrix4f matrix, int x0, int x1, int y0, int y1, int z, float u0, float u1, float v0, float v1) {
-        BufferBuilder bufferbuilder = Tessellator.getInstance().getBuilder();
-        bufferbuilder.begin(7, DefaultVertexFormats.POSITION_COLOR_TEX);
-        bufferbuilder.vertex(matrix, (float)x0, (float)y1, (float)z).color(1f, 1f, 1f, 1f).uv(u0, v1).endVertex();
-        bufferbuilder.vertex(matrix, (float)x1, (float)y1, (float)z).color(1f, 1f, 1f, 1f).uv(u1, v1).endVertex();
-        bufferbuilder.vertex(matrix, (float)x1, (float)y0, (float)z).color(1f, 1f, 1f, 1f).uv(u1, v0).endVertex();
-        bufferbuilder.vertex(matrix, (float)x0, (float)y0, (float)z).color(1f, 1f, 1f, 1f).uv(u0, v0).endVertex();
-        bufferbuilder.end();
-        RenderSystem.enableAlphaTest();
-        WorldVertexBufferUploader.end(bufferbuilder);
     }
 }

@@ -1,71 +1,69 @@
 package net.portalmod.common.sorted.button;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.client.renderer.model.BakedQuad;
-import net.minecraft.client.renderer.model.IBakedModel;
-import net.minecraft.client.renderer.model.ItemOverrideList;
-import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.util.Direction;
-import net.minecraftforge.client.model.data.IDynamicBakedModel;
-import net.minecraftforge.client.model.data.IModelData;
-import net.portalmod.core.math.BiHashMap;
+import net.fabricmc.fabric.api.client.model.loading.v1.ModelLoadingPlugin;
+import net.minecraft.client.renderer.block.dispatch.BlockStateModel;
+import net.minecraft.client.renderer.block.dispatch.SingleVariant;
+import net.minecraft.client.resources.model.ModelBaker;
+import net.minecraft.client.resources.model.ResolvableModel;
+import net.minecraft.client.resources.model.SimpleModelWrapper;
+import net.minecraft.core.Direction;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.level.block.state.BlockState;
+import net.portalmod.core.init.BlockInit;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
+public final class SuperButtonBakedModel {
+    private SuperButtonBakedModel() {}
 
-public class SuperButtonBakedModel implements IDynamicBakedModel {
-    private final BiHashMap<Direction, QuadBlockCorner, IBakedModel> variants = new BiHashMap<>();
-    private final IBakedModel base;
-    
-    public SuperButtonBakedModel(IBakedModel base) {
-        this.base = base;
+    public static void init() {
+        ModelLoadingPlugin.register(
+                plugin ->
+                        plugin.registerBlockStateResolver(
+                                BlockInit.SUPER_BUTTON.get(),
+                                context -> {
+                                    for (var state : context.block().getStateDefinition().getPossibleStates()) {
+                                        var corner = state.getValue(SuperButtonBlock.CORNER);
+                                        int variant =
+                                                corner == QuadBlockCorner.DOWN_RIGHT
+                                                                || corner == QuadBlockCorner.UP_LEFT
+                                                        ? 1
+                                                        : 2;
+                                        var model =
+                                                Identifier.fromNamespaceAndPath(
+                                                        "portalmod",
+                                                        "block/super_button_"
+                                                                + state.getValue(SuperButtonBlock.MODE)
+                                                                        .getSerializedName()
+                                                                + "_"
+                                                                + variant
+                                                                + (state.getValue(SuperButtonBlock.PRESSED)
+                                                                        ? "_pressed"
+                                                                        : "_unpressed")
+                                                                + (state.getValue(SuperButtonBlock.ACTIVE)
+                                                                        ? "_on"
+                                                                        : "_off"));
+                                        context.setModel(
+                                                state,
+                                                new Unbaked(model, state.getValue(SuperButtonBlock.FACING), corner));
+                                    }
+                                }));
     }
 
-    @SuppressWarnings("deprecation")
-    @Nonnull
-    @Override
-    public List<BakedQuad> getQuads(@Nullable BlockState state, @Nullable Direction side, @Nonnull Random rand, @Nonnull IModelData extraData) {
-        IBakedModel variant = this.variants.get(state.getValue(SuperButtonBlock.FACING), state.getValue(SuperButtonBlock.CORNER));
-        if(variant == null)
-            return new ArrayList<>();
-        return variant.getQuads(state, side, rand);
-    }
-    
-    public void addVariant(Direction facing, QuadBlockCorner corner, IBakedModel variant) {
-        this.variants.put(facing, corner, variant);
-    }
+    private record Unbaked(Identifier model, Direction facing, QuadBlockCorner corner)
+            implements BlockStateModel.UnbakedRoot {
+        @Override
+        public BlockStateModel bake(BlockState state, ModelBaker baker) {
+            return new SingleVariant(
+                    SimpleModelWrapper.bake(baker, model, new SuperButtonModelTransform(facing, corner)));
+        }
 
-    @Override
-    public boolean useAmbientOcclusion() {
-        return base.useAmbientOcclusion();
-    }
+        @Override
+        public Object visualEqualityGroup(BlockState state) {
+            return this;
+        }
 
-    @Override
-    public boolean isGui3d() {
-        return base.isGui3d();
-    }
-
-    @Override
-    public boolean isCustomRenderer() {
-        return base.isCustomRenderer();
-    }
-
-    @Override
-    public boolean usesBlockLight() {
-        return base.usesBlockLight();
-    }
-
-    @SuppressWarnings("deprecation")
-    @Override
-    public TextureAtlasSprite getParticleIcon() {
-        return base.getParticleIcon();
-    }
-
-    @Override
-    public ItemOverrideList getOverrides() {
-        return ItemOverrideList.EMPTY;
+        @Override
+        public void resolveDependencies(ResolvableModel.Resolver resolver) {
+            resolver.markDependency(model);
+        }
     }
 }

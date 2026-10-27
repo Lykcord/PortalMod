@@ -1,177 +1,166 @@
 package net.portalmod.common.sorted.turret;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
-import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.PoseStack;
+
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.BufferBuilder;
-import net.minecraft.client.renderer.IRenderTypeBuffer;
-import net.minecraft.client.renderer.Tessellator;
-import net.minecraft.client.renderer.culling.ClippingHelper;
-import net.minecraft.client.renderer.entity.EntityRendererManager;
-import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
-import net.minecraft.client.renderer.vertex.VertexBuffer;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.vector.Vector3d;
-import net.minecraft.util.math.vector.Vector3f;
+import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.culling.Frustum;
+import net.minecraft.client.renderer.entity.EntityRendererProvider;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.resources.Identifier;
+import net.minecraft.util.LightCoordsUtil;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
 import net.portalmod.PortalMod;
 import net.portalmod.common.entities.TestElementEntityRenderer;
 import net.portalmod.core.math.Mat4;
-import net.portalmod.core.math.Vec3;
 
-public class TurretRenderer extends TestElementEntityRenderer<TurretEntity, TurretModel<TurretEntity>> {
-//    private static final ResourceLocation TEXTURE = new ResourceLocation(PortalMod.MODID, "textures/entity/turret/turret.png");
-    private static final ResourceLocation[] TEXTURE = new ResourceLocation[] {
-            new ResourceLocation(PortalMod.MODID, "textures/entity/turret/turret.png"),
-            new ResourceLocation(PortalMod.MODID, "textures/entity/turret/turret_off.png"),
-    };
-    private static final VertexBuffer LASER_BUFFER = new VertexBuffer(DefaultVertexFormats.POSITION_TEX_COLOR);
-    public static TurretState state = TurretState.RESTING;
+import org.joml.Quaternionf;
 
-    public TurretRenderer(EntityRendererManager erm) {
-        super(erm, new TurretModel<>(), 0.5f);
-        this.addLayer(new TurretEyeLayer<>(this));
+public class TurretRenderer extends TestElementEntityRenderer<TurretEntity, TurretRenderState, TurretModel> {
+    private static final Identifier TEXTURE =
+            Identifier.fromNamespaceAndPath(PortalMod.MODID, "textures/entity/turret/turret.png");
+    private static final Identifier DEAD_TEXTURE =
+            Identifier.fromNamespaceAndPath(PortalMod.MODID, "textures/entity/turret/turret_off.png");
+    private static final RenderType LASER =
+            RenderTypes.entityTranslucentEmissive(
+                    Identifier.fromNamespaceAndPath(PortalMod.MODID, "textures/entity/turret/laser.png"));
+
+    public TurretRenderer(EntityRendererProvider.Context context) {
+        super(context, new TurretModel(), .5F);
+        addLayer(new TurretEyeLayer(this));
     }
 
     @Override
-    public ResourceLocation getTextureLocation(TurretEntity turret) {
-        return TEXTURE[(turret.getState() == TurretState.DEAD) ? 1 : 0];
+    public TurretRenderState createRenderState() {
+        return new TurretRenderState();
     }
 
     @Override
-    public void render(TurretEntity turret, float a, float partialTicks, MatrixStack matrixStack, IRenderTypeBuffer renderTypeBuffer, int light) {
-//        if(super.shouldRender(turret, ))
-        TurretState turretState = turret.getState();
+    public Identifier getTextureLocation(TurretRenderState state) {
+        return state.turretState == TurretState.DEAD ? DEAD_TEXTURE : TEXTURE;
+    }
 
-        float fallAnimTick = Math.min(turret.getAnimationTicks() + partialTicks, turret.fallDuration);
-        float fallAmount = 90F * (fallAnimTick * fallAnimTick) / (turret.fallDuration * turret.fallDuration);
-        int tipDir = turret.getTipDirectionRight() ? 1 : -1;
-        fallAmount *= tipDir;
-        float tipOffset = 0.2F;
-        float halfModelHeight = 0.8F;
-
-        if (turretState == TurretState.DEAD) {
-            fallAmount = 90F * tipDir;
-        }
-
-        if (!turretState.isStanding()) {
-            Vector3f lookAngle = new Vector3f(turret.getLookAngle().multiply(1, 0, 1).normalize());
-
-            matrixStack.pushPose();
-            float progress = (turretState == TurretState.FALLING ? fallAnimTick / turret.fallDuration : 1);
-            matrixStack.translate(
-                    lookAngle.z() * halfModelHeight * tipDir * progress,
-                    0,
-                    -lookAngle.x() * halfModelHeight * tipDir * progress
-            );
-
-            matrixStack.translate(-lookAngle.z() * tipOffset * tipDir, 0, lookAngle.x() * tipOffset * tipDir);
-            matrixStack.mulPose(lookAngle.rotationDegrees(fallAmount));
-            matrixStack.translate(lookAngle.z() * tipOffset * tipDir, 0, -lookAngle.x() * tipOffset * tipDir);
-        }
-
-        // todo dont render turret if clipped
-        super.render(turret, a, partialTicks, matrixStack, renderTypeBuffer, light);
-
-        if (!turretState.isStanding()) {
-            matrixStack.popPose();
-        }
-
-        if (turret.isFizzling()) {
+    @Override
+    public void extractRenderState(TurretEntity turret, TurretRenderState state, float partialTick) {
+        super.extractRenderState(turret, state, partialTick);
+        state.turretState = turret.getState();
+        state.entityYaw = turret.getYRot();
+        state.turretToTarget = turret.turretToTarget;
+        state.recoil =
+                state.turretState == TurretState.SHOOTING && turret.shouldShoot()
+                        ? ((turret.tickCount + turret.getId()) % 2 + partialTick) * .1F - .07F
+                        : 0;
+        float fallTick = Math.min(turret.getAnimationTicks() + partialTick, turret.fallDuration);
+        state.tipDirection = turret.getTipDirectionRight() ? 1 : -1;
+        state.fallAmount =
+                (state.turretState == TurretState.DEAD
+                                ? 90
+                                : 90 * fallTick * fallTick / (turret.fallDuration * turret.fallDuration))
+                        * state.tipDirection;
+        state.fallProgress = state.turretState == TurretState.FALLING ? fallTick / turret.fallDuration : 1;
+        state.renderLaser = !state.fizzling && state.turretState.isStanding() && turret.getHurtTime() == 0;
+        if (state.fizzling) {
             return;
         }
 
-        float rotation = -MathHelper.lerp(partialTicks, turret.yBodyRotO, turret.yBodyRot) * ((float)Math.PI / 180f);
-        float z = MathHelper.cos(rotation);
-        float x = MathHelper.sin(rotation);
-
-        // Eye position at eye height and 2.5 pixels to the direction it is looking in
-        Vector3d localEyePos = new Vector3d(x * 2.5 / 16, turret.getEyeHeight(), z * 2.5 / 16);
-        Vec3 turretEyePos = new Vec3(turret.getPosition(partialTicks).add(localEyePos));
-        Vec3 turretEyeToCamera = new Vec3(Minecraft.getInstance().gameRenderer.getMainCamera().getPosition())
-                .sub(turretEyePos)
-                .normalize();
-
-        // The position that the laser should ease towards
-        Vector3d targetPos;
-        if (turret.hasTarget() && turret.shouldLaserMove()) {
-            // Position at the target
-            targetPos = turret.targetEntity.getPosition(partialTicks).add(0, turret.targetEntity.getBbHeight() * 0.5, 0);
-        } else {
-            // Position 5 blocks in front of the turret, when not looking at anything
-            targetPos = turretEyePos.to3d().add(new Vector3d(x, 0, z).scale(5));
+        Minecraft client = Minecraft.getInstance();
+        float rotation = -Mth.lerp(partialTick, turret.yBodyRotO, turret.yBodyRot) * Mth.DEG_TO_RAD;
+        float x = Mth.sin(rotation), z = Mth.cos(rotation);
+        state.localEye = new Vec3(x * 2.5 / 16, turret.getEyeHeight(), z * 2.5 / 16);
+        Vec3 eye = turret.getPosition(partialTick).add(state.localEye);
+        Vec3 target =
+                turret.hasTarget() && turret.shouldLaserMove()
+                        ? turret.targetEntity.getPosition(partialTick).add(0, turret.targetEntity.getBbHeight() * .5, 0)
+                        : eye.add(new Vec3(x, 0, z).scale(5));
+        if (turret.lastLaserPos == Vec3.ZERO) {
+            turret.lastLaserPos = target;
         }
-
-        if (turret.lastLaserPos == Vector3d.ZERO) {
-            turret.lastLaserPos = targetPos;
-        }
-
-        // Exponential smoothing - https://lisyarus.github.io/blog/posts/exponential-smoothing.html
         if (turret.shouldLaserEase()) {
-            double deltaTime = Minecraft.getInstance().getDeltaFrameTime();
-            targetPos = turret.lastLaserPos.add(targetPos.subtract(turret.lastLaserPos).scale(1 - Math.exp(- 0.5 * deltaTime)));
+            double delta = client.getDeltaTracker().getGameTimeDeltaTicks();
+            target = turret.lastLaserPos.add(target.subtract(turret.lastLaserPos).scale(1 - Math.exp(-.5 * delta)));
         }
-
-        Vector3d turretToTarget = targetPos.subtract(turretEyePos.to3d());
-        turret.turretToTarget = turretToTarget;
-
-        Vec3 laserForward = new Vec3(turretToTarget).normalize();
-        Vec3 projectedTurretEyeToCamera = turretEyeToCamera.sub(laserForward.clone().mul(turretEyeToCamera.dot(laserForward)));
-        Vec3 laserUp = projectedTurretEyeToCamera.clone().normalize();
-        Vec3 laserRight = laserUp.clone().cross(laserForward).normalize();
-
-        Mat4 laserMatrix = new Mat4(
-                laserRight.x, laserUp.x, laserForward.x,0,
-                laserRight.y, laserUp.y, laserForward.y,0,
-                laserRight.z, laserUp.z, laserForward.z,0,
-                0,0, 0, 1
-        );
-
-        Vector3d rayPath = turretToTarget.scale(Minecraft.getInstance().gameRenderer.getRenderDistance() * 2);
-        Vector3d from = turretEyePos.to3d();
-        Vector3d to = from.add(rayPath);
-
-//        RayTraceContext rayCtx = new RayTraceContext(from, to, RayTraceContext.BlockMode.COLLIDER, RayTraceContext.FluidMode.NONE, null);
-//        RayTraceResult rayResult = turret.level.clip(rayCtx);
-
-//        float laserLen = (float)rayResult.getLocation().subtract(from).length();
-        float laserLen = (float) turret.traceAsFarAsPossible(from, to).getSecond().subtract(from).length();
-        float opacity = 1f - ((float)Math.sin((double)System.currentTimeMillis() / 1000d) + 1f) / 2f * 0.3f;
-
-        matrixStack.pushPose();
-        matrixStack.translate(localEyePos.x, localEyePos.y, localEyePos.z);
-        matrixStack.last().pose().multiply(laserMatrix.to4f());
-
-        BufferBuilder bufferBuilder = Tessellator.getInstance().getBuilder();
-        bufferBuilder.begin(7, DefaultVertexFormats.POSITION_TEX_COLOR);
-
-        bufferBuilder.vertex( 1/32f, 0, 0).uv(0, 0).color(1, 1, 1, opacity).endVertex();
-        bufferBuilder.vertex(-1/32f, 0, 0).uv(0, 1).color(1, 1, 1, opacity).endVertex();
-        bufferBuilder.vertex(-1/32f, 0, laserLen).uv(laserLen / 4f, 1).color(1, 1, 1, opacity).endVertex();
-        bufferBuilder.vertex( 1/32f, 0, laserLen).uv(laserLen / 4f, 0).color(1, 1, 1, opacity).endVertex();
-
-        bufferBuilder.end();
-        LASER_BUFFER.upload(bufferBuilder);
-
-        RenderSystem.defaultBlendFunc();
-        RenderSystem.enableDepthTest();
-        RenderSystem.enableBlend();
-//        RenderSystem.disableCull(); // Causes transparent texture issues
-
-        Minecraft.getInstance().textureManager.bind(new ResourceLocation(PortalMod.MODID, "textures/entity/turret/laser.png"));
-        LASER_BUFFER.bind();
-        DefaultVertexFormats.POSITION_TEX_COLOR.setupBufferState(0L);
-        if (turretState.isStanding() && turret.getHurtTime() == 0) LASER_BUFFER.draw(matrixStack.last().pose(), 7);
-        VertexBuffer.unbind();
-        DefaultVertexFormats.POSITION_TEX_COLOR.clearBufferState();
-
-        matrixStack.popPose();
-
-        turret.lastLaserPos = targetPos;
+        state.turretToTarget = target.subtract(eye);
+        turret.turretToTarget = state.turretToTarget;
+        net.portalmod.core.math.Vec3 forward = new net.portalmod.core.math.Vec3(state.turretToTarget).normalize();
+        net.portalmod.core.math.Vec3 toCamera =
+                new net.portalmod.core.math.Vec3(client.gameRenderer.mainCamera().position()).sub(eye).normalize();
+        net.portalmod.core.math.Vec3 up = toCamera.clone().sub(forward.clone().mul(toCamera.dot(forward))).normalize();
+        net.portalmod.core.math.Vec3 right = up.clone().cross(forward).normalize();
+        state.laserBasis.set(
+                new Mat4(
+                                right.x, up.x, forward.x, 0, right.y, up.y, forward.y, 0, right.z, up.z, forward.z, 0,
+                                0, 0, 0, 1)
+                        .to4f());
+        Vec3 end = eye.add(state.turretToTarget.scale(client.options.getEffectiveRenderDistance() * 2));
+        state.laserLength = (float) turret.traceAsFarAsPossible(eye, end).getSecond().subtract(eye).length();
+        state.laserOpacity = 1 - ((float) Math.sin(System.currentTimeMillis() / 1000.0) + 1) / 2 * .3F;
+        turret.lastLaserPos = target;
     }
 
     @Override
-    public boolean shouldRender(TurretEntity p_225626_1_, ClippingHelper p_225626_2_, double p_225626_3_, double p_225626_5_, double p_225626_7_) {
+    public void submit(
+            TurretRenderState state, PoseStack poses, SubmitNodeCollector collector, CameraRenderState camera) {
+        poses.pushPose();
+        if (!state.turretState.isStanding()) {
+            var look = state.horizontalLook;
+            float tip = state.tipDirection;
+            poses.translate(look.z * .8F * tip * state.fallProgress, 0, -look.x * .8F * tip * state.fallProgress);
+            poses.translate(-look.z * .2F * tip, 0, look.x * .2F * tip);
+            if (look.lengthSqr() > 0) {
+                poses.rotate(
+                        new Quaternionf()
+                                .rotationAxis(state.fallAmount * Mth.DEG_TO_RAD, (float) look.x, 0, (float) look.z));
+            }
+            poses.translate(look.z * .2F * tip, 0, -look.x * .2F * tip);
+        }
+        super.submit(state, poses, collector, camera);
+        poses.popPose();
+        if (!state.renderLaser) {
+            return;
+        }
+
+        poses.pushPose();
+        poses.translate(state.localEye);
+        poses.mulPose(state.laserBasis);
+        float length = state.laserLength, opacity = state.laserOpacity;
+        collector.submitCustomGeometry(
+                poses,
+                LASER,
+                (pose, vertices) -> {
+                    vertices.addVertex(pose, 1 / 32F, 0, 0)
+                            .setUv(0, 0)
+                            .setColor(1, 1, 1, opacity)
+                            .setOverlay(OverlayTexture.NO_OVERLAY)
+                            .setLight(LightCoordsUtil.FULL_BRIGHT)
+                            .setNormal(pose, 0, 1, 0);
+                    vertices.addVertex(pose, -1 / 32F, 0, 0)
+                            .setUv(0, 1)
+                            .setColor(1, 1, 1, opacity)
+                            .setOverlay(OverlayTexture.NO_OVERLAY)
+                            .setLight(LightCoordsUtil.FULL_BRIGHT)
+                            .setNormal(pose, 0, 1, 0);
+                    vertices.addVertex(pose, -1 / 32F, 0, length)
+                            .setUv(length / 4, 1)
+                            .setColor(1, 1, 1, opacity)
+                            .setOverlay(OverlayTexture.NO_OVERLAY)
+                            .setLight(LightCoordsUtil.FULL_BRIGHT)
+                            .setNormal(pose, 0, 1, 0);
+                    vertices.addVertex(pose, 1 / 32F, 0, length)
+                            .setUv(length / 4, 0)
+                            .setColor(1, 1, 1, opacity)
+                            .setOverlay(OverlayTexture.NO_OVERLAY)
+                            .setLight(LightCoordsUtil.FULL_BRIGHT)
+                            .setNormal(pose, 0, 1, 0);
+                });
+        poses.popPose();
+    }
+
+    @Override
+    public boolean shouldRender(TurretEntity turret, Frustum frustum, double x, double y, double z, float partialTick) {
         return true;
     }
 }

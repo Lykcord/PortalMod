@@ -1,178 +1,240 @@
 package net.portalmod.common.sorted.portal;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
+import com.mojang.blaze3d.vertex.PoseStack;
+
+import net.fabricmc.fabric.api.client.rendering.v1.RenderStateDataKey;
+import net.fabricmc.fabric.api.client.rendering.v1.SubmitRenderPhase;
+import net.fabricmc.fabric.api.client.rendering.v1.SubmitRenderPhases;
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
+import net.minecraft.client.Camera;
+import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.entity.player.ClientPlayerEntity;
-import net.minecraft.client.renderer.*;
-import net.minecraft.client.renderer.culling.ClippingHelper;
-import net.minecraft.client.renderer.entity.EntityRendererManager;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.util.math.AxisAlignedBB;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.vector.Matrix4f;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.OrderedSubmitNodeCollector;
+import net.minecraft.client.renderer.SubmitNodeStorage;
+import net.minecraft.client.renderer.entity.state.EntityRenderState;
+import net.minecraft.client.renderer.feature.phase.FeatureRenderPhase;
+import net.minecraft.client.renderer.feature.submit.SubmitNode;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.client.renderer.state.level.LevelRenderState;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.phys.AABB;
 import net.portalmod.PMState;
+import net.portalmod.client.render.DuplicateFeatureRenderer;
 import net.portalmod.core.config.PortalModConfigManager;
+import net.portalmod.core.math.AABBUtil;
 import net.portalmod.core.math.Mat4;
 import net.portalmod.core.math.Vec3;
-import net.portalmod.core.util.RenderUtil;
-import net.portalmod.mixins.accessors.ActiveRenderInfoAccessor;
-import net.portalmod.mixins.accessors.MinecraftAccessor;
+import net.portalmod.core.util.ModUtil;
+import net.portalmod.mixins.accessors.EntityRendererAccessor;
 
-import java.util.List;
+import org.joml.Matrix4f;
+import org.joml.Vector4f;
 
-import static org.lwjgl.opengl.GL11.*;
+import java.util.*;
 
-public class DuplicateEntityRenderer {
-    public static Vec3 entityPosOverride = null;
-    public static Matrix4f entityShadowTransformOverride = null;
-    public static boolean shouldRenderShadow = true;
+public final class DuplicateEntityRenderer {
+    private static final RenderStateDataKey<List<Duplicate>> DUPLICATES =
+            RenderStateDataKey.create(() -> "portalmod:duplicates");
+    private static final SubmitRenderPhase<SubmitNode> OIT =
+            new SubmitRenderPhase<>(collection -> collection.oitTranslucent);
 
-    public static void renderDuplicateEntities(ClippingHelper clippinghelper, double d0, double d1, double d2, float partialTicks, MatrixStack matrixStack, ActiveRenderInfo camera) {
-        Minecraft mc = Minecraft.getInstance();
-        WorldRenderer lr = Minecraft.getInstance().levelRenderer;
+    private record Duplicate(
+            EntityRenderState entity,
+            CameraRenderState sourceCamera,
+            Matrix4f transform,
+            Matrix4f shadowTransform,
+            List<EntityRenderState.ShadowPiece> shadows,
+            Vector4f clip) {}
 
-        if(mc.player == null)
+    private DuplicateEntityRenderer() {}
+
+    public static void extract(ClientLevel level, Camera camera, LevelRenderState scene, DeltaTracker delta) {
+        var client = Minecraft.getInstance();
+        var dispatcher = client.levelRenderer.entityRenderDispatcher();
+        var duplicates = new ArrayList<Duplicate>();
+        scene.setData(DUPLICATES, List.of());
+        if (client.player == null) {
             return;
-
-        Minecraft.getInstance().levelRenderer.renderBuffers.bufferSource().endBatch();
-
-        for(Entity entity : lr.level.entitiesForRendering()) {
-            boolean shouldRender = !(entity instanceof ClientPlayerEntity)
-                    || camera.getEntity() == entity
-                    || (entity == mc.player && !mc.player.isSpectator());
-
-            if(!PortalModConfigManager.RENDER_SELF.get()) {
-                shouldRender &= entity != camera.getEntity()
-                        || camera.isDetached()
-                        || camera.getEntity() instanceof LivingEntity && ((LivingEntity)camera.getEntity()).isSleeping();
-            }
-
-            if(shouldRender) {
-                lr.renderedEntities++;
-
-                if (entity.tickCount == 0) {
-                    entity.xOld = entity.getX();
-                    entity.yOld = entity.getY();
-                    entity.zOld = entity.getZ();
+        }
+        float partialTicks = scene.worldPartialTicks;
+        try {
+            for (var entity : level.entitiesForRendering()) {
+                if (entity instanceof PortalEntity
+                        || entity instanceof LocalPlayer
+                                && entity != camera.entity()
+                                && (entity != client.player || client.player.isSpectator())) {
+                    continue;
                 }
-
-                renderDuplicateEntity(entity, d0, d1, d2, partialTicks, matrixStack, clippinghelper);
+                if (!PortalModConfigManager.RENDER_SELF.get()
+                        && entity == camera.entity()
+                        && !camera.isDetached()
+                        && !(entity instanceof LivingEntity living && living.isSleeping())) {
+                    continue;
+                }
+                for (var portal :
+                        PortalEntity.getOpenPortals(level, entity.getBoundingBox().inflate(.2), ignored -> true)) {
+                    var exit = portal.getOtherPortal();
+                    if (exit.isEmpty() || !portal.isEntityAlignedToPortal(entity)) {
+                        continue;
+                    }
+                    var other = exit.get();
+                    var transform = PortalEntity.getPortalToPortalMatrix(portal, other);
+                    var renderer = (EntityRendererAccessor) dispatcher.getRenderer(entity);
+                    var bounds = transformBounds(renderer.pmCullBox(entity, partialTicks), transform);
+                    var position = new Vec3(entity.getPosition(partialTicks)).transform(transform);
+                    double distance = position.clone().sub(camera.position()).magnitudeSqr();
+                    if (!entity.hasIndirectPassenger(client.player)
+                            && (!entity.shouldRenderAtSqrDistance(distance)
+                                    || renderer.pmAffectedByCulling(entity)
+                                            && !camera.getCullFrustum().isVisible(bounds)
+                                    || !visibleSelf(entity, camera, transform, partialTicks))) {
+                        continue;
+                    }
+                    if (entity.tickCount == 0) {
+                        entity.xOld = entity.getX();
+                        entity.yOld = entity.getY();
+                        entity.zOld = entity.getZ();
+                    }
+                    var sourceCamera = PortalRenderer.setupCamera(camera, other, partialTicks);
+                    dispatcher.prepare(sourceCamera, client.crosshairPickEntity);
+                    var state = dispatcher.extractEntity(entity, partialTicks);
+                    state.outlineColor = 0;
+                    state.distanceToCameraSq = distance;
+                    position = new Vec3(state.x, state.y, state.z).transform(transform);
+                    var shadows = List.<EntityRenderState.ShadowPiece>of();
+                    if (portal.getDirection().getAxis().isHorizontal()
+                            && other.getDirection().getAxis().isHorizontal()) {
+                        double x = state.x, y = state.y, z = state.z;
+                        try {
+                            state.x = position.x;
+                            state.y = position.y;
+                            state.z = position.z;
+                            renderer.pmExtractShadow(state, client, level);
+                            shadows = List.copyOf(state.shadowPieces);
+                        } finally {
+                            state.x = x;
+                            state.y = y;
+                            state.z = z;
+                        }
+                    }
+                    state.shadowPieces.clear();
+                    var relative = position.clone().sub(camera.position());
+                    var model =
+                            PortalEntity.getPortalToPortalRotationMatrix(portal, other)
+                                    .to4f()
+                                    .setTranslation((float) relative.x, (float) relative.y, (float) relative.z);
+                    var shadowModel =
+                            new Matrix4f().translation((float) relative.x, (float) relative.y, (float) relative.z);
+                    var sourceState = new CameraRenderState();
+                    sourceCamera.extractRenderState(sourceState, delta);
+                    var normal = new Vec3(other.getDirection());
+                    var surface =
+                            new Vec3(.5, 1, 0)
+                                    .transform(
+                                            PortalEntity.setupMatrix(
+                                                    other.getDirection(), other.getUpVector(), other.getPivotPoint()))
+                                    .sub(camera.position());
+                    var plane =
+                            new Vector4f(
+                                    (float) normal.x, (float) normal.y, (float) normal.z, (float) -normal.dot(surface));
+                    duplicates.add(new Duplicate(state, sourceState, model, shadowModel, shadows, plane));
+                }
             }
+            scene.setData(DUPLICATES, List.copyOf(duplicates));
+        } finally {
+            dispatcher.prepare(client.gameRenderer.mainCamera(), client.crosshairPickEntity);
         }
     }
 
-    public static boolean shouldRenderSelf(Entity entity, ClippingHelper clippingHelper) {
-        return shouldRender(entity, Mat4.identity(), clippingHelper);
-    }
-
-    private static boolean shouldRenderEntity(Entity entity, ClippingHelper clippingHelper, Vec3 camPos, Mat4 matrix) {
-        if(!entity.shouldRender(camPos.x, camPos.y, camPos.z))
-            return false;
-
-        if(entity.noCulling)
+    private static boolean visibleSelf(Entity entity, Camera camera, Mat4 transform, float partialTicks) {
+        var client = Minecraft.getInstance();
+        if (entity != client.getCameraEntity()) {
             return true;
-
-        return shouldRender(entity, matrix, clippingHelper);
-    }
-
-    private static boolean shouldRender(Entity entity, Mat4 matrix, ClippingHelper clippingHelper) {
-        ActiveRenderInfo currentCamera = PortalRenderer.getInstance().getCurrentCamera();
-        Vec3 cameraPos = PMState.cameraPosOverrideForRenderingSelf != null
-                ? PMState.cameraPosOverrideForRenderingSelf
-                : new Vec3(currentCamera.getPosition());
-
-        Minecraft mc = Minecraft.getInstance();
-        ActiveRenderInfoAccessor mainCameraAccessor = (ActiveRenderInfoAccessor)mc.gameRenderer.getMainCamera();
-        float partialTicks = mc.isPaused() ? ((MinecraftAccessor)mc).pmGetPausePartialTick() : mc.getFrameTime();
-        float eyeHeight = MathHelper.lerp(partialTicks, mainCameraAccessor.pmGetEyeHeightOld(), mainCameraAccessor.pmGetEyeHeight());
-
-        Vec3 partialTickedOffset = new Vec3(entity.getPosition(partialTicks)).sub(entity.position());
-        AxisAlignedBB aabb = entity.getBoundingBox().move(partialTickedOffset.to3d());
-        aabb = transformAABB(aabb, matrix);
-        AxisAlignedBB aabbCull = entity.getBoundingBoxForCulling().move(partialTickedOffset.to3d()).inflate(0.5);
-        aabbCull = transformAABB(aabbCull, matrix);
-
-        if(entity != mc.cameraEntity)
-            return clippingHelper.isVisible(aabbCull);
-
-        if(aabb.contains(cameraPos.to3d()) ^ aabb.contains(cameraPos.clone().sub(0, eyeHeight, 0).to3d()))
+        }
+        var cameraPos =
+                PMState.cameraPosOverrideForRenderingSelf == null
+                        ? new Vec3(camera.position())
+                        : PMState.cameraPosOverrideForRenderingSelf
+                                .clone()
+                                .transform(
+                                        ModUtil.getMatrixFromPortalChain(
+                                                new ArrayList<>(PortalRenderer.getInstance().portalChain)));
+        var offset = new Vec3(entity.getPosition(partialTicks)).sub(entity.position());
+        var body = transformBounds(entity.getBoundingBox().move(offset.to3d()), transform);
+        float height = entity.getEyeHeight();
+        if (body.contains(cameraPos.to3d()) ^ body.contains(cameraPos.clone().sub(0, height, 0).to3d())) {
             return false;
-
-        Vec3 duplicateEntityPos = new Vec3(entity.getPosition(partialTicks)).add(0, eyeHeight, 0).transform(matrix);
-        float distance = (float)cameraPos.clone().sub(duplicateEntityPos).magnitudeSqr();
-        return distance > 0.001 && clippingHelper.isVisible(aabbCull);
+        }
+        var eye = new Vec3(entity.getPosition(partialTicks)).add(0, height, 0).transform(transform);
+        return eye.sub(cameraPos).magnitudeSqr() > .001;
     }
 
-    private static void renderDuplicateEntity(Entity entity, double camX, double camY, double camZ, float partialTicks, MatrixStack matrixStack, ClippingHelper clippingHelper) {
-        double d0 = MathHelper.lerp(partialTicks, entity.xOld, entity.getX());
-        double d1 = MathHelper.lerp(partialTicks, entity.yOld, entity.getY());
-        double d2 = MathHelper.lerp(partialTicks, entity.zOld, entity.getZ());
-        float f = MathHelper.lerp(partialTicks, entity.yRotO, entity.yRot);
+    static AABB transformBounds(AABB bounds, Mat4 matrix) {
+        return AABBUtil.transform(bounds, matrix);
+    }
 
-        if(entity instanceof PortalEntity || Minecraft.getInstance().player == null)
-            return;
-
-        List<PortalEntity> entities = PortalEntity.getOpenPortals(entity.level,
-                entity.getBoundingBox().inflate(.2), portal -> true);
-
-        for(PortalEntity portal : entities) {
-            if(!portal.isOpen() || !portal.getOtherPortal().isPresent() || !portal.isEntityAlignedToPortal(entity))
-                continue;
-
-            PortalEntity otherPortal = portal.getOtherPortal().get();
-            ActiveRenderInfo camera = PortalRenderer.getInstance().getCurrentCamera();
-            EntityRendererManager erm = Minecraft.getInstance().levelRenderer.entityRenderDispatcher;
-
-            Mat4 changeOfBasisMatrix = PortalEntity.getPortalToPortalRotationMatrix(portal, otherPortal);
-            Mat4 portalToPortalMatrix = PortalEntity.getPortalToPortalMatrix(portal, otherPortal);
-
-            Vec3 cameraPos = new Vec3(camera.getPosition()).transform(portalToPortalMatrix);
-            boolean shouldRender = shouldRenderEntity(entity, clippingHelper, cameraPos, portalToPortalMatrix)
-                    || entity.hasIndirectPassenger(Minecraft.getInstance().player);
-
-            if(!shouldRender)
-                continue;
-
-            matrixStack.pushPose();
-            matrixStack.translate(-camX, -camY, -camZ);
-            matrixStack.last().pose().multiply(portalToPortalMatrix.to4f());
-
-            matrixStack.pushPose();
-            matrixStack.translate(d0, d1, d2);
-            matrixStack.last().pose().multiply(changeOfBasisMatrix.transpose().to4f());
-            entityPosOverride = new Vec3(entity.xOld, entity.yOld, entity.zOld)
-                    .lerp(entity.position(), partialTicks)
-                    .transform(portalToPortalMatrix);
-            entityShadowTransformOverride = matrixStack.last().pose();
-            shouldRenderShadow = portal.getDirection().getAxis().isHorizontal() && otherPortal.getDirection().getAxis().isHorizontal();
-            matrixStack.popPose();
-
-            RenderUtil.setupClipPlane(new MatrixStack(), otherPortal, camera, 0, true);
-
-            erm.render(entity, d0, d1, d2, f,
-                    partialTicks, matrixStack, Minecraft.getInstance().levelRenderer.renderBuffers.bufferSource(),
-                    erm.getPackedLightCoords(entity, partialTicks));
-
-            Minecraft.getInstance().levelRenderer.renderBuffers.bufferSource().endBatch();
-
-            if(PortalRenderer.getInstance().recursion >= 1) {
-                RenderUtil.setStandardClipPlane(PortalRenderer.getInstance().clipMatrix.last().pose());
-            } else {
-                glDisable(GL_CLIP_PLANE0);
+    public static void submit(LevelRenderContext context) {
+        var dispatcher = Minecraft.getInstance().levelRenderer.entityRenderDispatcher();
+        for (var duplicate : context.levelState().getDataOrDefault(DUPLICATES, List.of())) {
+            var storage = new SubmitNodeStorage();
+            storage.setUseImprovedTransparency(context.gameRenderer().useImprovedTransparency());
+            var poses = new PoseStack();
+            poses.mulPose(duplicate.transform());
+            dispatcher.submit(duplicate.entity(), duplicate.sourceCamera(), 0, 0, 0, poses, storage);
+            if (!duplicate.shadows().isEmpty()) {
+                var shadowPoses = new PoseStack();
+                shadowPoses.mulPose(duplicate.shadowTransform());
+                storage.submitShadow(shadowPoses, duplicate.entity().shadowRadius, duplicate.shadows());
             }
-
-            matrixStack.popPose();
-
-            entityPosOverride = null;
-            entityShadowTransformOverride = null;
-            shouldRenderShadow = true;
+            for (var entry : storage.getSubmitsPerOrder().int2ObjectEntrySet()) {
+                var source = entry.getValue();
+                var target = context.submitNodeCollector().order(entry.getIntKey());
+                forward(source.solid, SubmitRenderPhases.SOLID, target, duplicate);
+                forward(source.shadows, SubmitRenderPhases.SHADOWS, target, duplicate);
+                forward(source.nameTags, SubmitRenderPhases.NAME_TAGS, target, duplicate);
+                forward(source.texts, SubmitRenderPhases.TEXTS, target, duplicate);
+                forward(source.shapeOutlines, SubmitRenderPhases.SHAPE_OUTLINES, target, duplicate);
+                forward(source.waterMask, SubmitRenderPhases.WATER_MASK, target, duplicate);
+                forward(
+                        source.translucentBlocksAndItems,
+                        SubmitRenderPhases.TRANSLUCENT_BLOCKS_AND_ITEMS,
+                        target,
+                        duplicate);
+                forward(source.translucentModels, SubmitRenderPhases.TRANSLUCENT_MODELS, target, duplicate);
+                forward(
+                        source.translucentCustomGeometry,
+                        SubmitRenderPhases.TRANSLUCENT_CUSTOM_GEOMETRY,
+                        target,
+                        duplicate);
+                forward(source.oitTranslucent, OIT, target, duplicate);
+                forward(source.breakingOverlay, SubmitRenderPhases.BREAKING_OVERLAY, target, duplicate);
+                forward(source.afterTerrain, SubmitRenderPhases.AFTER_TERRAIN, target, duplicate);
+                forward(source.alwaysOnTopGizmos, SubmitRenderPhases.ALWAYS_ON_TOP, target, duplicate);
+                forward(source.translucentGizmos, SubmitRenderPhases.GIZMOS, target, duplicate);
+            }
+            forward(
+                    storage.seeThrough(),
+                    SubmitRenderPhases.SEE_THROUGH_NAME_TAGS,
+                    context.submitNodeCollector().order(0),
+                    duplicate);
         }
     }
 
-    private static AxisAlignedBB transformAABB(AxisAlignedBB aabb, Mat4 matrix) {
-        Vec3 min = new Vec3(aabb.minX, aabb.minY, aabb.minZ).transform(matrix);
-        Vec3 max = new Vec3(aabb.maxX, aabb.maxY, aabb.maxZ).transform(matrix);
-        return new AxisAlignedBB(min.to3d(), max.to3d());
+    private static void forward(
+            FeatureRenderPhase<?> phase,
+            SubmitRenderPhase<? super DuplicateFeatureRenderer.Submit> targetPhase,
+            OrderedSubmitNodeCollector collector,
+            Duplicate duplicate) {
+        var nodes = new ArrayList<SubmitNode>();
+        phase.sortInto((node, outline) -> nodes.add(node));
+        if (!nodes.isEmpty()) {
+            collector.submitCustom(
+                    targetPhase,
+                    new DuplicateFeatureRenderer.Submit(
+                            nodes, duplicate.clip(), (float) duplicate.entity().distanceToCameraSq));
+        }
     }
 }

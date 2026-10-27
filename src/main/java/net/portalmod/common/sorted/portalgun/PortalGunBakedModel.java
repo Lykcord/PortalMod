@@ -1,60 +1,82 @@
 package net.portalmod.common.sorted.portalgun;
 
-import java.util.List;
-import java.util.Random;
+import net.fabricmc.fabric.api.client.model.loading.v1.ModelLoadingPlugin;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.item.ItemModel;
+import net.minecraft.client.renderer.item.ItemModelResolver;
+import net.minecraft.client.renderer.item.ItemStackRenderState;
+import net.minecraft.client.resources.model.sprite.Material;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.entity.ItemOwner;
+import net.minecraft.world.item.ItemDisplayContext;
+import net.minecraft.world.item.ItemStack;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.joml.Matrix4f;
+import org.joml.Matrix4fc;
+import org.joml.Vector3fc;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.client.renderer.model.BakedQuad;
-import net.minecraft.client.renderer.model.IBakedModel;
-import net.minecraft.client.renderer.model.ItemOverrideList;
-import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.util.Direction;
-import net.minecraftforge.client.model.data.IDynamicBakedModel;
-import net.minecraftforge.client.model.data.IModelData;
+import java.util.ArrayList;
 
-public class PortalGunBakedModel implements IDynamicBakedModel {
-    private final IBakedModel base;
-    
-    public PortalGunBakedModel(IBakedModel base) {
-        this.base = base;
+public final class PortalGunBakedModel implements ItemModel {
+    private final PortalGunISTER renderer = new PortalGunISTER();
+    private final Matrix4f transformation;
+    private final Material.Baked particle;
+    private final Vector3fc[] extents;
+
+    private PortalGunBakedModel(Matrix4fc transformation, Material.Baked particle) {
+        this.transformation = new Matrix4f(transformation);
+        this.particle = particle;
+        var points = new ArrayList<Vector3fc>();
+        renderer.getExtents(points::add);
+        extents = points.toArray(Vector3fc[]::new);
     }
 
-    @Nonnull
-    @Override
-    public List<BakedQuad> getQuads(@Nullable BlockState state, @Nullable Direction side, @Nonnull Random rand, @Nonnull IModelData extraData) {
-        return base.getQuads(state, side, rand);
-    }
-    
-    @Override
-    public boolean useAmbientOcclusion() {
-        return base.useAmbientOcclusion();
-    }
-
-    @Override
-    public boolean isGui3d() {
-        return base.isGui3d();
-    }
-
-    @Override
-    public boolean isCustomRenderer() {
-        return true;
-    }
-
-    @Override
-    public boolean usesBlockLight() {
-        return base.usesBlockLight();
-    }
-
-    @Override
-    public TextureAtlasSprite getParticleIcon() {
-        return base.getParticleIcon();
+    public static void init() {
+        ModelLoadingPlugin.register(
+                plugin ->
+                        plugin.modifyItemModelAfterBake()
+                                .register(
+                                        (model, context) -> {
+                                            if (!context.itemId()
+                                                    .equals(
+                                                            Identifier.fromNamespaceAndPath(
+                                                                    "portalmod", "portalgun"))) {
+                                                return model;
+                                            }
+                                            var particle =
+                                                    context.bakingContext()
+                                                            .blockModelBaker()
+                                                            .materials()
+                                                            .get(
+                                                                    new Material(
+                                                                            Identifier.fromNamespaceAndPath(
+                                                                                    "portalmod", "portalgun/default")),
+                                                                    () -> "portalmod:item/portalgun");
+                                            return new PortalGunBakedModel(context.transformation(), particle);
+                                        }));
     }
 
     @Override
-    public ItemOverrideList getOverrides() {
-        return ItemOverrideList.EMPTY;
+    public void update(
+            ItemStackRenderState state,
+            ItemStack stack,
+            ItemModelResolver resolver,
+            ItemDisplayContext context,
+            ClientLevel level,
+            ItemOwner owner,
+            int seed) {
+        var argument = renderer.extractArgument(stack, context, owner);
+        if (argument == null) {
+            return;
+        }
+        state.setAnimated();
+        state.appendModelIdentityElement(this);
+        state.appendModelIdentityElement(argument);
+        var layer = state.newLayer();
+        layer.setUsesBlockLight(true);
+        layer.setParticleMaterial(particle);
+        layer.setExtents(() -> extents);
+        layer.setLocalTransform(new Matrix4f(transformation).mul(PortalGunISTER.displayTransform(stack, context)));
+        layer.setupSpecialModel(renderer, argument);
     }
 }

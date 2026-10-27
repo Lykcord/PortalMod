@@ -1,59 +1,34 @@
 package net.portalmod.common.sorted.longfallboots;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
-import com.mojang.blaze3d.vertex.IVertexBuilder;
+import net.minecraft.client.model.Model;
+import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.model.geom.PartPose;
+import net.minecraft.client.model.geom.builders.CubeDeformation;
+import net.minecraft.client.model.geom.builders.CubeListBuilder;
+import net.minecraft.client.model.geom.builders.LayerDefinition;
+import net.minecraft.client.model.geom.builders.MeshDefinition;
+import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
 
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.entity.EntityRendererManager;
-import net.minecraft.client.renderer.entity.LivingRenderer;
-import net.minecraft.client.renderer.entity.model.BipedModel;
-import net.minecraft.client.renderer.model.ModelRenderer;
-import net.minecraft.entity.LivingEntity;
-
-public class LongFallBootsModel extends BipedModel<LivingEntity> {
-    private final ModelRenderer left_shoe;
-    private final ModelRenderer right_shoe;
-    private final LivingEntity entity;
-    
-    public LongFallBootsModel(LivingEntity entity) {
-        super(0);
-
-        this.texWidth = 32;
-        this.texHeight = 16;
-
-        this.left_shoe = new ModelRenderer(this);
-        this.left_shoe.setPos(2.0F, 12.0F, 0.0F);
-        this.left_shoe.texOffs(0, 0).addBox(-2.0F, 0.0F, -2.0F, 4.0F, 12.0F, 4.0F, 0.75F, false);
-        this.left_shoe.texOffs(16, 7).addBox(-2.0F, 4.0F, 3.5F, 4.0F, 7.0F, 2.0F, 0.75F, false);
-
-        this.right_shoe = new ModelRenderer(this);
-        this.right_shoe.setPos(-2.0F, 12.0F, 0.0F);
-        this.right_shoe.texOffs(0, 0).addBox(-2.0F, 0.0F, -2.0F, 4.0F, 12.0F, 4.0F, 0.75F, true);
-        this.right_shoe.texOffs(16, 7).addBox(-2.0F, 4.0F, 3.5F, 4.0F, 7.0F, 2.0F, 0.75F, true);
-        
-        this.entity = entity;
+public final class LongFallBootsModel extends Model<HumanoidRenderState> {
+    public LongFallBootsModel(ModelPart root) {
+        super(root, RenderTypes::armorCutoutNoCull);
     }
-    
-    @Override
-    public void renderToBuffer(MatrixStack matrixStack, IVertexBuilder buffer, int packedLight, int packedOverlay,
-            float red, float green, float blue, float alpha) {
-        this.setupAnim(entity, packedOverlay, red, green, blue, alpha);
-        this.left_shoe.render(matrixStack, buffer, packedLight, packedOverlay, red, green, blue, alpha);
-        this.right_shoe.render(matrixStack, buffer, packedLight, packedOverlay, red, green, blue, alpha);
+
+    public static LayerDefinition createLayer() {
+        MeshDefinition mesh = new MeshDefinition();
+        mesh.getRoot().addOrReplaceChild("left_leg", shoe(false), PartPose.offset(2, 12, 0));
+        mesh.getRoot().addOrReplaceChild("right_leg", shoe(true), PartPose.offset(-2, 12, 0));
+        return LayerDefinition.create(mesh, 32, 16);
     }
-    
-    @Override
-    public void setupAnim(LivingEntity entity, float f1, float f2, float f3, float f4, float f5) {
-        super.setupAnim(entity, f1, f2, f3, f4, f5);
-        
-//        if(entity instanceof LivingEntity) {
-            EntityRendererManager manager = Minecraft.getInstance().getEntityRenderDispatcher();
-            LivingRenderer<?, ?> renderer = (LivingRenderer<?, ?>)manager.getRenderer(entity);
-            if(renderer.getModel() instanceof BipedModel) {
-                BipedModel<?> model = (BipedModel<?>)renderer.getModel();
-                this.left_shoe.copyFrom(model.leftLeg);
-                this.right_shoe.copyFrom(model.rightLeg);
-            }
-//        }
+
+    private static CubeListBuilder shoe(boolean mirror) {
+        CubeDeformation inflation = new CubeDeformation(0.75F);
+        return CubeListBuilder.create()
+                .mirror(mirror)
+                .texOffs(0, 0)
+                .addBox(-2, 0, -2, 4, 12, 4, inflation)
+                .texOffs(16, 7)
+                .addBox(-2, 4, 3.5F, 4, 7, 2, inflation);
     }
 }

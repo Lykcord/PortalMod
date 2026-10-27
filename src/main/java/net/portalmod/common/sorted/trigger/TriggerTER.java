@@ -1,122 +1,158 @@
 package net.portalmod.common.sorted.trigger;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.*;
-import net.minecraft.client.renderer.tileentity.TileEntityRenderer;
-import net.minecraft.client.renderer.tileentity.TileEntityRendererDispatcher;
-import net.minecraft.util.Direction;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.math.AxisAlignedBB;
-import net.portalmod.PortalMod;
+import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
+import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
+import net.minecraft.client.renderer.blockentity.state.BlockEntityRenderState;
+import net.minecraft.client.renderer.feature.ModelFeatureRenderer;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.client.renderer.texture.TextureAtlas;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
+import net.minecraft.client.resources.model.sprite.SpriteGetter;
+import net.minecraft.client.resources.model.sprite.SpriteId;
+import net.minecraft.core.Direction;
+import net.minecraft.resources.Identifier;
+import net.minecraft.util.LightCoordsUtil;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.portalmod.common.items.WrenchItem;
+import net.portalmod.common.sorted.faithplate.FaithPlateTargetGeometry;
 
-import java.util.ArrayList;
-import java.util.List;
+public class TriggerTER implements BlockEntityRenderer<TriggerTileEntity, TriggerTER.State> {
+    private final SpriteGetter sprites;
 
-public class TriggerTER extends TileEntityRenderer<TriggerTileEntity> {
-    private final TriggerFieldBakedModel triggerFieldBakedModel;
+    public static class State extends BlockEntityRenderState {
+        public AABB field;
+        public TriggerType type;
+    }
 
-    public TriggerTER(TileEntityRendererDispatcher terd) {
-        super(terd);
-        this.triggerFieldBakedModel = new TriggerFieldBakedModel();
+    public TriggerTER(BlockEntityRendererProvider.Context context) {
+        sprites = context.sprites();
     }
 
     @Override
-    public void render(TriggerTileEntity be, float partialTicks, MatrixStack matrixStack, IRenderTypeBuffer renderBuffer, int light, int overlay) {
-        if(Minecraft.getInstance().player == null || !WrenchItem.holdingWrench(Minecraft.getInstance().player))
+    public State createRenderState() {
+        return new State();
+    }
+
+    @Override
+    public void extractRenderState(
+            TriggerTileEntity entity,
+            State state,
+            float partialTick,
+            Vec3 camera,
+            ModelFeatureRenderer.CrumblingOverlay breaking) {
+        BlockEntityRenderer.super.extractRenderState(entity, state, partialTick, camera, breaking);
+        var player = Minecraft.getInstance().player;
+        state.field = null;
+        if (player == null || !WrenchItem.holdingWrench(player)) {
             return;
-
-        this.triggerFieldBakedModel.bakeQuadsOnce();
-
-        AxisAlignedBB aabb = null;
-
-        if (TriggerSelectionClient.isSelecting(be)) {
-            aabb = TriggerSelectionClient.getBox();
-        } else if(be.hasField()) {
-            aabb = be.getField();
         }
-
-        if (aabb == null) return;
-
-        this.renderTriggerField(be.getTriggerType(), aabb, matrixStack, renderBuffer, LightTexture.pack(15, 0), overlay);
+        state.field = TriggerSelectionClient.isSelecting(entity) ? TriggerSelectionClient.getBox() : entity.getField();
+        state.type = entity.getTriggerType();
     }
 
-    private static ResourceLocation getFieldTexture(TriggerType type, boolean inside) {
-        String path = "block/trigger_field_";
-
-        switch(type) {
-            case PLAYER: path += "players"; break;
-            case MOB:    path += "mobs";    break;
-        }
-
-        path += "_" + (inside ? "inside" : "outside");
-        return new ResourceLocation(PortalMod.MODID, path);
-    }
-
-    public static List<ResourceLocation> getAllFieldTextures() {
-        List<ResourceLocation> textures = new ArrayList<>();
-
-        for(TriggerType type : TriggerType.values()) {
-            textures.add(getFieldTexture(type, false));
-            textures.add(getFieldTexture(type, true));
-        }
-
-        return textures;
-    }
-
-    private void renderTriggerField(TriggerType type, AxisAlignedBB aabb, MatrixStack matrixStack, IRenderTypeBuffer renderBuffer, int light, int overlay) {
-        float x0 = (float)aabb.minX;
-        float y0 = (float)aabb.minY;
-        float z0 = (float)aabb.minZ;
-        float x1 = (float)aabb.maxX;
-        float y1 = (float)aabb.maxY;
-        float z1 = (float)aabb.maxZ;
-
-        ResourceLocation outsideTexture = getFieldTexture(type, false);
-        ResourceLocation insideTexture = getFieldTexture(type, true);
-
-        for(float y = y0; y < y1; y++) {
-            for(float z = z0; z < z1; z++) {
-                this.renderQuad(renderBuffer, matrixStack, light, overlay, x0, y, z, Direction.WEST, outsideTexture, false);
-                this.renderQuad(renderBuffer, matrixStack, light, overlay, x0 - 1, y, z, Direction.EAST, insideTexture, true);
-                this.renderQuad(renderBuffer, matrixStack, light, overlay, x1 - 1, y, z, Direction.EAST, outsideTexture, false);
-                this.renderQuad(renderBuffer, matrixStack, light, overlay, x1, y, z, Direction.WEST, insideTexture, true);
-            }
-        }
-
-        for(float z = z0; z < z1; z++) {
-            for(float x = x0; x < x1; x++) {
-                this.renderQuad(renderBuffer, matrixStack, light, overlay, x, y0, z, Direction.DOWN, outsideTexture, false);
-                this.renderQuad(renderBuffer, matrixStack, light, overlay, x, y0 - 1, z, Direction.UP, insideTexture, true);
-                this.renderQuad(renderBuffer, matrixStack, light, overlay, x, y1 - 1, z, Direction.UP, outsideTexture, false);
-                this.renderQuad(renderBuffer, matrixStack, light, overlay, x, y1, z, Direction.DOWN, insideTexture, true);
-            }
-        }
-
-        for(float y = y0; y < y1; y++) {
-            for(float x = x0; x < x1; x++) {
-                this.renderQuad(renderBuffer, matrixStack, light, overlay, x, y, z0, Direction.NORTH, outsideTexture, false);
-                this.renderQuad(renderBuffer, matrixStack, light, overlay, x, y, z0 - 1, Direction.SOUTH, insideTexture, true);
-                this.renderQuad(renderBuffer, matrixStack, light, overlay, x, y, z1 - 1, Direction.SOUTH, outsideTexture, false);
-                this.renderQuad(renderBuffer, matrixStack, light, overlay, x, y, z1, Direction.NORTH, insideTexture, true);
-            }
-        }
-    }
-
-    private void renderQuad(IRenderTypeBuffer renderBuffer, MatrixStack matrixStack, int light, int overlay, float x, float y, float z, Direction face, ResourceLocation texture, boolean inside) {
-        matrixStack.pushPose();
-        matrixStack.translate(x, y, z);
-
-        renderBuffer.getBuffer(RenderType.translucentMovingBlock()).putBulkData(matrixStack.last(),
-                this.triggerFieldBakedModel.getQuad(face, texture),
-                1, 1, 1, light, overlay);
-
-        matrixStack.popPose();
+    private static Identifier texture(TriggerType type, boolean inside) {
+        return Identifier.fromNamespaceAndPath(
+                "portalmod",
+                "block/trigger_field_"
+                        + (type == TriggerType.PLAYER ? "players" : "mobs")
+                        + (inside ? "_inside" : "_outside"));
     }
 
     @Override
-    public boolean shouldRenderOffScreen(TriggerTileEntity be) {
+    public void submit(State state, PoseStack poses, SubmitNodeCollector collector, CameraRenderState camera) {
+        if (state.field == null) {
+            return;
+        }
+        submitField(
+                state.field,
+                sprites.get(new SpriteId(TextureAtlas.LOCATION_BLOCKS, texture(state.type, false))),
+                false,
+                poses,
+                collector);
+        submitField(
+                state.field,
+                sprites.get(new SpriteId(TextureAtlas.LOCATION_BLOCKS, texture(state.type, true))),
+                true,
+                poses,
+                collector);
+    }
+
+    private static void submitField(
+            AABB box, TextureAtlasSprite sprite, boolean inside, PoseStack poses, SubmitNodeCollector collector) {
+        collector.submitCustomGeometry(
+                poses,
+                RenderTypes.entityTranslucentCull(sprite.atlasLocation()),
+                (pose, vertices) -> {
+                    for (var outsideFace : Direction.values()) {
+                        var face = inside ? outsideFace.getOpposite() : outsideFace;
+                        var axis = face.getAxis();
+                        double boundary =
+                                outsideFace.getAxisDirection() == Direction.AxisDirection.POSITIVE
+                                        ? box.max(axis)
+                                        : box.min(axis);
+                        double base = boundary - (face.getAxisDirection() == Direction.AxisDirection.POSITIVE ? 1 : 0);
+                        var quad = FaithPlateTargetGeometry.vertices(face, 0);
+                        switch (axis) {
+                            case X -> {
+                                for (double y = box.minY; y < box.maxY; y++) {
+                                    for (double z = box.minZ; z < box.maxZ; z++) {
+                                        emitPatch(vertices, pose, sprite, face, quad, base, y, z);
+                                    }
+                                }
+                            }
+                            case Y -> {
+                                for (double x = box.minX; x < box.maxX; x++) {
+                                    for (double z = box.minZ; z < box.maxZ; z++) {
+                                        emitPatch(vertices, pose, sprite, face, quad, x, base, z);
+                                    }
+                                }
+                            }
+                            case Z -> {
+                                for (double x = box.minX; x < box.maxX; x++) {
+                                    for (double y = box.minY; y < box.maxY; y++) {
+                                        emitPatch(vertices, pose, sprite, face, quad, x, y, base);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+    }
+
+    private static void emitPatch(
+            VertexConsumer vertices,
+            PoseStack.Pose pose,
+            TextureAtlasSprite sprite,
+            Direction face,
+            Vec3[] quad,
+            double x,
+            double y,
+            double z) {
+        for (int i = 0; i < 4; i++) {
+            var point = quad[i];
+            vertices.addVertex(
+                            pose,
+                            (float) (x + point.x + face.getStepX() * .001),
+                            (float) (y + point.y + face.getStepY() * .001),
+                            (float) (z + point.z + face.getStepZ() * .001))
+                    .setColor(-1)
+                    .setUv(sprite.getU(i < 2 ? 0 : 1), sprite.getV(i == 0 || i == 3 ? 0 : 1))
+                    .setOverlay(OverlayTexture.NO_OVERLAY)
+                    .setLight(LightCoordsUtil.pack(15, 0))
+                    .setNormal(pose, face.getStepX(), face.getStepY(), face.getStepZ());
+        }
+    }
+
+    @Override
+    public boolean shouldRenderOffScreen() {
         return true;
     }
 }

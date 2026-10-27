@@ -1,96 +1,76 @@
 package net.portalmod.mixins;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.PistonBlockStructureHelper;
-import net.minecraft.util.Direction;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.World;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.llamalad7.mixinextras.sugar.Local;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.piston.PistonStructureResolver;
+import net.minecraft.world.level.block.state.BlockState;
 import net.portalmod.common.blocks.CustomPushBehavior;
+
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 
-// Pretty much all copied over from the Carpet mod
-@Mixin(PistonBlockStructureHelper.class)
-public class PistonBlockStructureHelperMixin {
-
-    @Shadow @Final private World level;
+@Mixin(PistonStructureResolver.class)
+public abstract class PistonBlockStructureHelperMixin {
+    @Shadow @Final private Level level;
     @Shadow @Final private Direction pushDirection;
 
-    // fields that are needed because @Redirects cannot capture locals
-    @Unique
-    private BlockPos pos_addBlockLine;
-    @Unique
-    private BlockPos behindPos_addBlockLinea;
-
-    @Inject(
-            method = "addBlockLine",
-            locals = LocalCapture.CAPTURE_FAILHARD,
-            at = @At(
-                    value = "INVOKE",
-                    ordinal = 1,
-                    target = "Lnet/minecraft/world/World;getBlockState(Lnet/minecraft/util/math/BlockPos;)Lnet/minecraft/block/BlockState;"
-            )
-    )
-    private void captureBlockLinePositions(BlockPos p_177251_1_, Direction p_177251_2_, CallbackInfoReturnable<Boolean> cir, BlockState blockstate, int i, BlockState oldState, BlockPos blockpos) {
-        pos_addBlockLine = blockpos.relative(pushDirection);
-        behindPos_addBlockLinea = blockpos;
-    }
-
-    @Redirect(
-            method = "addBlockLine",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/block/BlockState;canStickTo(Lnet/minecraft/block/BlockState;)Z"
-            )
-    )
-    private boolean onAddBlockLineCanStickToEachOther(BlockState state, BlockState behindState) {
-        Block block = state.getBlock();
-        if (block instanceof CustomPushBehavior) {
-            return ((CustomPushBehavior) block).isStickyToNeighbor(level, pos_addBlockLine, state, behindPos_addBlockLinea, behindState, pushDirection.getOpposite(), pushDirection);
+    @Inject(method = "isSticky", at = @At("HEAD"), cancellable = true)
+    private static void portalmod$recognizeBeams(BlockState state, CallbackInfoReturnable<Boolean> cir) {
+        if (state.getBlock() instanceof CustomPushBehavior) {
+            cir.setReturnValue(true);
         }
-
-        return state.canStickTo(behindState);
     }
 
-    // fields that are needed because @Redirects cannot capture locals
-    @Unique private Direction dir_addBranchingBlocks;
-    @Unique private BlockPos neighborPos_addBranchingBlocks;
-
-    @Inject(
-            method = "addBranchingBlocks",
-            locals = LocalCapture.CAPTURE_FAILHARD,
-            at = @At(
-                    value = "INVOKE",
-                    ordinal = 1,
-                    target = "Lnet/minecraft/world/World;getBlockState(Lnet/minecraft/util/math/BlockPos;)Lnet/minecraft/block/BlockState;"
-            )
-    )
-    private void captureNeighborPositions(BlockPos pos, CallbackInfoReturnable<Boolean> cir, BlockState state, Direction[] dirs, int i, int j, Direction dir, BlockPos neighborPos) {
-        dir_addBranchingBlocks = dir;
-        neighborPos_addBranchingBlocks = neighborPos;
-    }
-
-    @Redirect(
-            method = "addBranchingBlocks",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/block/BlockState;canStickTo(Lnet/minecraft/block/BlockState;)Z"
-            )
-    )
-    private boolean onAddBranchingBlocksCanStickToEachOther(BlockState neighborState, BlockState state, BlockPos pos) {
-        Block block = state.getBlock();
-        if (block instanceof CustomPushBehavior) {
-            return ((CustomPushBehavior) block).isStickyToNeighbor(level, pos, state, neighborPos_addBranchingBlocks, neighborState, dir_addBranchingBlocks, pushDirection);
+    @WrapOperation(
+            method = "addBlockLine",
+            at =
+                    @At(
+                            value = "INVOKE",
+                            target =
+                                    "Lnet/minecraft/world/level/block/piston/PistonStructureResolver;canStickToEachOther(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/state/BlockState;)Z"))
+    private boolean portalmod$stickAlongLine(
+            BlockState previous, BlockState next, Operation<Boolean> original, @Local(name = "pos") BlockPos nextPos) {
+        BlockPos previousPos = nextPos.relative(pushDirection);
+        if (previous.getBlock() instanceof CustomPushBehavior block) {
+            return block.isStickyToNeighbor(
+                    level, previousPos, previous, nextPos, next, pushDirection.getOpposite(), pushDirection);
         }
+        if (next.getBlock() instanceof CustomPushBehavior block) {
+            return block.isStickyToNeighbor(level, nextPos, next, previousPos, previous, pushDirection, pushDirection);
+        }
+        return original.call(previous, next);
+    }
 
-        return neighborState.canStickTo(state);
+    @WrapOperation(
+            method = "addBranchingBlocks",
+            at =
+                    @At(
+                            value = "INVOKE",
+                            target =
+                                    "Lnet/minecraft/world/level/block/piston/PistonStructureResolver;canStickToEachOther(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/state/BlockState;)Z"))
+    private boolean portalmod$stickAlongBeam(
+            BlockState neighbor,
+            BlockState state,
+            Operation<Boolean> original,
+            @Local(argsOnly = true) BlockPos pos,
+            @Local(name = "direction") Direction direction,
+            @Local(name = "neighbourPos") BlockPos neighborPos) {
+        if (state.getBlock() instanceof CustomPushBehavior block) {
+            return block.isStickyToNeighbor(level, pos, state, neighborPos, neighbor, direction, pushDirection);
+        }
+        if (neighbor.getBlock() instanceof CustomPushBehavior block) {
+            return block.isStickyToNeighbor(
+                    level, neighborPos, neighbor, pos, state, direction.getOpposite(), pushDirection);
+        }
+        return original.call(neighbor, state);
     }
 }

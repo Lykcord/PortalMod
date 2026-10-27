@@ -29,16 +29,17 @@ public class Animation {
         double accum = 0;
         Part selected = null;
 
-        for(Part part : parts) {
-            if(time < accum + part.duration) {
+        for (Part part : parts) {
+            if (time < accum + part.duration) {
                 selected = part;
                 break;
             }
             accum += part.duration;
         }
 
-        if(selected == null)
+        if (selected == null) {
             return parts.get(parts.size() - 1).end;
+        }
         return selected.compute(time - accum);
     }
 
@@ -93,8 +94,8 @@ public class Animation {
     }
 
     public enum Curve {
-        INV_CUBIC(x -> polynomial(1/3f, x)),
-        INV_QUADRATIC(x -> polynomial(1/2f, x)),
+        INV_CUBIC(x -> polynomial(1 / 3f, x)),
+        INV_QUADRATIC(x -> polynomial(1 / 2f, x)),
         LINEAR(x -> polynomial(1f, x)),
         QUADRATIC(x -> polynomial(2f, x)),
         CUBIC(x -> polynomial(3f, x)),

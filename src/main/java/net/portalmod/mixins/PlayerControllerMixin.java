@@ -1,55 +1,47 @@
 package net.portalmod.mixins;
 
-import net.minecraft.client.entity.player.ClientPlayerEntity;
-import net.minecraft.client.multiplayer.PlayerController;
-import net.minecraft.client.world.ClientWorld;
-import net.minecraft.entity.Entity;
-import net.minecraft.network.play.client.CPlayerDiggingPacket;
-import net.minecraft.util.ActionResultType;
-import net.minecraft.util.Direction;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.BlockRayTraceResult;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.multiplayer.MultiPlayerGameMode;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
+import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
+import net.minecraft.world.entity.Entity;
 import net.portalmod.common.sorted.portal.CThroughPortalProofPacket;
-import net.portalmod.common.sorted.portal.PortalEntity;
 import net.portalmod.common.sorted.portal.PortalRenderer;
-import net.portalmod.core.init.PacketInit;
+import net.portalmod.common.sorted.portalgun.PortalGun;
+import net.portalmod.core.packet.ClientNetworking;
+
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import java.util.List;
-
-@Mixin(PlayerController.class)
+@Mixin(MultiPlayerGameMode.class)
 public class PlayerControllerMixin {
-
-    @Inject(
-                        method = "sendBlockAction",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/client/network/play/ClientPlayNetHandler;send(Lnet/minecraft/network/IPacket;)V"
-            )
-    )
-    private void pmSendBreakProof(CPlayerDiggingPacket.Action action, BlockPos pos, Direction direction, CallbackInfo info) {
-        List<PortalEntity> portalChain = PortalRenderer.getInstance().outlineRenderingPortalChain;
-
-        if(portalChain != null)
-            PacketInit.INSTANCE.sendToServer(new CThroughPortalProofPacket(portalChain.stream().mapToInt(Entity::getId).toArray()));
+    @Redirect(
+            method = "startPrediction",
+            at =
+                    @At(
+                            value = "INVOKE",
+                            target =
+                                    "Lnet/minecraft/client/multiplayer/ClientPacketListener;send(Lnet/minecraft/network/protocol/Packet;)V"))
+    private void pmSendPortalProof(ClientPacketListener connection, Packet<?> packet) {
+        if (packet instanceof ServerboundPlayerActionPacket || packet instanceof ServerboundUseItemOnPacket) {
+            var chain = PortalRenderer.getInstance().outlineRenderingPortalChain;
+            ClientNetworking.sendToServer(
+                    new CThroughPortalProofPacket(
+                            chain == null ? new int[0] : chain.stream().mapToInt(Entity::getId).toArray()));
+        }
+        connection.send(packet);
     }
 
-    @Inject(
-                        method = "useItemOn",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/client/network/play/ClientPlayNetHandler;send(Lnet/minecraft/network/IPacket;)V"
-            )
-    )
-    private void pmSendPlaceProof(ClientPlayerEntity player, ClientWorld level, Hand hand, BlockRayTraceResult rayTrace, CallbackInfoReturnable<ActionResultType> info) {
-        List<PortalEntity> portalChain = PortalRenderer.getInstance().outlineRenderingPortalChain;
-
-        if(portalChain != null)
-            PacketInit.INSTANCE.sendToServer(new CThroughPortalProofPacket(portalChain.stream().mapToInt(Entity::getId).toArray()));
+    @Inject(method = "dropItem", at = @At("HEAD"))
+    private void pmDropPortalGun(LocalPlayer player, boolean all, CallbackInfo callback) {
+        var stack = player.getMainHandItem();
+        if (stack.getItem() instanceof PortalGun) {
+            PortalGun.dropCube(player, stack);
+        }
     }
 }

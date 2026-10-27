@@ -1,20 +1,16 @@
 package net.portalmod.client.screens;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.DialogTexts;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.button.Button;
-import net.minecraft.util.text.ITextComponent;
-import net.minecraft.util.text.StringTextComponent;
-import net.minecraft.util.text.TranslationTextComponent;
-import net.minecraftforge.fml.client.gui.GuiUtils;
-import net.minecraftforge.fml.client.gui.widget.Slider;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.AbstractSliderButton;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.CommonComponents;
+import net.minecraft.network.chat.Component;
 import net.portalmod.PortalMod;
 import net.portalmod.client.screens.widgets.ToggleButton;
-import net.portalmod.core.config.PortalModConfigManager;
-import net.portalmod.core.injectors.MainMenuInjector;
 import net.portalmod.common.sorted.portalgun.skins.SkinSelectorScreen;
+import net.portalmod.core.config.PortalModConfigManager;
 
 public class PortalModOptionsScreen extends Screen {
     private static final int BUTTON_WIDTH = 200;
@@ -22,7 +18,7 @@ public class PortalModOptionsScreen extends Screen {
 
     private final Screen lastScreen;
     private ToggleButton CROSSHAIR_BUTTON;
-    private Slider RECURSION_SLIDER;
+    private RecursionSlider RECURSION_SLIDER;
     private ToggleButton RENDER_SELF_BUTTON;
     private ToggleButton HIGHLIGHTS_BUTTON;
     private ToggleButton TOOLTIPS_BUTTON;
@@ -30,18 +26,20 @@ public class PortalModOptionsScreen extends Screen {
     private ToggleButton FUNNELING_BUTTON;
     private ToggleButton SEPARATE_GUN_BUTTON;
     private Button SKIN_PAGE_BUTTON;
-    
+
     public PortalModOptionsScreen(Screen lastScreen) {
-        super(new TranslationTextComponent("options." + PortalMod.MODID + ".title"));
+        super(Component.translatable("options." + PortalMod.MODID + ".title"));
         this.lastScreen = lastScreen;
     }
-    
+
     public static Button getAccessButton(Screen screen) {
-        return new Button(screen.width / 2 - 75, screen.height / 6 + 144 - 6, 150, 20,
-                new TranslationTextComponent("options." + PortalMod.MODID + ".button"),
-                ($1) -> Minecraft.getInstance().setScreen(new PortalModOptionsScreen(screen)));
+        return Button.builder(
+                        Component.translatable("options." + PortalMod.MODID + ".button"),
+                        button -> Minecraft.getInstance().gui.setScreen(new PortalModOptionsScreen(screen)))
+                .bounds(screen.width / 2 - 75, screen.height / 6 + 144 - 6, 150, 20)
+                .build();
     }
-    
+
     @Override
     protected void init() {
         int baseY = 50;
@@ -52,90 +50,86 @@ public class PortalModOptionsScreen extends Screen {
         y = baseY;
         CROSSHAIR_BUTTON = this.createToggleButton(x, y, "crosshair", PortalModConfigManager.CROSSHAIR.get());
         RECURSION_SLIDER = this.createRecursionSlider(x, y += stepY);
-        RENDER_SELF_BUTTON = this.createToggleButton(x, y += stepY, "render_self", PortalModConfigManager.RENDER_SELF.get());
-        HIGHLIGHTS_BUTTON = this.createToggleButton(x, y + stepY, "highlights", PortalModConfigManager.HIGHLIGHTS.get());
+        RENDER_SELF_BUTTON =
+                this.createToggleButton(x, y += stepY, "render_self", PortalModConfigManager.RENDER_SELF.get());
+        HIGHLIGHTS_BUTTON =
+                this.createToggleButton(x, y + stepY, "highlights", PortalModConfigManager.HIGHLIGHTS.get());
 
         x = this.width / 2 + 5;
         y = baseY;
         TOOLTIPS_BUTTON = this.createToggleButton(x, y, "tooltips", PortalModConfigManager.TOOLTIPS.get());
         MENU_BUTTON = this.createToggleButton(x, y += stepY, "menu", PortalModConfigManager.MENU.get());
-        FUNNELING_BUTTON = this.createToggleButton(x, y += stepY, "portal_funneling", PortalModConfigManager.PORTAL_FUNNELING.get());
-        SEPARATE_GUN_BUTTON = this.createToggleButton(x, y += stepY, "separate_gun", PortalModConfigManager.SEPARATE_GUN.get());
+        FUNNELING_BUTTON =
+                this.createToggleButton(
+                        x, y += stepY, "portal_funneling", PortalModConfigManager.PORTAL_FUNNELING.get());
+        SEPARATE_GUN_BUTTON =
+                this.createToggleButton(x, y += stepY, "separate_gun", PortalModConfigManager.SEPARATE_GUN.get());
         SKIN_PAGE_BUTTON = this.createSkinPageButton(x, y + stepY);
 
-        this.addButton(CROSSHAIR_BUTTON);
-        this.addButton(RECURSION_SLIDER);
-        this.addButton(RENDER_SELF_BUTTON);
-        this.addButton(HIGHLIGHTS_BUTTON);
-        this.addButton(TOOLTIPS_BUTTON);
-        this.addButton(MENU_BUTTON);
-        this.addButton(FUNNELING_BUTTON);
-        this.addButton(SEPARATE_GUN_BUTTON);
-        this.addButton(SKIN_PAGE_BUTTON);
+        this.addRenderableWidget(CROSSHAIR_BUTTON);
+        this.addRenderableWidget(RECURSION_SLIDER);
+        this.addRenderableWidget(RENDER_SELF_BUTTON);
+        this.addRenderableWidget(HIGHLIGHTS_BUTTON);
+        this.addRenderableWidget(TOOLTIPS_BUTTON);
+        this.addRenderableWidget(MENU_BUTTON);
+        this.addRenderableWidget(FUNNELING_BUTTON);
+        this.addRenderableWidget(SEPARATE_GUN_BUTTON);
+        this.addRenderableWidget(SKIN_PAGE_BUTTON);
 
-        this.addButton(new Button(this.width / 2 - 100, this.height / 6 + 168, 200, 20, DialogTexts.GUI_DONE, (p_213056_1_) -> {
-            close(true);
-        }));
+        this.addRenderableWidget(
+                Button.builder(CommonComponents.GUI_DONE, button -> close(true))
+                        .bounds(this.width / 2 - 100, this.height / 6 + 168, 200, 20)
+                        .build());
     }
 
-    private TranslationTextComponent getText(String id) {
-        return new TranslationTextComponent("options." + PortalMod.MODID + "." + id);
+    private Component getText(String id) {
+        return Component.translatable("options." + PortalMod.MODID + "." + id);
     }
 
     private ToggleButton createToggleButton(int x, int y, String id, boolean value) {
-        return new ToggleButton(
-                x, y, BUTTON_WIDTH, BUTTON_HEIGHT,
-                this.getText(id),
-                $1 -> {},
-                value
-        );
+        return new ToggleButton(x, y, BUTTON_WIDTH, BUTTON_HEIGHT, this.getText(id), $1 -> {}, value);
     }
 
     private RecursionSlider createRecursionSlider(int x, int y) {
-        return new RecursionSlider(x, y, BUTTON_WIDTH, BUTTON_HEIGHT,
-                this.getText("recursion").append(": "), StringTextComponent.EMPTY,
-                0, 9, PortalModConfigManager.RECURSION.get(), false, true, $1 -> {});
+        return new RecursionSlider(x, y, this.getText("recursion"), PortalModConfigManager.RECURSION.get());
     }
 
     private Button createSkinPageButton(int x, int y) {
-        return new Button(x, y, BUTTON_WIDTH, BUTTON_HEIGHT, this.getText("skins"), b -> {
-            this.save();
-            Minecraft.getInstance().setScreen(SkinSelectorScreen.getInstance(this));
-        });
+        return Button.builder(
+                        this.getText("skins"),
+                        b -> {
+                            this.save();
+                            Minecraft.getInstance().gui.setScreen(SkinSelectorScreen.getInstance(this));
+                        })
+                .bounds(x, y, BUTTON_WIDTH, BUTTON_HEIGHT)
+                .build();
     }
-    
+
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int action) {
-        RECURSION_SLIDER.mouseReleased(mouseX, mouseY, action);
-        return super.mouseReleased(mouseX, mouseY, action);
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTicks) {
+        super.extractRenderState(graphics, mouseX, mouseY, partialTicks);
+        graphics.centeredText(this.font, this.title, this.width / 2, 20, 0xFFFFFFFF);
     }
-    
-    @Override
-    public void render(MatrixStack matrixStack, int mouseX, int mouseY, float partialTicks) {
-        renderDirtBackground(0);
-        drawCenteredString(matrixStack, this.font, this.title, this.width / 2, 20, 16777215);
-        super.render(matrixStack, mouseX, mouseY, partialTicks);
-    }
-    
+
     @Override
     public void onClose() {
         close(false);
     }
-    
+
     private void close(boolean goBackElseClose) {
         boolean prevMenu = PortalModConfigManager.MENU.get();
 
         this.save();
-        
-        if(prevMenu != PortalModConfigManager.MENU.get())
-            MainMenuInjector.needsUpdate = true;
-        
-        this.minecraft.setScreen(goBackElseClose || Minecraft.getInstance().level == null ? lastScreen : null);
+
+        if (prevMenu != PortalModConfigManager.MENU.get()) {
+
+            this.minecraft.gui.setScreen(goBackElseClose || Minecraft.getInstance().level == null ? lastScreen : null);
+        }
     }
 
     private void save() {
         PortalModConfigManager.CROSSHAIR.set(CROSSHAIR_BUTTON.getValue());
-        PortalModConfigManager.RECURSION.set((int)Math.round(RECURSION_SLIDER.getValue()));
+        PortalModConfigManager.RECURSION.set(RECURSION_SLIDER.getValue());
         PortalModConfigManager.RENDER_SELF.set(RENDER_SELF_BUTTON.getValue());
         PortalModConfigManager.HIGHLIGHTS.set(HIGHLIGHTS_BUTTON.getValue());
         PortalModConfigManager.TOOLTIPS.set(TOOLTIPS_BUTTON.getValue());
@@ -144,36 +138,27 @@ public class PortalModOptionsScreen extends Screen {
         PortalModConfigManager.SEPARATE_GUN.set(SEPARATE_GUN_BUTTON.getValue());
     }
 
-    private static class RecursionSlider extends Slider {
-        public RecursionSlider(int x, int y, int width, int height, ITextComponent prefix, ITextComponent suf, double minVal, double maxVal, double currentVal, boolean showDec, boolean drawStr, IPressable handler) {
-            super(x, y, width, height, prefix, suf, minVal, maxVal, currentVal, showDec, drawStr, handler);
+    private static class RecursionSlider extends AbstractSliderButton {
+        private final Component label;
+
+        private RecursionSlider(int x, int y, Component label, int currentValue) {
+            super(x, y, BUTTON_WIDTH, BUTTON_HEIGHT, Component.empty(), currentValue / 9.0);
+            this.label = label;
+            updateMessage();
+        }
+
+        public int getValue() {
+            return (int) Math.round(value * 9);
         }
 
         @Override
-        protected void renderBg(MatrixStack matrixStack, Minecraft minecraft, int x, int y) {
-            if(this.visible) {
-                if(this.dragging) {
-                    this.sliderValue = (x - (this.x + 4)) / (float)(this.width - 8);
-                    updateSlider();
-                }
-
-                GuiUtils.drawContinuousTexturedBox(
-                        matrixStack,WIDGETS_LOCATION,
-                        this.x + (int)(this.sliderValue * (float)(this.width - 8)), this.y,
-                        0, 66 + (this.isHovered() ? 20 : 0),
-                        8, this.height,
-                        200, 20,
-                        2, 3, 2, 2,
-                        this.getBlitOffset()
-                );
-            }
+        protected void updateMessage() {
+            setMessage(Component.empty().append(label).append(": " + getValue()));
         }
 
         @Override
-        public void updateSlider() {
-            super.updateSlider();
-            int range = ((int)this.maxValue - (int)this.minValue);
-            this.sliderValue = (double)Math.round(this.sliderValue * range) / range;
+        protected void applyValue() {
+            value = getValue() / 9.0;
         }
     }
 }

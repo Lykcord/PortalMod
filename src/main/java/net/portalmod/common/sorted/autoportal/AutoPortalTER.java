@@ -1,80 +1,108 @@
 package net.portalmod.common.sorted.autoportal;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
-import com.mojang.blaze3d.vertex.IVertexBuilder;
-import net.minecraft.client.renderer.IRenderTypeBuffer;
-import net.minecraft.client.renderer.LightTexture;
-import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.model.RenderMaterial;
-import net.minecraft.client.renderer.texture.AtlasTexture;
-import net.minecraft.client.renderer.tileentity.TileEntityRenderer;
-import net.minecraft.client.renderer.tileentity.TileEntityRendererDispatcher;
-import net.minecraft.util.Direction;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.vector.Vector3f;
-import net.portalmod.PortalMod;
-import net.portalmod.client.render.DynamicTextureVertexBuilder;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Axis;
+
+import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
+import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
+import net.minecraft.client.renderer.feature.ModelFeatureRenderer;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.client.renderer.texture.TextureAtlas;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
+import net.minecraft.client.renderer.texture.UvMapping;
+import net.minecraft.client.resources.model.sprite.SpriteGetter;
+import net.minecraft.client.resources.model.sprite.SpriteId;
+import net.minecraft.resources.Identifier;
+import net.minecraft.util.LightCoordsUtil;
 import net.portalmod.common.sorted.button.QuadBlockCorner;
 import net.portalmod.common.sorted.portal.OrthonormalBasis;
-import net.portalmod.core.math.Mat4;
 import net.portalmod.core.math.Vec3;
 
-import java.util.Optional;
+public class AutoPortalTER implements BlockEntityRenderer<AutoPortalTileEntity, AutoPortalRenderState> {
+    public static final Identifier TEXTURE = Identifier.fromNamespaceAndPath("portalmod", "entity/autoportal");
+    private final AutoPortalModel model = new AutoPortalModel();
+    private final SpriteGetter sprites;
 
-public class AutoPortalTER extends TileEntityRenderer<AutoPortalTileEntity> {
-    public static final ResourceLocation TEXTURE = new ResourceLocation(PortalMod.MODID, "entity/autoportal");
-    public static RenderMaterial MATERIAL;
-    private final AutoPortalModel model;
-
-    public AutoPortalTER(TileEntityRendererDispatcher terd) {
-        super(terd);
-        this.model = new AutoPortalModel();
-        MATERIAL = new RenderMaterial(AtlasTexture.LOCATION_BLOCKS, TEXTURE);
+    public AutoPortalTER(BlockEntityRendererProvider.Context context) {
+        sprites = context.sprites();
     }
 
     @Override
-    public void render(AutoPortalTileEntity be, float partialTicks, MatrixStack matrixStack, IRenderTypeBuffer renderBuffer, int light, int overlay) {
-        if(be.getBlockState().getBlock() instanceof AutoPortalBlock) {
-            AutoPortalBlock block = (AutoPortalBlock)be.getBlockState().getBlock();
-            Direction facing = be.getBlockState().getValue(AutoPortalBlock.FACING);
-            Direction direction = be.getBlockState().getValue(AutoPortalBlock.DIRECTION);
-            BlockPos pos = be.getBlockPos();
+    public AutoPortalRenderState createRenderState() {
+        return new AutoPortalRenderState();
+    }
 
-            Vec3 up = new Vec3(block.getOtherBlock(pos, QuadBlockCorner.DOWN_LEFT, QuadBlockCorner.UP_LEFT, facing, direction).subtract(pos));
-            Vec3 right = new Vec3(block.getOtherBlock(pos, QuadBlockCorner.DOWN_LEFT, QuadBlockCorner.DOWN_RIGHT, facing, direction).subtract(pos));
-            Mat4 matrix = new OrthonormalBasis(right, up).getChangeOfBasisFromCanonicalMatrix();
+    @Override
+    public void extractRenderState(
+            AutoPortalTileEntity entity,
+            AutoPortalRenderState state,
+            float partialTick,
+            net.minecraft.world.phys.Vec3 camera,
+            ModelFeatureRenderer.CrumblingOverlay breaking) {
+        BlockEntityRenderer.super.extractRenderState(entity, state, partialTick, camera, breaking);
+        state.basis = null;
+        var blockState = entity.getBlockState();
+        if (!(blockState.getBlock() instanceof AutoPortalBlock block)) {
+            return;
+        }
+        var facing = blockState.getValue(AutoPortalBlock.FACING);
+        var direction = blockState.getValue(AutoPortalBlock.DIRECTION);
+        var pos = entity.getBlockPos();
+        var up =
+                new Vec3(
+                        block.getOtherBlock(pos, QuadBlockCorner.DOWN_LEFT, QuadBlockCorner.UP_LEFT, facing, direction)
+                                .subtract(pos));
+        var right =
+                new Vec3(
+                        block.getOtherBlock(
+                                        pos, QuadBlockCorner.DOWN_LEFT, QuadBlockCorner.DOWN_RIGHT, facing, direction)
+                                .subtract(pos));
+        state.basis = new OrthonormalBasis(right, up).getChangeOfBasisFromCanonicalMatrix().to4f();
+        state.offset = right.mul(.5).add(up.mul(.5)).add(new Vec3(facing).mul(-.499)).add(.5).to3d();
+        state.closed = entity.lastOpenedUUID == null;
+        state.colorIndex = entity.getCurrentColorIndex().orElse(-1);
+    }
 
-            up = up.mul(.5);
-            right = right.mul(.5);
-            Vec3 normal = new Vec3(facing).mul(-.499);
+    @Override
+    public void submit(
+            AutoPortalRenderState state, PoseStack poses, SubmitNodeCollector collector, CameraRenderState camera) {
+        if (state.basis == null) {
+            return;
+        }
+        poses.pushPose();
+        poses.translate(state.offset.x, state.offset.y, state.offset.z);
+        poses.mulPose(state.basis);
+        poses.rotateDegrees(Axis.ZP, 180);
+        poses.translate(0, -1.5, 0);
+        var sprite = sprites.get(new SpriteId(TextureAtlas.LOCATION_BLOCKS, TEXTURE));
+        var type = RenderTypes.entityTranslucent(sprite.atlasLocation());
+        collector.submitModelPart(model.frame, poses, type, state.lightCoords, OverlayTexture.NO_OVERLAY, sprite);
+        if (state.colorIndex >= 0) {
+            float u = (state.colorIndex % 4 * 11 + (state.closed ? 2 : 0)) / 64F;
+            float v = (state.colorIndex / 4) * 16 / 64F;
+            collector.submitModelPart(
+                    model.wawas,
+                    poses,
+                    type,
+                    LightCoordsUtil.FULL_BRIGHT,
+                    OverlayTexture.NO_OVERLAY,
+                    new OffsetUv(sprite, u, v));
+        }
+        poses.popPose();
+    }
 
-            matrixStack.pushPose();
-            matrixStack.translate(right.x, right.y, right.z);
-            matrixStack.translate(up.x, up.y, up.z);
-            matrixStack.translate(normal.x, normal.y, normal.z);
-            matrixStack.translate(0.5, 0.5, 0.5);
-            matrixStack.last().pose().multiply(matrix.to4f());
-            matrixStack.mulPose(Vector3f.ZP.rotationDegrees(180));
-            matrixStack.translate(0, -1.5, 0);
+    private record OffsetUv(TextureAtlasSprite sprite, float u, float v) implements UvMapping {
+        @Override
+        public float getU(float value) {
+            return sprite.getU(value + u);
+        }
 
-            IVertexBuilder vertexBuilder = MATERIAL.buffer(renderBuffer, RenderType::entityTranslucent);
-            DynamicTextureVertexBuilder dtvb = new DynamicTextureVertexBuilder(vertexBuilder);
-
-            int closedOffset = be.lastOpenedUUID != null ? 0 : 2;
-
-            model.frame.render(matrixStack, dtvb, light, overlay, 1, 1, 1, 1);
-
-            Optional<Integer> colorIndex = be.getCurrentColorIndex();
-            if(colorIndex.isPresent()) {
-                int color = colorIndex.get();
-                float u = ((color % 4) * 11 + closedOffset) / 64f;
-                float v = (float) (color / 4) * 16 / 64f;
-                dtvb.setOffset(u, v);
-                model.wawas.render(matrixStack, dtvb, LightTexture.pack(15, 15), overlay, 1, 1, 1, 1);
-            }
-
-            matrixStack.popPose();
+        @Override
+        public float getV(float value) {
+            return sprite.getV(value + v);
         }
     }
 }
