@@ -8,9 +8,26 @@ import net.portalmod.core.config.PortalModConfigManager;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
 
 @Mixin(LogoRenderer.class)
 public class LogoRendererMixin {
+    // The artwork occupies pixels 4..93 inside a 128px texture.
+    private static final int PORTAL_EDITION_OFFSET = 15;
+
+    @ModifyArg(
+            method = "extractRenderState(Lnet/minecraft/client/gui/GuiGraphicsExtractor;IFI)V",
+            at =
+                    @At(
+                            value = "INVOKE",
+                            target =
+                                    "Lnet/minecraft/client/gui/GuiGraphicsExtractor;blit(Lcom/mojang/renderpearl/api/pipeline/RenderPipeline;Lnet/minecraft/resources/Identifier;IIFFIIIII)V",
+                            ordinal = 1),
+            index = 2)
+    private int pmCenterEdition(int x) {
+        return PortalModConfigManager.MENU.get() ? x + PORTAL_EDITION_OFFSET : x;
+    }
+
     @ModifyExpressionValue(
             method = "extractRenderState(Lnet/minecraft/client/gui/GuiGraphicsExtractor;IFI)V",
             at =

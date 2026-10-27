@@ -26,7 +26,8 @@
       "net.portalmod.common.sorted.radio.ChamberContentClientTest",
       "net.portalmod.PortalClientTest",
       "net.portalmod.PortalSwimmingClientTest",
-      "net.portalmod.PortalReviewWorldCreator"
+      "net.portalmod.PortalReviewWorldCreator",
+      "net.portalmod.PortalTitleClientTest"
     ]
   },
   "mixins": [

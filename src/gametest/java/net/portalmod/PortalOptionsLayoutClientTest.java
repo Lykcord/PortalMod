@@ -5,6 +5,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.options.OptionsScreen;
+import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.portalmod.client.screens.PortalModOptionsScreen;
 
@@ -86,6 +87,19 @@ public final class PortalOptionsLayoutClientTest implements FabricClientGameTest
                         }
                     });
         }
+        context.runOnClient(
+                client ->
+                        client.gui
+                                .screen()
+                                .resize(
+                                        client.getWindow().getGuiScaledWidth(),
+                                        client.getWindow().getGuiScaledHeight()));
+        context.clickScreenButton(CommonComponents.GUI_DONE.getString());
+        context.waitForScreen(OptionsScreen.class);
+        context.clickScreenButton(Component.translatable("options.portalmod.button").getString());
+        context.waitForScreen(PortalModOptionsScreen.class);
+        context.runOnClient(client -> client.gui.screen().onClose());
+        context.waitForScreen(OptionsScreen.class);
         context.setScreen(() -> null);
     }
 }

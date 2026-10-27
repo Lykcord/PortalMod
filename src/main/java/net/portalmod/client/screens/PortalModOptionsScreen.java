@@ -120,15 +120,9 @@ public class PortalModOptionsScreen extends Screen {
         close(false);
     }
 
-    private void close(boolean goBackElseClose) {
-        boolean prevMenu = PortalModConfigManager.MENU.get();
-
+    private void close(boolean returnToParent) {
         this.save();
-
-        if (prevMenu != PortalModConfigManager.MENU.get()) {
-
-            this.minecraft.gui.setScreen(goBackElseClose || Minecraft.getInstance().level == null ? lastScreen : null);
-        }
+        this.minecraft.gui.setScreen(returnToParent || this.minecraft.level == null ? lastScreen : null);
     }
 
     private void save() {
