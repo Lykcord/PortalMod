@@ -1,3 +1,9 @@
+# Version 1.3.1+26.3-fabric.6
+
+- Restored the original encoder's immediate response to ordinary redstone changes while deferring repeated feedback across ticks.
+- Reproduced the standing-button feedback circuit in the original Forge 1.16.5 mod and added matching checks for input timing and normal-mode latching.
+- Added rendered-frame checks that the client displays both states of a running inverted clock.
+
 # Version 1.3.1+26.3-fabric.5
 
 - Replaced recursive antline signal propagation with a connected-network scan that reads all inputs before changing wires or outputs.
