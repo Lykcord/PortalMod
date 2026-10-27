@@ -1,0 +1,8 @@
+{
+  "type": "minecraft:stonecutting",
+  "ingredient": "portalmod:blackplate",
+  "result": {
+    "count": 2,
+    "id": "portalmod:blackplate_slab"
+  }
+}

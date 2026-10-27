@@ -1,0 +1,15 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "group": "lunecast_platform",
+  "key": {
+    "i": "#portalmod:iron_frames",
+    "s": "portalmod:arbored_lunecast"
+  },
+  "pattern": [
+    "s",
+    "i"
+  ],
+  "result": {
+    "id": "portalmod:arbored_lunecast_platform"
+  }
+}

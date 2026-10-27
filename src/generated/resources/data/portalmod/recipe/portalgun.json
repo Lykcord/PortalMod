@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "i": "minecraft:iron_ingot",
+    "n": "minecraft:netherite_ingot",
+    "o": "minecraft:ender_pearl",
+    "r": "minecraft:redstone"
+  },
+  "pattern": [
+    "ii ",
+    "ron"
+  ],
+  "result": {
+    "id": "portalmod:portalgun"
+  }
+}

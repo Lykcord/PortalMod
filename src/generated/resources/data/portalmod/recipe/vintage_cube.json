@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "i": "minecraft:iron_nugget",
+    "p": "#minecraft:planks"
+  },
+  "pattern": [
+    "IiI",
+    "ipi",
+    "IiI"
+  ],
+  "result": {
+    "id": "portalmod:vintage_cube"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    "minecraft:soul_sand",
+    "minecraft:dirt",
+    "minecraft:bucket"
+  ],
+  "result": {
+    "id": "portalmod:goo_bucket"
+  }
+}

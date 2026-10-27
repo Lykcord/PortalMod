@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "group": "lunecast_slab",
+  "key": {
+    "#": "portalmod:lunecast"
+  },
+  "pattern": [
+    "###"
+  ],
+  "result": {
+    "count": 6,
+    "id": "portalmod:lunecast_slab"
+  }
+}

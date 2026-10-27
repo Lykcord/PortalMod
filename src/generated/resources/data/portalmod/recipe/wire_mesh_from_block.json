@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "group": "wire_mesh",
+  "ingredients": [
+    "portalmod:wire_mesh_block"
+  ],
+  "result": {
+    "count": 4,
+    "id": "portalmod:wire_mesh"
+  }
+}

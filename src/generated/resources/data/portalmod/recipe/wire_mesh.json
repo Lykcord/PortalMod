@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "group": "wire_mesh",
+  "key": {
+    "n": "minecraft:iron_nugget"
+  },
+  "pattern": [
+    "nnn",
+    "nnn"
+  ],
+  "result": {
+    "id": "portalmod:wire_mesh"
+  }
+}

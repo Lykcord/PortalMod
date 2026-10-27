@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "group": "lunecast_stairs",
+  "key": {
+    "#": "portalmod:eroded_lunecast"
+  },
+  "pattern": [
+    "#  ",
+    "## ",
+    "###"
+  ],
+  "result": {
+    "count": 4,
+    "id": "portalmod:eroded_lunecast_stairs"
+  }
+}

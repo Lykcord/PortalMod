@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "group": "blackplate_variant",
+  "ingredients": [
+    "portalmod:blackplate",
+    [
+      "minecraft:short_grass",
+      "minecraft:tall_grass",
+      "minecraft:seagrass",
+      "minecraft:vine"
+    ]
+  ],
+  "result": {
+    "id": "portalmod:arbored_blackplate"
+  }
+}

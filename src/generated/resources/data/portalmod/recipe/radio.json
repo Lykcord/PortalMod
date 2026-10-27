@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "i": "minecraft:iron_ingot",
+    "o": "minecraft:jukebox"
+  },
+  "pattern": [
+    " i ",
+    "ioi"
+  ],
+  "result": {
+    "id": "portalmod:radio"
+  }
+}

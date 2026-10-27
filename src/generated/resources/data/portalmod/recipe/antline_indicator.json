@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "a": "portalmod:antline",
+    "i": "minecraft:iron_ingot"
+  },
+  "pattern": [
+    "iai"
+  ],
+  "result": {
+    "id": "portalmod:antline_indicator"
+  }
+}

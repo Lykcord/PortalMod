@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "b": "minecraft:white_banner",
+    "g": "minecraft:glowstone",
+    "i": "minecraft:iron_nugget"
+  },
+  "pattern": [
+    "igi",
+    "ibi",
+    "igi"
+  ],
+  "result": {
+    "id": "portalmod:chamber_sign"
+  }
+}

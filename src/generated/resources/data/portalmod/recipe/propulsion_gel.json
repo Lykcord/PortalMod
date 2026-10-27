@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    "minecraft:crimson_fungus",
+    "minecraft:magma_cream",
+    "portalmod:container"
+  ],
+  "result": {
+    "id": "portalmod:propulsion_gel"
+  }
+}

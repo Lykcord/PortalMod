@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "group": "rusty_beam",
+  "ingredients": [
+    "portalmod:platform_beam",
+    "portalmod:platform_beam",
+    "portalmod:platform_beam",
+    "portalmod:platform_beam",
+    "minecraft:water_bucket",
+    "portalmod:platform_beam",
+    "portalmod:platform_beam",
+    "portalmod:platform_beam",
+    "portalmod:platform_beam"
+  ],
+  "result": {
+    "count": 8,
+    "id": "portalmod:rusty_platform_beam"
+  }
+}

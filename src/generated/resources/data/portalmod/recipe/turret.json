@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "/": "minecraft:stick",
+    "b": "minecraft:bow",
+    "i": "minecraft:iron_ingot",
+    "r": "minecraft:redstone"
+  },
+  "pattern": [
+    " i ",
+    "brb",
+    "/i/"
+  ],
+  "result": {
+    "id": "portalmod:turret"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    "minecraft:gunpowder",
+    "minecraft:gold_ingot"
+  ],
+  "result": {
+    "count": 4,
+    "id": "portalmod:bullets"
+  }
+}

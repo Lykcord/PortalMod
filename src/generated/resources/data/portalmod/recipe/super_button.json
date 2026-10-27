@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "#": "minecraft:blackstone",
+    "a": "portalmod:antline",
+    "i": "minecraft:iron_nugget",
+    "p": "#portalmod:pressure_plates"
+  },
+  "pattern": [
+    "ipi",
+    "#a#"
+  ],
+  "result": {
+    "id": "portalmod:super_button"
+  }
+}

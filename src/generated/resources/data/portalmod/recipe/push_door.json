@@ -1,0 +1,10 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    "minecraft:iron_door",
+    "#minecraft:buttons"
+  ],
+  "result": {
+    "id": "portalmod:push_door"
+  }
+}

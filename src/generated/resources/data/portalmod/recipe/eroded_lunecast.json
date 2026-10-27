@@ -1,0 +1,15 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "group": "lunecast_variant",
+  "ingredients": [
+    "portalmod:lunecast",
+    [
+      "minecraft:dirt",
+      "minecraft:coarse_dirt",
+      "minecraft:gravel"
+    ]
+  ],
+  "result": {
+    "id": "portalmod:eroded_lunecast"
+  }
+}

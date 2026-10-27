@@ -1,0 +1,7 @@
+{
+  "type": "minecraft:stonecutting",
+  "ingredient": "portalmod:arbored_lunecast",
+  "result": {
+    "id": "portalmod:arbored_lunecast_stairs"
+  }
+}

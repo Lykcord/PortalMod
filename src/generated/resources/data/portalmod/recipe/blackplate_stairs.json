@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "group": "blackplate_stairs",
+  "key": {
+    "#": "portalmod:blackplate"
+  },
+  "pattern": [
+    "#  ",
+    "## ",
+    "###"
+  ],
+  "result": {
+    "count": 4,
+    "id": "portalmod:blackplate_stairs"
+  }
+}

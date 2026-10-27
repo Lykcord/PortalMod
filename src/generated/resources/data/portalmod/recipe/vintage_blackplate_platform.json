@@ -1,0 +1,15 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "group": "blackplate_platform",
+  "key": {
+    "i": "#portalmod:iron_frames",
+    "s": "portalmod:vintage_blackplate"
+  },
+  "pattern": [
+    "s",
+    "i"
+  ],
+  "result": {
+    "id": "portalmod:vintage_blackplate_platform"
+  }
+}

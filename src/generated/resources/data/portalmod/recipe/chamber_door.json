@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "b": "portalmod:blackplate_slab",
+    "i": "minecraft:iron_door"
+  },
+  "pattern": [
+    "bb",
+    "ii"
+  ],
+  "result": {
+    "id": "portalmod:chamber_door"
+  }
+}

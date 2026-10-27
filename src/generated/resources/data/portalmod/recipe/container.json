@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "i": "minecraft:iron_ingot",
+    "p": "minecraft:paper"
+  },
+  "pattern": [
+    "i i",
+    "pip"
+  ],
+  "result": {
+    "id": "portalmod:container"
+  }
+}

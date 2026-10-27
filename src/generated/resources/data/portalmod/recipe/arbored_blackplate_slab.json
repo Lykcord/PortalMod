@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "group": "blackplate_slab",
+  "key": {
+    "#": "portalmod:arbored_blackplate"
+  },
+  "pattern": [
+    "###"
+  ],
+  "result": {
+    "count": 6,
+    "id": "portalmod:arbored_blackplate_slab"
+  }
+}

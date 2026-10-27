@@ -1,0 +1,7 @@
+{
+  "type": "minecraft:stonecutting",
+  "ingredient": "portalmod:fractured_blackplate",
+  "result": {
+    "id": "portalmod:fractured_blackplate_stairs"
+  }
+}

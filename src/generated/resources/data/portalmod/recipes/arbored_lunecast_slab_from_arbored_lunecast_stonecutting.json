@@ -1,8 +1,0 @@
-{
-  "type": "minecraft:stonecutting",
-  "ingredient": {
-    "item": "portalmod:arbored_lunecast"
-  },
-  "result": "portalmod:arbored_lunecast_slab",
-  "count": 2
-}

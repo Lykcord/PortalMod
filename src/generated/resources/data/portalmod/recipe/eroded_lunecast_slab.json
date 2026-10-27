@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "group": "lunecast_slab",
+  "key": {
+    "#": "portalmod:eroded_lunecast"
+  },
+  "pattern": [
+    "###"
+  ],
+  "result": {
+    "count": 6,
+    "id": "portalmod:eroded_lunecast_slab"
+  }
+}

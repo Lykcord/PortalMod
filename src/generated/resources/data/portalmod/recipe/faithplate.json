@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "P": "#portalmod:pressure_plates",
+    "a": "portalmod:antline",
+    "b": "portalmod:blackplate_slab",
+    "i": "minecraft:iron_ingot",
+    "p": [
+      "minecraft:piston",
+      "minecraft:sticky_piston"
+    ]
+  },
+  "pattern": [
+    " p ",
+    "Pai",
+    "bbb"
+  ],
+  "result": {
+    "id": "portalmod:faithplate"
+  }
+}

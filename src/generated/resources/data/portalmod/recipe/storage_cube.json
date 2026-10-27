@@ -1,0 +1,15 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "i": "minecraft:iron_nugget"
+  },
+  "pattern": [
+    "IiI",
+    "i i",
+    "IiI"
+  ],
+  "result": {
+    "id": "portalmod:storage_cube"
+  }
+}

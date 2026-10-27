@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    "minecraft:warped_fungus",
+    "minecraft:slime_ball",
+    "portalmod:container"
+  ],
+  "result": {
+    "id": "portalmod:repulsion_gel"
+  }
+}

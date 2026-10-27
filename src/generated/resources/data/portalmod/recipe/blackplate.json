@@ -1,0 +1,15 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "#": "minecraft:blackstone",
+    "i": "minecraft:iron_nugget"
+  },
+  "pattern": [
+    "i#",
+    "#i"
+  ],
+  "result": {
+    "count": 4,
+    "id": "portalmod:blackplate"
+  }
+}

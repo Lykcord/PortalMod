@@ -1,0 +1,44 @@
+{
+  "parent": "minecraft:recipes/root",
+  "criteria": {
+    "has_item": {
+      "conditions": {
+        "location": {
+          "type": "minecraft:all_of",
+          "terms": [
+            {
+              "type": "minecraft:location_check",
+              "predicate": {
+                "block": {
+                  "blocks": "minecraft:crafting_table"
+                }
+              }
+            },
+            {
+              "type": "minecraft:match_tool",
+              "predicate": {}
+            }
+          ]
+        }
+      },
+      "trigger": "minecraft:item_used_on_block"
+    },
+    "has_the_recipe": {
+      "conditions": {
+        "recipes": "portalmod:portalgun"
+      },
+      "trigger": "minecraft:recipe_unlocked"
+    }
+  },
+  "requirements": [
+    [
+      "has_the_recipe",
+      "has_item"
+    ]
+  ],
+  "rewards": {
+    "recipes": [
+      "portalmod:portalgun"
+    ]
+  }
+}
