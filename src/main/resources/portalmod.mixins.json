@@ -44,6 +44,7 @@
     "accessors.GameRenderStateAccessor",
     "accessors.FogRendererAccessor",
     "accessors.LevelRendererAccessor",
+    "accessors.CloudRendererAccessor",
     "accessors.LevelExtractorAccessor",
     "accessors.FeatureRenderDispatcherAccessor",
     "accessors.EntityRendererAccessor",

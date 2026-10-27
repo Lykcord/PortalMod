@@ -358,6 +358,7 @@ public class PortalRenderer {
             mainRender.run();
             drawHighlights(view, target, projection);
         } finally {
+            scenes.endFrame();
             for (var resource : borrowed) {
                 allocator.release(resource.descriptor(), resource.target());
             }
