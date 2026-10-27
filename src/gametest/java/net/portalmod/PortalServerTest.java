@@ -95,17 +95,25 @@ public class PortalServerTest {
             test.assertTrue(
                     !entity.hurtServer(level, entity.damageSources().generic(), Float.MAX_VALUE),
                     "Ordinary damage must retain the original test-element protection: " + type);
+            var bounds = entity.getBoundingBox().inflate(2);
             server.getCommands()
                     .performPrefixedCommand(server.createCommandSourceStack(), "kill " + entity.getStringUUID());
             test.assertTrue(entity.isRemoved(), "The actual kill command must remove " + type);
+            test.assertTrue(
+                    level.getEntitiesOfClass(ItemEntity.class, bounds).isEmpty(),
+                    "Command kills must not drop an item: " + type);
         }
         var holder = test.makeMockPlayer(GameType.SURVIVAL);
         var held = test.spawn(EntityInit.TURRET.get(), 3, 3, 3);
         test.assertTrue(held.pickUp(holder), "The command must also work on a carried turret");
+        var bounds = held.getBoundingBox().inflate(2);
         server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "kill " + held.getStringUUID());
         test.assertTrue(
                 held.isRemoved() && holder.getPassengers().isEmpty(),
                 "Killing a held turret must also detach it from the holder");
+        test.assertTrue(
+                level.getEntitiesOfClass(ItemEntity.class, bounds).isEmpty(),
+                "Killing a held turret must not drop its item");
         test.succeed();
     }
 

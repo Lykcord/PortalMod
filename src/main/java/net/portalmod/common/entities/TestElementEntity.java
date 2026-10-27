@@ -649,6 +649,7 @@ public abstract class TestElementEntity extends LivingEntity implements Fizzleab
         if (creative || this.getDamage() > 40.0F) {
             this.discard();
             if (!creative
+                    && !source.is(DamageTypes.GENERIC_KILL)
                     && !this.isFromDropper()
                     && this.level() instanceof ServerLevel server
                     && GameRuleInit.getBoolean(server, GameRules.ENTITY_DROPS)) {

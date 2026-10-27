@@ -1,3 +1,7 @@
+# Version 1.3.1+26.3-fabric.10
+
+- Suppressed item drops when `/kill` removes turrets, cubes, or Gabe, including carried turrets.
+
 # Version 1.3.1+26.3-fabric.9
 
 - Fixed `/kill` being rejected by the shared damage filter for turrets, cubes, and Gabe.
