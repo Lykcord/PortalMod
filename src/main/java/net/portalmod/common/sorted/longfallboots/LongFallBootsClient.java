@@ -36,7 +36,7 @@ public final class LongFallBootsClient {
                                             : model.renderType(TEXTURE),
                                     light,
                                     OverlayTexture.NO_OVERLAY,
-                                    -1);
+                                    state.outlineColor);
                         }
                     };
                 },

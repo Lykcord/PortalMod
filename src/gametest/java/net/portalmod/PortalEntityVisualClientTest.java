@@ -16,7 +16,9 @@ import net.minecraft.core.Direction;
 import net.minecraft.locale.Language;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.PositionPath;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 import net.portalmod.client.render.PortalCamera;
@@ -106,6 +108,29 @@ public final class PortalEntityVisualClientTest implements FabricClientGameTest 
                         }
                         var cube = client.level.getEntity(cubeId);
                         var dispatcher = client.levelRenderer.entityRenderDispatcher();
+                        var previousBoots = client.player.getItemBySlot(EquipmentSlot.FEET);
+                        try {
+                            client.player.setItemSlot(EquipmentSlot.FEET, new ItemStack(ItemInit.LONGFALL_BOOTS.get()));
+                            var playerState = dispatcher.extractEntity(client.player, 1);
+                            var boots = new SubmitNodeStorage();
+                            dispatcher.submit(
+                                    playerState,
+                                    client.gameRenderer.gameRenderState().levelRenderState.cameraRenderState,
+                                    0,
+                                    0,
+                                    0,
+                                    new PoseStack(),
+                                    boots);
+                            for (var group : boots.getSubmitsPerOrder().values()) {
+                                group.outline.sortInto(
+                                        (node, outline) -> {
+                                            throw new AssertionError(
+                                                    "Ordinary Long Fall Boots submitted a glowing outline");
+                                        });
+                            }
+                        } finally {
+                            client.player.setItemSlot(EquipmentSlot.FEET, previousBoots);
+                        }
                         var state = dispatcher.extractEntity(cube, 1);
                         if (state.outlineColor != 0) {
                             throw new AssertionError("Ordinary cube unexpectedly glows");
