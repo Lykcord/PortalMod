@@ -1,84 +1,98 @@
 package net.portalmod.common.sorted.gel;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.ai.attributes.AttributeModifier;
-import net.minecraft.entity.ai.attributes.Attributes;
-import net.minecraft.entity.ai.attributes.ModifiableAttributeInstance;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.shapes.IBooleanFunction;
-import net.minecraft.util.math.shapes.ISelectionContext;
-import net.minecraft.util.math.shapes.VoxelShape;
-import net.minecraft.util.math.shapes.VoxelShapes;
-import net.minecraft.util.math.vector.Vector3d;
-import net.portalmod.core.init.PacketInit;
+import net.minecraft.core.BlockPos;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.attributes.AttributeInstance;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.BooleanOp;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import net.portalmod.core.injectors.LivingEntityInjector;
-
-import java.util.UUID;
+import net.portalmod.core.packet.ClientNetworking;
 
 public class PropulsionGelBlock extends AbstractGelBlock {
-    private static final UUID SPEED_MODIFIER_GEL = UUID.fromString("46ea8b5a-6e03-44d0-b9b3-ed94341b0c51");
-    private static final UUID SPEED_MODIFIER_GEL_BOUNCE = UUID.fromString("69ea0d28-0fc5-4cfd-8640-1525a61295cc");
+    private static final Identifier SPEED_MODIFIER_GEL =
+            Identifier.fromNamespaceAndPath("portalmod", "propulsion_gel_boost");
+    private static final Identifier SPEED_MODIFIER_GEL_BOUNCE =
+            Identifier.fromNamespaceAndPath("portalmod", "propulsion_gel_bounce_boost");
 
     public PropulsionGelBlock(Properties properties) {
         super(properties);
     }
 
     public static boolean actuallyOnSpeedGel(BlockPos pos, BlockState state, Entity entity) {
-        VoxelShape shapeEntity = state.getShape(entity.level, pos, ISelectionContext.of(entity));
+        VoxelShape shapeEntity = state.getShape(entity.level(), pos, CollisionContext.of(entity));
         VoxelShape alignedShapeEntity = shapeEntity.move(pos.getX(), pos.getY(), pos.getZ());
 
-        return VoxelShapes.joinIsNotEmpty(alignedShapeEntity,
-                VoxelShapes.create(entity.getBoundingBox().inflate(.001f)), IBooleanFunction.AND);
+        return Shapes.joinIsNotEmpty(
+                alignedShapeEntity, Shapes.create(entity.getBoundingBox().inflate(.001f)), BooleanOp.AND);
     }
 
     public static void applyGelSpeedBoost(LivingEntity entity, int propulsionTicks) {
-        ModifiableAttributeInstance speedAttribute = entity.getAttribute(Attributes.MOVEMENT_SPEED);
-        if (speedAttribute == null) return;
+        AttributeInstance speedAttribute = entity.getAttribute(Attributes.MOVEMENT_SPEED);
+        if (speedAttribute == null) {
+            return;
+        }
 
-        double speedBoost = .12F * (1 + Math.cos(Math.PI + Math.PI * propulsionTicks / IGelAffected.MAX_PROPULSION_TICKS)) / 2;
+        double speedBoost =
+                .12F * (1 + Math.cos(Math.PI + Math.PI * propulsionTicks / IGelAffected.MAX_PROPULSION_TICKS)) / 2;
 
-        AttributeModifier propulsionGelBoost = new AttributeModifier(SPEED_MODIFIER_GEL,
-                "Propulsion Gel Boost", speedBoost, AttributeModifier.Operation.ADDITION);
+        AttributeModifier propulsionGelBoost =
+                new AttributeModifier(SPEED_MODIFIER_GEL, speedBoost, AttributeModifier.Operation.ADD_VALUE);
 
-        if (speedAttribute.getModifier(SPEED_MODIFIER_GEL) == null) speedAttribute.addTransientModifier(propulsionGelBoost);
+        if (speedAttribute.getModifier(SPEED_MODIFIER_GEL) == null) {
+            speedAttribute.addTransientModifier(propulsionGelBoost);
+        }
     }
 
     public static void applyBounceSpeedBoost(LivingEntity entity) {
-        ModifiableAttributeInstance speedAttribute = entity.getAttribute(Attributes.MOVEMENT_SPEED);
-        if (speedAttribute == null) return;
+        AttributeInstance speedAttribute = entity.getAttribute(Attributes.MOVEMENT_SPEED);
+        if (speedAttribute == null) {
+            return;
+        }
 
-        AttributeModifier gelSpeedBounceBoost = new AttributeModifier(SPEED_MODIFIER_GEL_BOUNCE,
-                "Propulsion Gel Bounce Boost", .7F, AttributeModifier.Operation.ADDITION);
+        AttributeModifier gelSpeedBounceBoost =
+                new AttributeModifier(SPEED_MODIFIER_GEL_BOUNCE, .7F, AttributeModifier.Operation.ADD_VALUE);
 
-        if (speedAttribute.getModifier(SPEED_MODIFIER_GEL_BOUNCE) == null) speedAttribute.addTransientModifier(gelSpeedBounceBoost);
+        if (speedAttribute.getModifier(SPEED_MODIFIER_GEL_BOUNCE) == null) {
+            speedAttribute.addTransientModifier(gelSpeedBounceBoost);
+        }
     }
 
     public static void removeGelSpeedBoost(LivingEntity entity) {
-        ModifiableAttributeInstance speedAttribute = entity.getAttribute(Attributes.MOVEMENT_SPEED);
-        if (speedAttribute == null) return;
+        AttributeInstance speedAttribute = entity.getAttribute(Attributes.MOVEMENT_SPEED);
+        if (speedAttribute == null) {
+            return;
+        }
 
         speedAttribute.removeModifier(SPEED_MODIFIER_GEL);
     }
 
     public static void removeBounceSpeedBoost(LivingEntity entity) {
-        ModifiableAttributeInstance speedAttribute = entity.getAttribute(Attributes.MOVEMENT_SPEED);
-        if (speedAttribute == null) return;
+        AttributeInstance speedAttribute = entity.getAttribute(Attributes.MOVEMENT_SPEED);
+        if (speedAttribute == null) {
+            return;
+        }
 
         speedAttribute.removeModifier(SPEED_MODIFIER_GEL_BOUNCE);
     }
 
     public static void onPreTick(LivingEntity entity) {
         BlockPos pos = entity.blockPosition();
-        BlockState state = entity.level.getBlockState(pos);
+        BlockState state = entity.level().getBlockState(pos);
         boolean isInSpeedGel = state.getBlock() instanceof PropulsionGelBlock;
 
         IGelAffected gelAffected = ((IGelAffected) entity);
 
         // to each their own
-        if (entity.level.isClientSide == entity instanceof PlayerEntity) {
+        if (entity.level().isClientSide() == entity instanceof Player) {
             if (isInSpeedGel) {
                 if (actuallyOnSpeedGel(pos, state, entity)) {
                     double speed = entity.getDeltaMovement().multiply(1, 0, 1).length();
@@ -89,13 +103,16 @@ public class PropulsionGelBlock extends AbstractGelBlock {
                         gelAffected.decrementPropulsionTicks();
                     }
 
-                    Vector3d velocity = entity.getDeltaMovement().multiply(1, 0, 1).normalize();
-                    Vector3d oldVelocity = ((IGelAffected) entity).getLastLastDeltaMovement().multiply(1, 0, 1).normalize();
-                    gelAffected.setPropulsionTicks((int)Math.round(gelAffected.getPropulsionTicks() * (velocity.dot(oldVelocity) / 2 + 0.5)));
+                    Vec3 velocity = entity.getDeltaMovement().multiply(1, 0, 1).normalize();
+                    Vec3 oldVelocity = ((IGelAffected) entity).getLastLastDeltaMovement().multiply(1, 0, 1).normalize();
+                    gelAffected.setPropulsionTicks(
+                            (int) Math.round(gelAffected.getPropulsionTicks() * (velocity.dot(oldVelocity) / 2 + 0.5)));
                 }
             } else {
                 // Preserve speed while jumping / bouncing
-                if (entity.isOnGround() && gelAffected.getLeftGround() && !(state.getBlock() instanceof RepulsionGelBlock)) {
+                if (entity.onGround()
+                        && gelAffected.getLeftGround()
+                        && !(state.getBlock() instanceof RepulsionGelBlock)) {
                     gelAffected.setPropulsionTicks(0);
                 }
 
@@ -104,8 +121,8 @@ public class PropulsionGelBlock extends AbstractGelBlock {
                 }
             }
 
-            if (entity.level.isClientSide) {
-                PacketInit.INSTANCE.sendToServer(new CPropulsionGelBoostTickPacket(gelAffected.getPropulsionTicks()));
+            if (entity.level().isClientSide()) {
+                ClientNetworking.sendToServer(new CPropulsionGelBoostTickPacket(gelAffected.getPropulsionTicks()));
             }
         }
 
@@ -122,7 +139,6 @@ public class PropulsionGelBlock extends AbstractGelBlock {
             removeGelSpeedBoost(entity);
         }
 
-        gelAffected.setLeftGround(!entity.isOnGround());
+        gelAffected.setLeftGround(!entity.onGround());
     }
-
 }

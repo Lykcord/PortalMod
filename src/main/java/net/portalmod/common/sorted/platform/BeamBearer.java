@@ -1,15 +1,10 @@
 package net.portalmod.common.sorted.platform;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.util.Direction;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.block.state.BlockState;
 
-import javax.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 
 public interface BeamBearer {
-    @Nullable
-    Direction getBeamDirection(BlockState state);
-
-    default boolean canStickTo(BlockState other) {
-        return !(other.getBlock() instanceof BeamBearer) && other.isStickyBlock();
-    }
+    @Nullable Direction getBeamDirection(BlockState state);
 }

@@ -1,23 +1,28 @@
 package net.portalmod.common.items;
 
-import net.minecraft.block.Block;
-import net.minecraft.client.util.ITooltipFlag;
-import net.minecraft.item.BlockItem;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.text.ITextComponent;
-import net.minecraft.world.World;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.item.component.TooltipDisplay;
+import net.minecraft.world.level.block.Block;
 import net.portalmod.core.util.ModUtil;
 
-import javax.annotation.Nullable;
-import java.util.List;
+import java.util.function.Consumer;
 
 public class PanelBlockItem extends BlockItem {
-    public PanelBlockItem(Block p_i48527_1_, Properties p_i48527_2_) {
-        super(p_i48527_1_, p_i48527_2_);
+    public PanelBlockItem(Block block, Properties properties) {
+        super(block, properties);
     }
 
     @Override
-    public void appendHoverText(ItemStack itemStack, @Nullable World world, List<ITextComponent> list, ITooltipFlag flag) {
+    public void appendHoverText(
+            ItemStack itemStack,
+            Item.TooltipContext context,
+            TooltipDisplay display,
+            Consumer<Component> list,
+            TooltipFlag flag) {
         ModUtil.addTooltip("panel", list);
     }
 }

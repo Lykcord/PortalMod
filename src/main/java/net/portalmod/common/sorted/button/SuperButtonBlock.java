@@ -1,30 +1,36 @@
 package net.portalmod.common.sorted.button;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.client.util.ITooltipFlag;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.state.BooleanProperty;
-import net.minecraft.state.EnumProperty;
-import net.minecraft.state.StateContainer.Builder;
-import net.minecraft.util.*;
-import net.minecraft.util.Direction.Axis;
-import net.minecraft.util.Direction.AxisDirection;
-import net.minecraft.util.math.AxisAlignedBB;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.BlockRayTraceResult;
-import net.minecraft.util.math.shapes.ISelectionContext;
-import net.minecraft.util.math.shapes.VoxelShape;
-import net.minecraft.util.math.shapes.VoxelShapes;
-import net.minecraft.util.math.vector.Vector3f;
-import net.minecraft.util.text.ITextComponent;
-import net.minecraft.util.text.TranslationTextComponent;
-import net.minecraft.world.IBlockReader;
-import net.minecraft.world.World;
-import net.minecraft.world.server.ServerWorld;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.Direction.Axis;
+import net.minecraft.core.Direction.AxisDirection;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySelector;
+import net.minecraft.world.entity.InsideBlockEffectApplier;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.StateDefinition.Builder;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
+import net.minecraft.world.level.block.state.properties.EnumProperty;
+import net.minecraft.world.level.redstone.Orientation;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
+import net.portalmod.common.blocks.BlockTooltip;
 import net.portalmod.common.blocks.QuadBlock;
 import net.portalmod.common.entities.TestElementEntity;
 import net.portalmod.common.items.WrenchItem;
@@ -37,26 +43,28 @@ import net.portalmod.core.math.Vec3;
 import net.portalmod.core.math.VoxelShapeGroup;
 import net.portalmod.core.util.ModUtil;
 
-import javax.annotation.Nullable;
-import java.util.List;
-import java.util.Random;
+import org.joml.Vector3f;
+import org.jspecify.annotations.Nullable;
 
-public class SuperButtonBlock extends QuadBlock implements AntlineActivator {
+import java.util.List;
+
+public class SuperButtonBlock extends QuadBlock implements AntlineActivator, BlockTooltip {
     public static final BooleanProperty PRESSED = BooleanProperty.create("pressed");
     public static final BooleanProperty ACTIVE = BooleanProperty.create("active");
     public static final EnumProperty<ButtonMode> MODE = EnumProperty.create("mode", ButtonMode.class);
-    
+
     private static final BiHashMap<Direction, QuadBlockCorner, VoxelShapeGroup> SHAPES = new BiHashMap<>();
-    
+
     public SuperButtonBlock(Properties properties) {
         super(properties);
-        this.registerDefaultState(stateDefinition.any()
-                .setValue(FACING, Direction.UP)
-                .setValue(CORNER, QuadBlockCorner.UP_LEFT)
-                .setValue(PRESSED, false)
-                .setValue(ACTIVE, false)
-                .setValue(MODE, ButtonMode.NORMAL)
-        );
+        this.registerDefaultState(
+                stateDefinition
+                        .any()
+                        .setValue(FACING, Direction.UP)
+                        .setValue(CORNER, QuadBlockCorner.UP_LEFT)
+                        .setValue(PRESSED, false)
+                        .setValue(ACTIVE, false)
+                        .setValue(MODE, ButtonMode.NORMAL));
         this.initAABBs();
     }
 
@@ -64,51 +72,60 @@ public class SuperButtonBlock extends QuadBlock implements AntlineActivator {
     protected void createBlockStateDefinition(Builder<Block, BlockState> builder) {
         builder.add(FACING, CORNER, PRESSED, ACTIVE, MODE);
     }
-    
+
     @Override
-    public void tick(BlockState state, ServerWorld level, BlockPos pos, Random random) {
+    public void tick(BlockState state, ServerLevel level, BlockPos pos, RandomSource random) {
         checkPressed(state, level, pos);
     }
-    
+
     private void initAABBs() {
-        VoxelShapeGroup shape = new VoxelShapeGroup.Builder()
-                .add(0, 0, 0, 12, 3, 12)
-                .add(0, 0, 12, 2.5f, 2, 16)
-                .add(12, 0, 0, 16, 2, 2.5f)
-                .addPart("normal",  0, 3, 0, 8.5f, 5, 8.5f)
-                .addPart("pressed", 0, 3, 0, 8.5f, 4, 8.5f)
-                .addPart("trigger", 0, 4, 0, 8.5f, 6, 8.5f)
-                .build();
-        
-        for(Direction facing : Direction.values()) {
-            for(QuadBlockCorner corner : QuadBlockCorner.values()) {
+        VoxelShapeGroup shape =
+                new VoxelShapeGroup.Builder()
+                        .add(0, 0, 0, 12, 3, 12)
+                        .add(0, 0, 12, 2.5f, 2, 16)
+                        .add(12, 0, 0, 16, 2, 2.5f)
+                        .addPart("normal", 0, 3, 0, 8.5f, 5, 8.5f)
+                        .addPart("pressed", 0, 3, 0, 8.5f, 4, 8.5f)
+                        .addPart("trigger", 0, 4, 0, 8.5f, 6, 8.5f)
+                        .build();
+
+        for (Direction facing : Direction.values()) {
+            for (QuadBlockCorner corner : QuadBlockCorner.values()) {
                 Mat4 matrix = Mat4.identity();
                 matrix.translate(new Vec3(.5));
-                
-                if(facing.getAxisDirection() == AxisDirection.NEGATIVE) {
-                    matrix.scale(new Vec3(facing.getNormal()).mul(2).add(1));
-                    matrix.rotateDeg(new Vec3(facing.getNormal()).to3f(), corner.getRot() - 90);
-                } else {
-                    matrix.rotateDeg(new Vec3(facing.getNormal()).to3f(), corner.getRot());
-                }
-                
-                if(facing.getAxis() == Axis.X)
-                    matrix.rotateDeg(Vector3f.ZP, -90)
-                            .rotateDeg(Vector3f.YP, 90);
-                
-                if(facing.getAxis() == Axis.Z)
-                    matrix.rotateDeg(Vector3f.XP, 90);
 
-                matrix.rotateDeg(Vector3f.YP, 90);
+                if (facing.getAxisDirection() == AxisDirection.NEGATIVE) {
+                    matrix.scale(new Vec3(facing.getStep()).mul(2).add(1));
+                    matrix.rotateDeg(new Vec3(facing.getStep()).to3f(), corner.getRot() - 90);
+                } else {
+                    matrix.rotateDeg(new Vec3(facing.getStep()).to3f(), corner.getRot());
+                }
+
+                if (facing.getAxis() == Axis.X) {
+                    matrix.rotateDeg(new Vector3f(0, 0, 1), -90).rotateDeg(new Vector3f(0, 1, 0), 90);
+                }
+
+                if (facing.getAxis() == Axis.Z) {
+                    matrix.rotateDeg(new Vector3f(1, 0, 0), 90);
+                }
+
+                matrix.rotateDeg(new Vector3f(0, 1, 0), 90);
                 matrix.translate(new Vec3(-.5));
-                
+
                 SHAPES.put(facing, corner, shape.clone().transform(matrix));
             }
         }
     }
 
     @Override
-    public ActionResultType use(BlockState blockState, World world, BlockPos pos, PlayerEntity player, Hand hand, BlockRayTraceResult result) {
+    public InteractionResult useItemOn(
+            ItemStack stack,
+            BlockState blockState,
+            Level world,
+            BlockPos pos,
+            Player player,
+            InteractionHand hand,
+            BlockHitResult result) {
         if (player.getItemInHand(hand).getItem() instanceof WrenchItem) {
 
             // Don't cycle when persistent/toggle and active
@@ -116,7 +133,8 @@ public class SuperButtonBlock extends QuadBlock implements AntlineActivator {
 
             if (shouldCycle) {
                 ButtonMode newMode = this.cycleMode(blockState, world, pos);
-                player.displayClientMessage(new TranslationTextComponent("actionbar.portalmod.button_mode." + newMode.getSerializedName()), true);
+                player.sendOverlayMessage(
+                        Component.translatable("actionbar.portalmod.button_mode." + newMode.getSerializedName()));
             }
 
             this.setBlockStateValue(ACTIVE, false, blockState, world, pos);
@@ -126,12 +144,12 @@ public class SuperButtonBlock extends QuadBlock implements AntlineActivator {
 
             this.updateAllNeighbors(world, pos, blockState);
 
-            return ActionResultType.sidedSuccess(world.isClientSide);
+            return InteractionResult.SUCCESS;
         }
-        return ActionResultType.PASS;
+        return InteractionResult.PASS;
     }
 
-    public ButtonMode cycleMode(BlockState blockState, World world, BlockPos pos) {
+    public ButtonMode cycleMode(BlockState blockState, Level world, BlockPos pos) {
         ButtonMode currentMode = blockState.getValue(MODE);
         ButtonMode newMode = currentMode.cycle();
         this.setBlockStateValue(MODE, newMode, blockState, world, pos);
@@ -139,29 +157,34 @@ public class SuperButtonBlock extends QuadBlock implements AntlineActivator {
     }
 
     @Override
-    public VoxelShape getShape(BlockState state, IBlockReader blockReader, BlockPos pos, ISelectionContext selectionContext) {
+    public VoxelShape getShape(
+            BlockState state, BlockGetter blockReader, BlockPos pos, CollisionContext selectionContext) {
         VoxelShape shape = this.getShapeGroup(state).getVariant(state.getValue(PRESSED) ? "pressed" : "normal");
-        return shape != null ? shape : VoxelShapes.empty();
+        return shape != null ? shape : Shapes.empty();
     }
-    
+
     private VoxelShapeGroup getShapeGroup(BlockState state) {
         return SHAPES.get(state.getValue(FACING), state.getValue(CORNER));
     }
 
     @Override
-    public void neighborChanged(BlockState state, World level, BlockPos pos, Block block, BlockPos neighborPos, boolean b) {
-        if (level.isClientSide) return;
+    public void neighborChanged(
+            BlockState state, Level level, BlockPos pos, Block block, Orientation orientation, boolean b) {
+        if (level.isClientSide()) {
+            return;
+        }
 
-        if(!state.canSurvive(level, pos)) {
+        if (!state.canSurvive(level, pos)) {
             level.destroyBlock(pos, true, null, 0);
         }
 
         Direction facing = state.getValue(FACING);
 
         // Reset when powered from "below"
-        boolean isPowered = getAllPositions(state, pos).stream()
-                .filter(blockPos -> level.getBlockState(blockPos).getBlock() instanceof SuperButtonBlock)
-                .anyMatch(checkingPos -> level.hasSignal(checkingPos.relative(facing.getOpposite()), facing));
+        boolean isPowered =
+                getAllPositions(state, pos).stream()
+                        .filter(blockPos -> level.getBlockState(blockPos).getBlock() instanceof SuperButtonBlock)
+                        .anyMatch(checkingPos -> level.hasSignal(checkingPos.relative(facing.getOpposite()), facing));
 
         if (isPowered && state.getValue(ACTIVE)) {
             this.setBlockStateValue(ACTIVE, false, state, level, pos);
@@ -169,19 +192,29 @@ public class SuperButtonBlock extends QuadBlock implements AntlineActivator {
             this.playPressSound(level, pos, false);
         }
     }
-    
+
     @Override
-    public void entityInside(BlockState state, World level, BlockPos pos, Entity entity) {
-        if(level.isClientSide)
+    public void entityInside(
+            BlockState state,
+            Level level,
+            BlockPos pos,
+            Entity entity,
+            InsideBlockEffectApplier effects,
+            boolean moved) {
+        if (level.isClientSide()) {
             return;
+        }
 
-        boolean hasScheduledTick = this.getAllPositions(state, pos).stream().anyMatch(pos1 -> level.getBlockTicks().hasScheduledTick(pos1, this));
+        boolean hasScheduledTick =
+                this.getAllPositions(state, pos).stream()
+                        .anyMatch(pos1 -> level.getBlockTicks().hasScheduledTick(pos1, this));
 
-        if(!hasScheduledTick)
+        if (!hasScheduledTick) {
             this.checkPressed(state, level, pos);
+        }
     }
-    
-    private void checkPressed(BlockState state, World level, BlockPos pos) {
+
+    private void checkPressed(BlockState state, Level level, BlockPos pos) {
         List<BlockPos> blocks = this.getAllPositions(state, pos);
         boolean wasPressed = state.getValue(PRESSED);
         boolean wasActive = state.getValue(ACTIVE);
@@ -189,8 +222,10 @@ public class SuperButtonBlock extends QuadBlock implements AntlineActivator {
 
         boolean pressed = blocks.stream().anyMatch(cornerPos -> this.isBeingPressed(level, cornerPos));
 
-        if (pressed) level.getBlockTicks().scheduleTick(pos, this, 10);
-        
+        if (pressed) {
+            level.scheduleTick(pos, this, 10);
+        }
+
         if (wasPressed != pressed) {
             this.setBlockStateValue(PRESSED, pressed, state, level, pos);
             this.playPressSound(level, pos, pressed);
@@ -198,12 +233,10 @@ public class SuperButtonBlock extends QuadBlock implements AntlineActivator {
             if (mode == ButtonMode.NORMAL) {
                 this.setBlockStateValue(ACTIVE, pressed, state, level, pos);
                 this.playActivationSound(level, pos, pressed);
-            }
-            else if (mode == ButtonMode.PERSISTENT && !wasActive) {
+            } else if (mode == ButtonMode.PERSISTENT && !wasActive) {
                 this.setBlockStateValue(ACTIVE, true, state, level, pos);
                 this.playActivationSound(level, pos, true);
-            }
-            else if (mode == ButtonMode.TOGGLE && pressed) {
+            } else if (mode == ButtonMode.TOGGLE && pressed) {
                 this.setBlockStateValue(ACTIVE, !wasActive, state, level, pos);
                 this.playActivationSound(level, pos, !wasActive);
             }
@@ -212,32 +245,54 @@ public class SuperButtonBlock extends QuadBlock implements AntlineActivator {
         }
     }
 
-    public void playPressSound(World level, BlockPos pos, boolean pressed) {
-        level.playSound(null, pos, pressed ? SoundInit.SUPER_BUTTON_PRESS.get() : SoundInit.SUPER_BUTTON_RELEASE.get(), SoundCategory.BLOCKS, 1, ModUtil.randomSlightSoundPitch());
+    public void playPressSound(Level level, BlockPos pos, boolean pressed) {
+        level.playSound(
+                null,
+                pos,
+                pressed ? SoundInit.SUPER_BUTTON_PRESS.get() : SoundInit.SUPER_BUTTON_RELEASE.get(),
+                SoundSource.BLOCKS,
+                1,
+                ModUtil.randomSlightSoundPitch());
     }
 
-    public void playActivationSound(World level, BlockPos pos, boolean activated) {
-        level.playSound(null, pos, activated ? SoundInit.BUTTON_ACTIVATE.get() : SoundInit.BUTTON_DEACTIVATE.get(), SoundCategory.BLOCKS, 1, ModUtil.randomSlightSoundPitch());
+    public void playActivationSound(Level level, BlockPos pos, boolean activated) {
+        level.playSound(
+                null,
+                pos,
+                activated ? SoundInit.BUTTON_ACTIVATE.get() : SoundInit.BUTTON_DEACTIVATE.get(),
+                SoundSource.BLOCKS,
+                1,
+                ModUtil.randomSlightSoundPitch());
     }
 
-    public AxisAlignedBB getTrigger(BlockState state, BlockPos pos) {
+    public AABB getTrigger(BlockState state, BlockPos pos) {
         return this.getShapeGroup(state).getPart("trigger").bounds().move(pos);
     }
-    
-    private boolean isBeingPressed(World level, BlockPos pos) {
-        BlockState state = level.getBlockState(pos);
-        if (!(state.getBlock() instanceof SuperButtonBlock)) return false;
-        AxisAlignedBB trigger = this.getTrigger(state, pos);
 
-        List<? extends Entity> entities = level.getEntitiesOfClass(LivingEntity.class, trigger, EntityPredicates.NO_SPECTATORS
-                .and(entity -> !entity.getType().is(EntityTagInit.BUTTON_NO_PRESS))
-                .and(entity -> !(entity instanceof TestElementEntity && ((TestElementEntity) entity).isFizzling())));
+    private boolean isBeingPressed(Level level, BlockPos pos) {
+        BlockState state = level.getBlockState(pos);
+        if (!(state.getBlock() instanceof SuperButtonBlock)) {
+            return false;
+        }
+        AABB trigger = this.getTrigger(state, pos);
+
+        List<? extends Entity> entities =
+                level.getEntitiesOfClass(
+                        LivingEntity.class,
+                        trigger,
+                        EntitySelector.NO_SPECTATORS
+                                .and(entity -> !entity.is(EntityTagInit.BUTTON_NO_PRESS))
+                                .and(
+                                        entity ->
+                                                !(entity instanceof TestElementEntity
+                                                        && ((TestElementEntity) entity).isFizzling())));
 
         return !entities.isEmpty();
     }
 
     @Override
-    public void appendHoverText(ItemStack itemStack, @Nullable IBlockReader blockReader, List<ITextComponent> list, ITooltipFlag flag) {
+    public void appendHoverText(
+            ItemStack itemStack, @Nullable BlockGetter blockReader, List<Component> list, TooltipFlag flag) {
         ModUtil.addTooltip("super_button", list);
     }
 

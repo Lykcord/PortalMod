@@ -1,9 +1,9 @@
 package net.portalmod.common.sorted.gel;
 
-import net.minecraft.entity.player.ServerPlayerEntity;
-import net.minecraft.network.PacketBuffer;
-import net.minecraftforge.fml.network.NetworkEvent;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.server.level.ServerPlayer;
 import net.portalmod.core.packet.AbstractPacket;
+import net.portalmod.core.packet.PacketContext;
 
 import java.util.function.Supplier;
 
@@ -17,26 +17,27 @@ public class CRepulsionGelBouncePacket implements AbstractPacket<CRepulsionGelBo
     }
 
     @Override
-    public void encode(PacketBuffer buffer) {
+    public void encode(FriendlyByteBuf buffer) {
         buffer.writeBoolean(this.bounced);
     }
 
     @Override
-    public CRepulsionGelBouncePacket decode(PacketBuffer buffer) {
+    public CRepulsionGelBouncePacket decode(FriendlyByteBuf buffer) {
         return new CRepulsionGelBouncePacket(buffer.readBoolean());
     }
 
     @Override
-    public boolean handle(Supplier<NetworkEvent.Context> context) {
-        context.get().enqueueWork(() -> {
-            ServerPlayerEntity player = context.get().getSender();
-            if(player == null)
-                return;
+    public boolean handle(Supplier<PacketContext> context) {
+        context.get()
+                .enqueueWork(
+                        () -> {
+                            ServerPlayer player = context.get().getSender();
+                            if (player == null) {
+                                return;
+                            }
 
-            ((IGelAffected)player).setBounced(this.bounced);
-        });
-
-        context.get().setPacketHandled(true);
+                            ((IGelAffected) player).setBounced(this.bounced);
+                        });
         return true;
     }
 }

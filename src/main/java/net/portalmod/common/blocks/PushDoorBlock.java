@@ -1,63 +1,76 @@
 package net.portalmod.common.blocks;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.DoorBlock;
-import net.minecraft.client.util.ITooltipFlag;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.state.properties.DoorHingeSide;
-import net.minecraft.state.properties.DoubleBlockHalf;
-import net.minecraft.util.ActionResultType;
-import net.minecraft.util.Direction;
-import net.minecraft.util.Hand;
-import net.minecraft.util.SoundCategory;
-import net.minecraft.util.math.AxisAlignedBB;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.BlockRayTraceResult;
-import net.minecraft.util.text.ITextComponent;
-import net.minecraft.world.IBlockReader;
-import net.minecraft.world.World;
-import net.minecraft.world.server.ServerWorld;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockSetType;
+import net.minecraft.world.level.block.state.properties.DoorHingeSide;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.level.redstone.Orientation;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
 import net.portalmod.common.sorted.portalgun.CPortalGunInteractionPacket;
 import net.portalmod.common.sorted.portalgun.PortalGunInteraction;
-import net.portalmod.core.init.PacketInit;
 import net.portalmod.core.init.SoundInit;
+import net.portalmod.core.packet.ClientNetworking;
 import net.portalmod.core.util.ModUtil;
 
-import javax.annotation.Nullable;
-import java.util.List;
-import java.util.Random;
+import org.jspecify.annotations.Nullable;
 
-public class PushDoorBlock extends DoorBlock implements InteractKeyInteractable {
-    private void playCloseSound(World world, BlockPos pos) {
-        world.playSound(null, pos, SoundInit.PUSH_DOOR_CLOSE.get(), SoundCategory.BLOCKS, 1, ModUtil.randomSoundPitch());
+import java.util.List;
+
+public class PushDoorBlock extends DoorBlock implements InteractKeyInteractable, BlockTooltip {
+    private void playCloseSound(Level world, BlockPos pos) {
+        world.playSound(null, pos, SoundInit.PUSH_DOOR_CLOSE.get(), SoundSource.BLOCKS, 1, ModUtil.randomSoundPitch());
     }
 
-    private void playOpenSound(World world, BlockPos pos) {
-        world.playSound(null, pos, SoundInit.PUSH_DOOR_OPEN.get(), SoundCategory.BLOCKS, 1, ModUtil.randomSoundPitch());
+    private void playOpenSound(Level world, BlockPos pos) {
+        world.playSound(null, pos, SoundInit.PUSH_DOOR_OPEN.get(), SoundSource.BLOCKS, 1, ModUtil.randomSoundPitch());
     }
 
     @Override
-    public ActionResultType use(BlockState blockState, World world, BlockPos blockPos, PlayerEntity playerEntity, Hand hand, BlockRayTraceResult blockRayTraceResult) {
-        return interact(blockState, world, blockPos, blockRayTraceResult) ? ActionResultType.sidedSuccess(world.isClientSide) : ActionResultType.PASS;
+    public InteractionResult useWithoutItem(
+            BlockState blockState,
+            Level world,
+            BlockPos blockPos,
+            Player playerEntity,
+            BlockHitResult blockRayTraceResult) {
+        return interact(blockState, world, blockPos, blockRayTraceResult)
+                ? InteractionResult.SUCCESS
+                : InteractionResult.PASS;
     }
 
-    public boolean interact(BlockState blockState, World world, BlockPos blockPos, BlockRayTraceResult blockRayTraceResult) {
+    public boolean interact(BlockState blockState, Level world, BlockPos blockPos, BlockHitResult blockRayTraceResult) {
         Direction clickedFace = blockRayTraceResult.getDirection();
         Direction facing = blockState.getValue(FACING);
-        Direction doorFront = !blockState.getValue(OPEN)
-                ? facing.getOpposite()
-                : blockState.getValue(HINGE) == DoorHingeSide.LEFT
-                        ? facing.getClockWise()
-                        : facing.getCounterClockWise();
+        Direction doorFront =
+                !blockState.getValue(OPEN)
+                        ? facing.getOpposite()
+                        : blockState.getValue(HINGE) == DoorHingeSide.LEFT
+                                ? facing.getClockWise()
+                                : facing.getCounterClockWise();
 
         if (clickedFace == doorFront) {
-            if (!blockState.getValue(OPEN)) open(blockState, world, blockPos);
-            if (blockState.getValue(OPEN)) close(blockState, world, blockPos);
+            if (!blockState.getValue(OPEN)) {
+                open(blockState, world, blockPos);
+            }
+            if (blockState.getValue(OPEN)) {
+                close(blockState, world, blockPos);
+            }
 
-            world.getBlockTicks().scheduleTick(blockPos, this, 20);
+            world.scheduleTick(blockPos, this, 20);
 
             return true;
         }
@@ -66,44 +79,44 @@ public class PushDoorBlock extends DoorBlock implements InteractKeyInteractable 
     }
 
     @Override
-    public boolean interactKeyInteract(PlayerEntity player, BlockRayTraceResult rayHit) {
+    public boolean interactKeyInteract(Player player, BlockHitResult rayHit) {
         if (withinInteractRange(player, rayHit)) {
-            PacketInit.INSTANCE.sendToServer(new CPortalGunInteractionPacket.Builder(PortalGunInteraction.OPEN_DOOR).blockHit(rayHit).build());
+            ClientNetworking.sendToServer(
+                    new CPortalGunInteractionPacket.Builder(PortalGunInteraction.OPEN_DOOR).blockHit(rayHit).build());
             return true;
         }
         return false;
     }
 
-    public PushDoorBlock(Properties p_i48413_1_) {
-        super(p_i48413_1_);
+    public PushDoorBlock(Properties properties) {
+        super(BlockSetType.IRON, properties);
     }
 
     @Override
-    public void fallOn(World p_180658_1_, BlockPos p_180658_2_, Entity p_180658_3_, float p_180658_4_) {
-        super.fallOn(p_180658_1_, p_180658_2_, p_180658_3_, p_180658_4_);
-    }
-
-    @Override
-    public void tick(BlockState blockState, ServerWorld world, BlockPos blockPos, Random random) {
+    public void tick(BlockState blockState, ServerLevel world, BlockPos blockPos, RandomSource random) {
         // Get whether there is a player within 1 block
-        boolean playerNearby = !world.getEntitiesOfClass(
-                PlayerEntity.class,
-                new AxisAlignedBB(blockPos).inflate(1),
-                player -> !player.isSpectator()
-        ).isEmpty();
+        boolean playerNearby =
+                !world.getEntitiesOfClass(Player.class, new AABB(blockPos).inflate(1), player -> !player.isSpectator())
+                        .isEmpty();
 
         if (playerNearby) {
-            world.getBlockTicks().scheduleTick(blockPos, this, 5);
+            world.scheduleTick(blockPos, this, 5);
             return;
         }
         // Close
-        if (blockState.getValue(OPEN)) close(blockState, world, blockPos);
+        if (blockState.getValue(OPEN)) {
+            close(blockState, world, blockPos);
+        }
     }
 
     @Override
-    public void neighborChanged(BlockState state, World world, BlockPos pos, Block block, BlockPos fromPos, boolean isMoving) {
-        boolean powered = world.hasNeighborSignal(pos) ||
-                world.hasNeighborSignal(pos.relative(state.getValue(HALF) == DoubleBlockHalf.LOWER ? Direction.UP : Direction.DOWN));
+    public void neighborChanged(
+            BlockState state, Level world, BlockPos pos, Block block, Orientation orientation, boolean isMoving) {
+        boolean powered =
+                world.hasNeighborSignal(pos)
+                        || world.hasNeighborSignal(
+                                pos.relative(
+                                        state.getValue(HALF) == DoubleBlockHalf.LOWER ? Direction.UP : Direction.DOWN));
 
         if (powered != state.getValue(POWERED)) {
 
@@ -115,30 +128,29 @@ public class PushDoorBlock extends DoorBlock implements InteractKeyInteractable 
                 }
             }
 
-            world.setBlock(pos, state
-                    .setValue(POWERED, powered)
-                    .setValue(OPEN, powered), 2);
+            world.setBlock(pos, state.setValue(POWERED, powered).setValue(OPEN, powered), 2);
         }
     }
 
-    private void open(BlockState blockState, World world, BlockPos blockPos) {
+    private void open(BlockState blockState, Level world, BlockPos blockPos) {
         blockState = blockState.cycle(OPEN);
         world.setBlock(blockPos, blockState, 10);
         this.playOpenSound(world, blockPos);
     }
 
-    private void close(BlockState blockState, World world, BlockPos blockPos) {
-        if (blockState.getValue(POWERED))
+    private void close(BlockState blockState, Level world, BlockPos blockPos) {
+        if (blockState.getValue(POWERED)) {
             return;
+        }
 
         blockState = blockState.cycle(OPEN); // Close the door
         world.setBlock(blockPos, blockState, 10);
         this.playCloseSound(world, blockPos);
     }
 
-
     @Override
-    public void appendHoverText(ItemStack itemStack, @Nullable IBlockReader blockReader, List<ITextComponent> list, ITooltipFlag flag) {
+    public void appendHoverText(
+            ItemStack itemStack, @Nullable BlockGetter blockReader, List<Component> list, TooltipFlag flag) {
         ModUtil.addTooltip("push_door", list);
     }
 }

@@ -1,21 +1,20 @@
 package net.portalmod.common.blocks;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.item.BlockItemUseContext;
-import net.minecraft.state.EnumProperty;
-import net.minecraft.state.Property;
-import net.minecraft.state.properties.BlockStateProperties;
-import net.minecraft.state.properties.DoubleBlockHalf;
-import net.minecraft.util.Direction;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.level.block.state.properties.EnumProperty;
+import net.minecraft.world.level.block.state.properties.Property;
 import net.portalmod.core.util.ModUtil;
 
-import javax.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
+
 import java.util.*;
 
-/**
- * Implementation of {@link MultiBlock} for two-high blocks
- */
+/** Implementation of {@link MultiBlock} for two-high blocks */
 public abstract class DoubleBlock extends MultiBlock {
     public static final EnumProperty<DoubleBlockHalf> HALF = BlockStateProperties.DOUBLE_BLOCK_HALF;
 
@@ -30,7 +29,9 @@ public abstract class DoubleBlock extends MultiBlock {
 
     @Override
     public BlockPos getMainPosition(BlockState blockState, BlockPos pos) {
-        return blockState.getValue(HALF) == DoubleBlockHalf.LOWER ? pos : pos.relative(this.getUpperDirection(blockState).getOpposite());
+        return blockState.getValue(HALF) == DoubleBlockHalf.LOWER
+                ? pos
+                : pos.relative(this.getUpperDirection(blockState).getOpposite());
     }
 
     @Override
@@ -45,7 +46,8 @@ public abstract class DoubleBlock extends MultiBlock {
 
         HashMap<BlockPos, BlockState> map = new HashMap<>();
 
-        map.put(pos.relative(isLower ? direction : direction.getOpposite()),
+        map.put(
+                pos.relative(isLower ? direction : direction.getOpposite()),
                 blockState.setValue(HALF, isLower ? DoubleBlockHalf.UPPER : DoubleBlockHalf.LOWER));
 
         return map;
@@ -53,8 +55,7 @@ public abstract class DoubleBlock extends MultiBlock {
 
     @Override
     public boolean isSamePart(BlockState one, BlockState two) {
-        return one.getValue(HALF) == two.getValue(HALF)
-                && this.getUpperDirection(one) == this.getUpperDirection(two);
+        return one.getValue(HALF) == two.getValue(HALF) && this.getUpperDirection(one) == this.getUpperDirection(two);
     }
 
     @Override
@@ -64,14 +65,14 @@ public abstract class DoubleBlock extends MultiBlock {
 
     @Nullable
     @Override
-    public BlockState getStateForPlacement(BlockItemUseContext context) {
+    public BlockState getStateForPlacement(BlockPlaceContext context) {
         // Basic implementation for vertical double blocks but this can be overridden if needed
         return getPlacementHalf(context, Direction.UP)
                 .map(doubleBlockHalf -> this.defaultBlockState().setValue(HALF, doubleBlockHalf))
                 .orElse(null);
     }
 
-    public static Optional<DoubleBlockHalf> getPlacementHalf(BlockItemUseContext context, Direction upDirection) {
+    public static Optional<DoubleBlockHalf> getPlacementHalf(BlockPlaceContext context, Direction upDirection) {
         BlockPos pos = context.getClickedPos();
         boolean placedOnUpperSide = clickedOnPositiveHalf(context, upDirection);
 
@@ -79,12 +80,20 @@ public abstract class DoubleBlock extends MultiBlock {
         boolean canBeUpper = ModUtil.canPlaceAt(context, pos.relative(upDirection.getOpposite()));
 
         // Placement preference
-        if (!placedOnUpperSide && canBeUpper) return Optional.of(DoubleBlockHalf.UPPER);
-        if (placedOnUpperSide && canBeLower) return Optional.of(DoubleBlockHalf.LOWER);
+        if (!placedOnUpperSide && canBeUpper) {
+            return Optional.of(DoubleBlockHalf.UPPER);
+        }
+        if (placedOnUpperSide && canBeLower) {
+            return Optional.of(DoubleBlockHalf.LOWER);
+        }
 
         // Placement fallback
-        if (canBeUpper) return Optional.of(DoubleBlockHalf.UPPER);
-        if (canBeLower) return Optional.of(DoubleBlockHalf.LOWER);
+        if (canBeUpper) {
+            return Optional.of(DoubleBlockHalf.UPPER);
+        }
+        if (canBeLower) {
+            return Optional.of(DoubleBlockHalf.LOWER);
+        }
 
         return Optional.empty();
     }

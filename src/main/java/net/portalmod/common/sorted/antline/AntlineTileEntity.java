@@ -1,18 +1,17 @@
 package net.portalmod.common.sorted.antline;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.network.NetworkManager;
-import net.minecraft.network.play.server.SUpdateTileEntityPacket;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.tileentity.TileEntityType;
-import net.minecraft.util.Direction;
-import net.minecraft.util.Mirror;
-import net.minecraft.util.Rotation;
-import net.minecraftforge.client.model.data.IModelData;
-import net.minecraftforge.client.model.data.ModelDataMap;
-import net.minecraftforge.client.model.data.ModelProperty;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Mirror;
+import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
 import net.portalmod.core.init.BlockInit;
 import net.portalmod.core.init.TileEntityTypeInit;
 import net.portalmod.core.util.ModUtil;
@@ -22,58 +21,48 @@ import java.util.HashMap;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class AntlineTileEntity extends TileEntity {
+public class AntlineTileEntity extends BlockEntity {
     private final SideMap sideMap = new SideMap();
 
     public SideMap getSideMap() {
         return sideMap;
     }
 
-    public AntlineTileEntity(TileEntityType<?> type) {
-        super(type);
-    }
-
-    public AntlineTileEntity() {
-        this(TileEntityTypeInit.ANTLINE.get());
+    public AntlineTileEntity(BlockPos pos, BlockState state) {
+        super(TileEntityTypeInit.ANTLINE.get(), pos, state);
     }
 
     @Override
-    public CompoundNBT save(CompoundNBT nbt) {
-        if(sideMap.isBlank())
+    protected void saveAdditional(ValueOutput output) {
+        super.saveAdditional(output);
+        if (sideMap.isBlank()) {
             sideMap.makeDefault();
-        return super.save(sideMap.get(nbt));
+        }
+        output.store(
+                "AntlineSides", CompoundTag.CODEC, sideMap.get(new CompoundTag()).getCompoundOrEmpty("AntlineSides"));
     }
 
     @Override
-    public void load(BlockState state, CompoundNBT nbt) {
-        super.load(state, nbt);
+    protected void loadAdditional(ValueInput input) {
+        super.loadAdditional(input);
+        CompoundTag nbt = new CompoundTag();
+        nbt.put("AntlineSides", input.read("AntlineSides", CompoundTag.CODEC).orElseGet(CompoundTag::new));
         sideMap.set(nbt);
     }
 
-    public void load(CompoundNBT nbt, boolean complete) {
-        if (complete)
+    public void load(CompoundTag nbt, boolean complete) {
+        if (complete) {
             sideMap.set(nbt);
-        else
+        } else {
             sideMap.merge(nbt);
+        }
     }
 
-//    @Override
-//    public void onLoad() {
-//        super.onLoad();
-//
-//        if (level.isClientSide) return; //|| this.initialized
-//
-//        BlockPos pos = this.getBlockPos();
-//        BlockState state = level.getBlockState(pos);
-//        Block block = state.getBlock();
-//
-//        AntlineBlock.onPlaced(state, level, pos, block, this);
-//        this.initialized = true;
-//    }
-//
     @Override
-    protected void invalidateCaps() { // On removal of entity
-        if (level.isClientSide) return;
+    public void preRemoveSideEffects(BlockPos pos, BlockState state) {
+        if (level.isClientSide()) {
+            return;
+        }
 
         SideMap sidemap = this.getSideMap();
         int count = sidemap.getSideCount();
@@ -82,7 +71,7 @@ public class AntlineTileEntity extends TileEntity {
             AntlineBlock.dropResources(getBlock().defaultBlockState(), level, this.getBlockPos());
         }
 
-        super.invalidateCaps();
+        super.preRemoveSideEffects(pos, state);
     }
 
     private static Block getBlock() {
@@ -90,11 +79,12 @@ public class AntlineTileEntity extends TileEntity {
     }
 
     @Override
-    public IModelData getModelData() {
-        return sideMap.toModelData();
+    public SideMap getRenderData() {
+        SideMap snapshot = new SideMap();
+        sideMap.forEach((direction, side) -> snapshot.put(direction, new Side(side.sideDir, side.value)));
+        return snapshot;
     }
 
-    @Override
     public void rotate(Rotation rotation) {
         SideMap initial = (SideMap) this.sideMap.clone();
 
@@ -110,9 +100,10 @@ public class AntlineTileEntity extends TileEntity {
         this.sideMap.get(Direction.DOWN).rotate(ModUtil.getRotationAmount(rotation));
     }
 
-    @Override
     public void mirror(Mirror mirror) {
-        if (mirror == Mirror.NONE) return;
+        if (mirror == Mirror.NONE) {
+            return;
+        }
 
         SideMap initial = (SideMap) this.sideMap.clone();
 
@@ -132,46 +123,37 @@ public class AntlineTileEntity extends TileEntity {
     // chunk update
 
     @Override
-    public CompoundNBT getUpdateTag() {
-        return this.save(new CompoundNBT());
-    }
-
-    @Override
-    public void handleUpdateTag(BlockState state, CompoundNBT tag) {
-        load(state, tag);
+    public CompoundTag getUpdateTag(HolderLookup.Provider lookup) {
+        return saveWithoutMetadata(lookup);
     }
 
     // block update
 
     @Override
-    public SUpdateTileEntityPacket getUpdatePacket() {
-        // TODO sync only needed data
-        return new SUpdateTileEntityPacket(this.getBlockPos(), -1, save(new CompoundNBT()));
-    }
-
-    @Override
-    public void onDataPacket(NetworkManager net, SUpdateTileEntityPacket packet) {
-        // TODO false with only needed data
-        this.load(packet.getTag(), true);
+    public ClientboundBlockEntityDataPacket getUpdatePacket() {
+        return ClientboundBlockEntityDataPacket.create(this);
     }
 
     public static class SideMap extends HashMap<Direction, Side> {
-        public static final ModelProperty<SideMap> MODEL_PROPERTY = new ModelProperty<>();
 
         public void makeDefault() {
-            for(Direction direction : Direction.values())
+            for (Direction direction : Direction.values()) {
                 put(direction, direction == Direction.DOWN ? Side.dot(direction) : Side.emptySide(direction));
+            }
         }
 
         public SideMap() {
-            for (Direction direction : Direction.values())
+            for (Direction direction : Direction.values()) {
                 this.put(direction, Side.emptySide(direction));
+            }
         }
 
         public boolean isBlank() {
-            for(Direction direction : Direction.values())
-                if(!get(direction).isEmpty())
+            for (Direction direction : Direction.values()) {
+                if (!get(direction).isEmpty()) {
                     return false;
+                }
+            }
             return true;
         }
 
@@ -179,38 +161,36 @@ public class AntlineTileEntity extends TileEntity {
             return !get(direction).isEmpty();
         }
 
-        public void set(CompoundNBT nbt) {
-            CompoundNBT data = nbt.getCompound("AntlineSides");
-            for (Direction direction : Direction.values())
-                this.put(direction, new Side(direction, data.getByte(direction.getName())));
-//            }
+        public void set(CompoundTag nbt) {
+            CompoundTag data = nbt.getCompoundOrEmpty("AntlineSides");
+            for (Direction direction : Direction.values()) {
+                this.put(direction, new Side(direction, data.getByteOr(direction.getName(), (byte) 0)));
+            }
         }
 
-        public CompoundNBT get(CompoundNBT nbt) {
-            CompoundNBT data = new CompoundNBT();
-            for(Direction direction : Direction.values())
+        public CompoundTag get(CompoundTag nbt) {
+            CompoundTag data = new CompoundTag();
+            for (Direction direction : Direction.values()) {
                 data.putByte(direction.getName(), this.get(direction).value);
+            }
             nbt.put("AntlineSides", data);
             return nbt;
         }
 
-        public void merge(CompoundNBT nbt) {
-            for (String s : nbt.getAllKeys())
-                this.put(Direction.valueOf(s.toUpperCase()), new Side(Direction.valueOf(s.toUpperCase()), nbt.getByte(s)));
+        public void merge(CompoundTag nbt) {
+            for (String s : nbt.keySet()) {
+                this.put(
+                        Direction.valueOf(s.toUpperCase()),
+                        new Side(Direction.valueOf(s.toUpperCase()), nbt.getByteOr(s, (byte) 0)));
+            }
         }
 
         public int getSideCount() {
-            return (int)values().stream().filter(v -> v.value != 0xF).count();
+            return (int) values().stream().filter(v -> v.value != 0xF).count();
         }
 
         public void removeSide(Direction direction) {
             this.put(direction, Side.emptySide(direction));
-        }
-
-        public IModelData toModelData() {
-            ModelDataMap.Builder builder = new ModelDataMap.Builder();
-            builder.withInitial(MODEL_PROPERTY, this);
-            return builder.build();
         }
     }
 
@@ -227,7 +207,7 @@ public class AntlineTileEntity extends TileEntity {
 
         public Side(Direction sideDir, byte value) {
             this.sideDir = sideDir;
-            this.value   = value;
+            this.value = value;
         }
 
         public static Side emptySide(Direction direction) {
@@ -268,10 +248,14 @@ public class AntlineTileEntity extends TileEntity {
 
         public static byte valueByDirection(Direction direction) {
             switch (direction) {
-                case NORTH: return 0b1000; // 1000 north
-                case EAST:  return 0b0100; // 0100 east
-                case SOUTH: return 0b0010; // 0010 south
-                case WEST:  return 0b0001; // 0001 west
+                case NORTH:
+                    return 0b1000; // 1000 north
+                case EAST:
+                    return 0b0100; // 0100 east
+                case SOUTH:
+                    return 0b0010; // 0010 south
+                case WEST:
+                    return 0b0001; // 0001 west
             }
             return 0;
         }
@@ -279,17 +263,24 @@ public class AntlineTileEntity extends TileEntity {
         private Direction toRelative(Direction direction) {
             if (sideDir.getAxis() != Direction.Axis.Y) { // On a wall
                 switch (direction) {
-                    case UP:    return Direction.NORTH;
-                    case DOWN:  return Direction.SOUTH;
+                    case UP:
+                        return Direction.NORTH;
+                    case DOWN:
+                        return Direction.SOUTH;
 
-                    default: { // Else
-                        switch (sideDir) {
-                            case NORTH: return direction;
-                            case WEST:  return direction.getClockWise();
-                            case SOUTH: return direction.getOpposite();
-                            case EAST:  return direction.getCounterClockWise();
+                    default:
+                        { // Else
+                            switch (sideDir) {
+                                case NORTH:
+                                    return direction;
+                                case WEST:
+                                    return direction.getClockWise();
+                                case SOUTH:
+                                    return direction.getOpposite();
+                                case EAST:
+                                    return direction.getCounterClockWise();
+                            }
                         }
-                    }
                 }
             }
             return direction;
@@ -302,7 +293,9 @@ public class AntlineTileEntity extends TileEntity {
         public HashMap<Direction, Boolean> getConnections() {
             HashMap<Direction, Boolean> connections = new HashMap<>();
             for (Direction direction : Direction.values()) {
-                if (direction.getAxis() == Direction.Axis.Y) continue;
+                if (direction.getAxis() == Direction.Axis.Y) {
+                    continue;
+                }
                 connections.put(toRelative(direction), hasConnection(direction));
             }
             return connections;
@@ -318,11 +311,19 @@ public class AntlineTileEntity extends TileEntity {
             this.setValue((byte) newValue);
         }
 
-        public enum SideType { NORMAL, NONE, CORNER }
+        public enum SideType {
+            NORMAL,
+            NONE,
+            CORNER
+        }
 
         public SideType getSideType() {
-            if (getValue() == 0xF) return SideType.NONE; // Empty side
-            if ((getValue() == 0b0101) || (getValue() == 0b1010)) return SideType.NORMAL; // Straight lines
+            if (getValue() == 0xF) {
+                return SideType.NONE;
+            } // Empty side
+            if ((getValue() == 0b0101) || (getValue() == 0b1010)) {
+                return SideType.NORMAL;
+            } // Straight lines
             return SideType.CORNER; // Intersection side
         }
 
@@ -343,7 +344,9 @@ public class AntlineTileEntity extends TileEntity {
         }
 
         public int countConnections() { // Count how many connections a side has
-            if (getValue() == 0xF) return 0;
+            if (getValue() == 0xF) {
+                return 0;
+            }
             return Integer.bitCount(getValue());
         }
 

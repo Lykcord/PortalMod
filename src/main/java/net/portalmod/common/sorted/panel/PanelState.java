@@ -1,9 +1,9 @@
 package net.portalmod.common.sorted.panel;
 
-import net.minecraft.util.Direction;
-import net.minecraft.util.IStringSerializable;
+import net.minecraft.core.Direction;
+import net.minecraft.util.StringRepresentable;
 
-public enum PanelState implements IStringSerializable {
+public enum PanelState implements StringRepresentable {
     SINGLE("single"),
     BOTTOM("bottom"),
     TOP("top"),
@@ -47,7 +47,10 @@ public enum PanelState implements IStringSerializable {
     }
 
     public boolean isFloor() {
-        return this == FLOOR_BOTTOM_LEFT || this == FLOOR_BOTTOM_RIGHT || this == FLOOR_TOP_LEFT || this == FLOOR_TOP_RIGHT;
+        return this == FLOOR_BOTTOM_LEFT
+                || this == FLOOR_BOTTOM_RIGHT
+                || this == FLOOR_TOP_LEFT
+                || this == FLOOR_TOP_RIGHT;
     }
 
     public boolean isLeft() {
@@ -55,7 +58,11 @@ public enum PanelState implements IStringSerializable {
     }
 
     public boolean isBottom() {
-        return this == BOTTOM || this == BOTTOM_LEFT || this == BOTTOM_RIGHT || this == FLOOR_BOTTOM_LEFT || this == FLOOR_BOTTOM_RIGHT;
+        return this == BOTTOM
+                || this == BOTTOM_LEFT
+                || this == BOTTOM_RIGHT
+                || this == FLOOR_BOTTOM_LEFT
+                || this == FLOOR_BOTTOM_RIGHT;
     }
 
     public PanelState mirrorUpDown() {

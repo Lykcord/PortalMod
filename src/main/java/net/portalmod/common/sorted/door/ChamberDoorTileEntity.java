@@ -1,14 +1,12 @@
 package net.portalmod.common.sorted.door;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.state.properties.DoubleBlockHalf;
-import net.minecraft.tileentity.ITickableTileEntity;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.Direction;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.vector.Vector3d;
-import net.minecraft.world.World;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.portalmod.common.sorted.antline.indicator.IndicatorActivated;
 import net.portalmod.common.sorted.antline.indicator.IndicatorInfo;
 import net.portalmod.core.init.TileEntityTypeInit;
@@ -18,13 +16,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-public class ChamberDoorTileEntity extends TileEntity implements ITickableTileEntity, IndicatorActivated {
+public class ChamberDoorTileEntity extends BlockEntity implements IndicatorActivated {
 
-    public ChamberDoorTileEntity() {
-        super(TileEntityTypeInit.CHAMBER_DOOR.get());
+    public ChamberDoorTileEntity(BlockPos pos, BlockState state) {
+        super(TileEntityTypeInit.CHAMBER_DOOR.get(), pos, state);
     }
 
-    @Override
     public void tick() {
         BlockState blockState = this.getBlockState();
         if (!(blockState.getBlock() instanceof ChamberDoorBlock)) {
@@ -32,7 +29,7 @@ public class ChamberDoorTileEntity extends TileEntity implements ITickableTileEn
         }
         ChamberDoorBlock doorBlock = (ChamberDoorBlock) blockState.getBlock();
         BlockPos pos = this.getBlockPos();
-        World world = this.level;
+        Level world = this.level;
         Direction facing = blockState.getValue(ChamberDoorBlock.FACING);
 
         IndicatorInfo indicatorInfo = this.checkIndicators(blockState, world, pos);
@@ -46,16 +43,17 @@ public class ChamberDoorTileEntity extends TileEntity implements ITickableTileEn
             return;
         }
 
-        Vector3d middlePos = ChamberDoorBlock.getExactMiddlePos(blockState, pos);
-        int changeProximity = isOpen ? 4 : 3;  // Open in 3 blocks, close in 4
+        net.minecraft.world.phys.Vec3 middlePos = ChamberDoorBlock.getExactMiddlePos(blockState, pos);
+        int changeProximity = isOpen ? 4 : 3; // Open in 3 blocks, close in 4
 
         // Powered by nearby player
         boolean hasNearbyPlayer = false;
-        for (PlayerEntity player : world.players()) {
+        for (Player player : world.players()) {
             if (player.isSpectator()) {
                 continue;
             }
-            boolean inFront = player.position().subtract(middlePos).multiply(1, 0, 1).dot(new Vec3(facing.getNormal()).to3d()) > 0;
+            boolean inFront =
+                    player.position().subtract(middlePos).multiply(1, 0, 1).dot(new Vec3(facing.getStep()).to3d()) > 0;
             double playerDistance = player.position().distanceTo((middlePos));
             if (playerDistance < changeProximity && inFront || isOpen && playerDistance < 1.5) {
                 hasNearbyPlayer = true;
@@ -74,7 +72,7 @@ public class ChamberDoorTileEntity extends TileEntity implements ITickableTileEn
     }
 
     @Override
-    public List<BlockPos> getIndicatorPositions(BlockState blockState, World world, BlockPos pos) {
+    public List<BlockPos> getIndicatorPositions(BlockState blockState, Level world, BlockPos pos) {
         Direction facing = blockState.getValue(ChamberDoorBlock.FACING);
         boolean isLower = blockState.getValue(ChamberDoorBlock.HALF) == DoubleBlockHalf.LOWER;
         boolean isLeft = blockState.getValue(ChamberDoorBlock.SIDE) == ChamberDoorBlock.Side.LEFT;
@@ -83,10 +81,13 @@ public class ChamberDoorTileEntity extends TileEntity implements ITickableTileEn
         Direction horizontalDirection = isLeft ? facing.getCounterClockWise() : facing.getClockWise();
 
         List<BlockPos> possibleIndicatorPositions = new ArrayList<>();
-        possibleIndicatorPositions.addAll(getSurroundingPositions(pos.relative(facing), verticalDirection, horizontalDirection));
-        possibleIndicatorPositions.addAll(getDoorPositions(pos.relative(facing), verticalDirection, horizontalDirection)); // fill the gap
+        possibleIndicatorPositions.addAll(
+                getSurroundingPositions(pos.relative(facing), verticalDirection, horizontalDirection));
+        possibleIndicatorPositions.addAll(
+                getDoorPositions(pos.relative(facing), verticalDirection, horizontalDirection)); // fill the gap
         possibleIndicatorPositions.addAll(getOuterCornerPositions(pos, verticalDirection, horizontalDirection));
-        possibleIndicatorPositions.addAll(getOuterCornerPositions(pos.relative(facing.getOpposite()), verticalDirection, horizontalDirection));
+        possibleIndicatorPositions.addAll(
+                getOuterCornerPositions(pos.relative(facing.getOpposite()), verticalDirection, horizontalDirection));
         return possibleIndicatorPositions;
     }
 
@@ -101,29 +102,29 @@ public class ChamberDoorTileEntity extends TileEntity implements ITickableTileEn
 
      */
     public List<BlockPos> getSurroundingPositions(BlockPos pos, Direction vertical, Direction horizontal) {
-        return new ArrayList<>(Arrays.asList(
-                pos.relative(vertical.getOpposite()),
-                pos.relative(horizontal.getOpposite()).relative(vertical.getOpposite()),
-                pos.relative(horizontal.getOpposite()),
-                pos.relative(horizontal.getOpposite()).relative(vertical),
-                pos.relative(horizontal.getOpposite()).relative(vertical, 2),
-                pos.relative(vertical, 2),
-                pos.relative(horizontal).relative(vertical, 2),
-                pos.relative(horizontal, 2).relative(vertical, 2),
-                pos.relative(horizontal, 2).relative(vertical),
-                pos.relative(horizontal, 2),
-                pos.relative(horizontal, 2).relative(vertical.getOpposite()),
-                pos.relative(horizontal).relative(vertical.getOpposite())
-        ));
+        return new ArrayList<>(
+                Arrays.asList(
+                        pos.relative(vertical.getOpposite()),
+                        pos.relative(horizontal.getOpposite()).relative(vertical.getOpposite()),
+                        pos.relative(horizontal.getOpposite()),
+                        pos.relative(horizontal.getOpposite()).relative(vertical),
+                        pos.relative(horizontal.getOpposite()).relative(vertical, 2),
+                        pos.relative(vertical, 2),
+                        pos.relative(horizontal).relative(vertical, 2),
+                        pos.relative(horizontal, 2).relative(vertical, 2),
+                        pos.relative(horizontal, 2).relative(vertical),
+                        pos.relative(horizontal, 2),
+                        pos.relative(horizontal, 2).relative(vertical.getOpposite()),
+                        pos.relative(horizontal).relative(vertical.getOpposite())));
     }
 
     public List<BlockPos> getDoorPositions(BlockPos pos, Direction vertical, Direction horizontal) {
-        return new ArrayList<>(Arrays.asList(
-                pos.relative(horizontal),
-                pos.relative(horizontal).relative(vertical),
-                pos.relative(vertical),
-                pos
-        ));
+        return new ArrayList<>(
+                Arrays.asList(
+                        pos.relative(horizontal),
+                        pos.relative(horizontal).relative(vertical),
+                        pos.relative(vertical),
+                        pos));
     }
 
     /*
@@ -135,11 +136,11 @@ public class ChamberDoorTileEntity extends TileEntity implements ITickableTileEn
 
      */
     public List<BlockPos> getOuterCornerPositions(BlockPos pos, Direction vertical, Direction horizontal) {
-        return new ArrayList<>(Arrays.asList(
-                pos.relative(horizontal.getOpposite()).relative(vertical.getOpposite()),
-                pos.relative(horizontal.getOpposite()).relative(vertical, 2),
-                pos.relative(horizontal, 2).relative(vertical, 2),
-                pos.relative(horizontal, 2).relative(vertical.getOpposite())
-        ));
+        return new ArrayList<>(
+                Arrays.asList(
+                        pos.relative(horizontal.getOpposite()).relative(vertical.getOpposite()),
+                        pos.relative(horizontal.getOpposite()).relative(vertical, 2),
+                        pos.relative(horizontal, 2).relative(vertical, 2),
+                        pos.relative(horizontal, 2).relative(vertical.getOpposite())));
     }
 }

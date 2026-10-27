@@ -1,29 +1,33 @@
 package net.portalmod.common.sorted.panel;
 
 import com.mojang.datafixers.util.Pair;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.entity.player.PlayerInventory;
-import net.minecraft.item.BlockItem;
-import net.minecraft.item.BlockItemUseContext;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.state.EnumProperty;
-import net.minecraft.state.StateContainer;
-import net.minecraft.state.properties.BlockStateProperties;
-import net.minecraft.util.Direction;
-import net.minecraft.util.Mirror;
-import net.minecraft.util.Rotation;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.IWorld;
-import net.minecraft.world.World;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.LevelReader;
+import net.minecraft.world.level.ScheduledTickAccess;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Mirror;
+import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.portalmod.common.blocks.MultiBlock;
 import net.portalmod.core.math.Vec3;
 import net.portalmod.core.util.ModUtil;
 
-import javax.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
+
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Optional;
@@ -35,26 +39,27 @@ public class PanelBlock extends Block implements PortalHelper {
 
     public PanelBlock(Properties properties) {
         super(properties);
-        this.registerDefaultState(this.stateDefinition.any().setValue(STATE, PanelState.SINGLE).setValue(AXIS, Direction.Axis.X));
+        this.registerDefaultState(
+                this.stateDefinition.any().setValue(STATE, PanelState.SINGLE).setValue(AXIS, Direction.Axis.X));
     }
 
     @Override
-    protected void createBlockStateDefinition(StateContainer.Builder<Block, BlockState> builder) {
+    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
         super.createBlockStateDefinition(builder);
         builder.add(STATE, AXIS);
     }
 
     @Nullable
     @Override
-    public BlockState getStateForPlacement(BlockItemUseContext context) {
-        World world = context.getLevel();
+    public BlockState getStateForPlacement(BlockPlaceContext context) {
+        Level world = context.getLevel();
         Direction clickedFace = context.getClickedFace();
         BlockPos clickedOnPos = context.getClickedPos().relative(clickedFace.getOpposite());
         BlockState clickedBlock = world.getBlockState(clickedOnPos);
-        PlayerEntity player = context.getPlayer();
+        Player player = context.getPlayer();
 
         // Block is not this one or shift is not down
-        if (!clickedBlock.getBlock().is(this) || player == null || !player.isShiftKeyDown()) {
+        if (!clickedBlock.is(this) || player == null || !player.isShiftKeyDown()) {
             return this.defaultBlockState();
         }
 
@@ -68,7 +73,9 @@ public class PanelBlock extends Block implements PortalHelper {
 
         if (clickedOnSide && areTwoBlocksInInventory(player, this)) {
             // Wall 2x2 panel
-            if (clickedPanelState.isDouble() && world.getBlockState(context.getClickedPos().relative(clickedPanelState.getVerticalFacing())).canBeReplaced(context)) {
+            if (clickedPanelState.isDouble()
+                    && world.getBlockState(context.getClickedPos().relative(clickedPanelState.getVerticalFacing()))
+                            .canBeReplaced(context)) {
                 removeBlockFromInventory(player, this);
                 return this.defaultBlockState()
                         .setValue(STATE, wallStateFromDirection(clickedFace, clickedPanelState))
@@ -82,19 +89,31 @@ public class PanelBlock extends Block implements PortalHelper {
 
                 BlockState leftBlockState = world.getBlockState(clickedOnPos.relative(left));
                 BlockState rightBlockState = world.getBlockState(clickedOnPos.relative(right));
-                boolean canPlaceOnRight = leftBlockState.is(this) && leftBlockState.getValue(STATE).isSingle()
-                        && world.getBlockState(context.getClickedPos().relative(left)).canBeReplaced(context);
-                boolean canPlaceOnLeft = rightBlockState.is(this) && rightBlockState.getValue(STATE).isSingle()
-                        && world.getBlockState(context.getClickedPos().relative(right)).canBeReplaced(context);
+                boolean canPlaceOnRight =
+                        leftBlockState.is(this)
+                                && leftBlockState.getValue(STATE).isSingle()
+                                && world.getBlockState(context.getClickedPos().relative(left)).canBeReplaced(context);
+                boolean canPlaceOnLeft =
+                        rightBlockState.is(this)
+                                && rightBlockState.getValue(STATE).isSingle()
+                                && world.getBlockState(context.getClickedPos().relative(right)).canBeReplaced(context);
 
-                if (!canPlaceOnRight && !canPlaceOnLeft) return this.defaultBlockState();
+                if (!canPlaceOnRight && !canPlaceOnLeft) {
+                    return this.defaultBlockState();
+                }
 
                 boolean prefersLeft = MultiBlock.clickedOnPositiveHalf(context, right);
                 boolean willPlaceLeft = prefersLeft && canPlaceOnLeft || !canPlaceOnRight;
 
                 Direction.Axis axis = clickedFace.getAxis();
-                boolean getsBottomState = axis == Direction.Axis.Z ? clickedFace == Direction.SOUTH : willPlaceLeft != (clickedFace == Direction.WEST);
-                boolean getsLeftState = axis == Direction.Axis.X ? clickedFace == Direction.WEST : willPlaceLeft != (clickedFace == Direction.NORTH);
+                boolean getsBottomState =
+                        axis == Direction.Axis.Z
+                                ? clickedFace == Direction.SOUTH
+                                : willPlaceLeft != (clickedFace == Direction.WEST);
+                boolean getsLeftState =
+                        axis == Direction.Axis.X
+                                ? clickedFace == Direction.WEST
+                                : willPlaceLeft != (clickedFace == Direction.NORTH);
 
                 removeBlockFromInventory(player, this);
                 return this.defaultBlockState()
@@ -107,12 +126,15 @@ public class PanelBlock extends Block implements PortalHelper {
     }
 
     @Override
-    public void setPlacedBy(World world, BlockPos pos, BlockState blockState, @Nullable LivingEntity entity, ItemStack itemStack) {
+    public void setPlacedBy(
+            Level world, BlockPos pos, BlockState blockState, @Nullable LivingEntity entity, ItemStack itemStack) {
         PanelState panelState = blockState.getValue(STATE);
 
         // Place the other half
         if (panelState.isDouble()) {
-            world.setBlockAndUpdate(pos.relative(panelState.getVerticalFacing()), blockState.setValue(STATE, panelState.mirrorUpDown()));
+            world.setBlockAndUpdate(
+                    pos.relative(panelState.getVerticalFacing()),
+                    blockState.setValue(STATE, panelState.mirrorUpDown()));
             return;
         }
 
@@ -120,16 +142,27 @@ public class PanelBlock extends Block implements PortalHelper {
 
         // Place the other 3 wall blocks
         if (panelState.isWall()) {
-            Direction direction = axis == Direction.Axis.X ? panelState.isLeft() ? Direction.EAST : Direction.WEST : panelState.isLeft() ? Direction.NORTH : Direction.SOUTH;
+            Direction direction =
+                    axis == Direction.Axis.X
+                            ? panelState.isLeft() ? Direction.EAST : Direction.WEST
+                            : panelState.isLeft() ? Direction.NORTH : Direction.SOUTH;
 
             // New block
-            setBlock(world, pos.relative(panelState.getVerticalFacing()), wallStateFromDirection(direction.getOpposite(), panelState.mirrorUpDown()), axis);
+            setBlock(
+                    world,
+                    pos.relative(panelState.getVerticalFacing()),
+                    wallStateFromDirection(direction.getOpposite(), panelState.mirrorUpDown()),
+                    axis);
 
             // Clicked block
             setBlock(world, pos.relative(direction), wallStateFromDirection(direction, panelState), axis);
 
             // Diagonal block
-            setBlock(world, pos.relative(direction).relative(panelState.getVerticalFacing()), wallStateFromDirection(direction, panelState.mirrorUpDown()), axis);
+            setBlock(
+                    world,
+                    pos.relative(direction).relative(panelState.getVerticalFacing()),
+                    wallStateFromDirection(direction, panelState.mirrorUpDown()),
+                    axis);
         }
 
         // Place the other 3 floor blocks
@@ -144,7 +177,11 @@ public class PanelBlock extends Block implements PortalHelper {
             setBlock(world, pos.relative(upDownDir), panelState.mirrorUpDown(), axis);
 
             // Diagonal block
-            setBlock(world, pos.relative(leftRightDir).relative(upDownDir), panelState.mirrorUpDown().mirrorLeftRight(), axis);
+            setBlock(
+                    world,
+                    pos.relative(leftRightDir).relative(upDownDir),
+                    panelState.mirrorUpDown().mirrorLeftRight(),
+                    axis);
         }
     }
 
@@ -156,18 +193,29 @@ public class PanelBlock extends Block implements PortalHelper {
         return panelState.isLeft() ? Direction.EAST : Direction.WEST;
     }
 
-    public void setBlock(World world, BlockPos pos, PanelState state, Direction.Axis axis) {
+    public void setBlock(Level world, BlockPos pos, PanelState state, Direction.Axis axis) {
         world.setBlockAndUpdate(pos, this.defaultBlockState().setValue(STATE, state).setValue(AXIS, axis));
     }
 
     public static PanelState wallStateFromDirection(Direction direction, PanelState placedState) {
-        if (direction.getAxis() == Direction.Axis.Y) return PanelState.SINGLE;
+        if (direction.getAxis() == Direction.Axis.Y) {
+            return PanelState.SINGLE;
+        }
 
-        return PanelState.wallState(placedState.isBottom(), direction == Direction.WEST || direction == Direction.SOUTH);
+        return PanelState.wallState(
+                placedState.isBottom(), direction == Direction.WEST || direction == Direction.SOUTH);
     }
 
     @Override
-    public BlockState updateShape(BlockState state, Direction direction, BlockState neighborState, IWorld world, BlockPos pos, BlockPos neighborPos) {
+    public BlockState updateShape(
+            BlockState state,
+            LevelReader world,
+            ScheduledTickAccess ticks,
+            BlockPos pos,
+            Direction direction,
+            BlockPos neighborPos,
+            BlockState neighborState,
+            RandomSource random) {
         PanelState panelState = state.getValue(STATE);
         Direction.Axis axis = state.getValue(AXIS);
 
@@ -176,16 +224,22 @@ public class PanelBlock extends Block implements PortalHelper {
             return state;
         }
 
-        if (panelState.isFloor() && (!neighborState.is(this)
-                || axis != neighborState.getValue(AXIS)
-                || getLeftRightFloorDir(panelState) == direction && neighborState.getValue(STATE) != panelState.mirrorLeftRight()
-                || getUpDownFloorDir(panelState) == direction && neighborState.getValue(STATE) != panelState.mirrorUpDown())) {
+        if (panelState.isFloor()
+                && (!neighborState.is(this)
+                        || axis != neighborState.getValue(AXIS)
+                        || getLeftRightFloorDir(panelState) == direction
+                                && neighborState.getValue(STATE) != panelState.mirrorLeftRight()
+                        || getUpDownFloorDir(panelState) == direction
+                                && neighborState.getValue(STATE) != panelState.mirrorUpDown())) {
             return this.defaultBlockState();
         }
 
         // Incorrect sideways connection
-        if (panelState.isWall() && direction.getAxis() != Direction.Axis.Y
-                && (!neighborState.is(this) || axis != neighborState.getValue(AXIS) || panelState.mirrorLeftRight() != neighborState.getValue(STATE))) {
+        if (panelState.isWall()
+                && direction.getAxis() != Direction.Axis.Y
+                && (!neighborState.is(this)
+                        || axis != neighborState.getValue(AXIS)
+                        || panelState.mirrorLeftRight() != neighborState.getValue(STATE))) {
             return state.setValue(STATE, PanelState.doubleState(panelState.isBottom()));
         }
 
@@ -198,16 +252,16 @@ public class PanelBlock extends Block implements PortalHelper {
         return state;
     }
 
-    public static boolean areTwoBlocksInInventory(PlayerEntity player, Block block) {
+    public static boolean areTwoBlocksInInventory(Player player, Block block) {
         if (player.isCreative()) {
             return true;
         }
 
         int total = 0;
-        for (int i = 0; i < player.inventory.getContainerSize(); i++) {
-            ItemStack itemStack = player.inventory.getItem(i);
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            ItemStack itemStack = player.getInventory().getItem(i);
             Item item = itemStack.getItem();
-            if (item instanceof BlockItem && ((BlockItem) item).getBlock().is(block)) {
+            if (item instanceof BlockItem && ((BlockItem) item).getBlock() == block) {
                 total += itemStack.getCount();
                 if (total >= 2) {
                     return true;
@@ -217,15 +271,20 @@ public class PanelBlock extends Block implements PortalHelper {
         return false;
     }
 
-    public static void removeBlockFromInventory(PlayerEntity player, Block block) {
-        PlayerInventory inventory = player.inventory;
+    public static void removeBlockFromInventory(Player player, Block block) {
+        if (player.hasInfiniteMaterials()) {
+            return;
+        }
+        Inventory inventory = player.getInventory();
 
         for (int i = 0; i < inventory.getContainerSize(); i++) {
             ItemStack itemStack = inventory.getItem(i);
             Item item = itemStack.getItem();
-            if (item instanceof BlockItem && ((BlockItem) item).getBlock().is(block)
-                    // May not remove one from the selected hand if its count is 1, because it will already get removed by default
-                    && !(i == inventory.selected && itemStack.getCount() == 1)) {
+            if (item instanceof BlockItem
+                    && ((BlockItem) item).getBlock() == block
+                    // May not remove one from the selected hand if its count is 1, because it will already get removed
+                    // by default
+                    && !(i == inventory.getSelectedSlot() && itemStack.getCount() == 1)) {
                 itemStack.shrink(1);
                 return;
             }
@@ -242,7 +301,10 @@ public class PanelBlock extends Block implements PortalHelper {
         }
 
         if (panelState.isWall()) {
-            Direction direction = axis == Direction.Axis.X ? panelState.isLeft() ? Direction.EAST : Direction.WEST : panelState.isLeft() ? Direction.NORTH : Direction.SOUTH;
+            Direction direction =
+                    axis == Direction.Axis.X
+                            ? panelState.isLeft() ? Direction.EAST : Direction.WEST
+                            : panelState.isLeft() ? Direction.NORTH : Direction.SOUTH;
             set.add(pos.relative(panelState.getVerticalFacing()));
             set.add(pos.relative(panelState.getVerticalFacing()).relative(direction));
             set.add(pos.relative(direction));
@@ -290,7 +352,6 @@ public class PanelBlock extends Block implements PortalHelper {
         }
 
         return state;
-
     }
 
     @Override
@@ -301,33 +362,34 @@ public class PanelBlock extends Block implements PortalHelper {
 
         PanelState panelState = state.getValue(STATE);
         if (panelState.isFloor()) {
-            return state.setValue(STATE, mirror == Mirror.FRONT_BACK ? panelState.mirrorLeftRight() : panelState.mirrorUpDown());
+            return state.setValue(
+                    STATE, mirror == Mirror.FRONT_BACK ? panelState.mirrorLeftRight() : panelState.mirrorUpDown());
         }
 
         if (panelState.isWall()) {
             Direction.Axis axis = state.getValue(AXIS);
-            if (axis == Direction.Axis.X && mirror == Mirror.FRONT_BACK || axis == Direction.Axis.Z && mirror == Mirror.LEFT_RIGHT) {
+            if (axis == Direction.Axis.X && mirror == Mirror.FRONT_BACK
+                    || axis == Direction.Axis.Z && mirror == Mirror.LEFT_RIGHT) {
                 return state.setValue(STATE, panelState.mirrorLeftRight());
             }
         }
 
         return state;
-
     }
 
     @Override
-    public boolean containsBlock(BlockState state, BlockPos panelPos, BlockPos pos, World world) {
+    public boolean containsBlock(BlockState state, BlockPos panelPos, BlockPos pos, Level world) {
         return panelPos.equals(pos) || this.getConnectedPositions(state, panelPos).contains(pos);
     }
 
     @Override
-    public boolean willHelpPortal(Direction face, Direction horizontalDirection, BlockState state, World world) {
+    public boolean willHelpPortal(Direction face, Direction horizontalDirection, BlockState state, Level world) {
         // Only front face of 2x2 panel
         PanelState panelState = state.getValue(STATE);
 
-        if(panelState.isFloor()) {
+        if (panelState.isFloor()) {
             return face.getAxis().isVertical();
-        } else if(panelState.isWall()) {
+        } else if (panelState.isWall()) {
             return !face.getAxis().isVertical() && face.getClockWise().getAxis() == state.getValue(AXIS);
         }
 
@@ -335,49 +397,62 @@ public class PanelBlock extends Block implements PortalHelper {
     }
 
     @Override
-    public Pair<Vec3, Direction> helpPortal(Vec3 hitPos, Direction face, Direction horizontalDirection, Direction[] lookingDirections, BlockState state, World world) {
-        if(!this.willHelpPortal(face, horizontalDirection, state, world))
+    public Pair<Vec3, Direction> helpPortal(
+            Vec3 hitPos,
+            Direction face,
+            Direction horizontalDirection,
+            Direction[] lookingDirections,
+            BlockState state,
+            Level world) {
+        if (!this.willHelpPortal(face, horizontalDirection, state, world)) {
             return new Pair<>(hitPos, horizontalDirection);
+        }
 
         PanelState panelState = state.getValue(STATE);
         double yPos = panelState.isBottom() ? Math.ceil(hitPos.y) : Math.floor(hitPos.y);
 
-        Optional<Direction> upDirection = Arrays.stream(lookingDirections)
-                .filter(direction -> direction.getAxis() == state.getValue(AXIS))
-                .findFirst();
+        Optional<Direction> upDirection =
+                Arrays.stream(lookingDirections)
+                        .filter(direction -> direction.getAxis() == state.getValue(AXIS))
+                        .findFirst();
 
-        if(!upDirection.isPresent())
+        if (!upDirection.isPresent()) {
             return new Pair<>(hitPos, lookingDirections[0]);
+        }
 
-        if(face.getAxis().isVertical()) {
-            if(state.getValue(AXIS) == Direction.Axis.X) {
-                return new Pair<>(new Vec3(
-                        !panelState.isLeft() ? Math.floor(hitPos.x) : Math.ceil(hitPos.x),
-                        yPos,
-                        panelState.isBottom() ? Math.floor(hitPos.z) : Math.ceil(hitPos.z)
-                ), upDirection.get());
+        if (face.getAxis().isVertical()) {
+            if (state.getValue(AXIS) == Direction.Axis.X) {
+                return new Pair<>(
+                        new Vec3(
+                                !panelState.isLeft() ? Math.floor(hitPos.x) : Math.ceil(hitPos.x),
+                                yPos,
+                                panelState.isBottom() ? Math.floor(hitPos.z) : Math.ceil(hitPos.z)),
+                        upDirection.get());
             }
 
-            return new Pair<>(new Vec3(
-                    !panelState.isLeft() ? Math.floor(hitPos.x) : Math.ceil(hitPos.x),
-                    yPos,
-                    panelState.isBottom() ? Math.floor(hitPos.z) : Math.ceil(hitPos.z)
-            ), upDirection.get());
+            return new Pair<>(
+                    new Vec3(
+                            !panelState.isLeft() ? Math.floor(hitPos.x) : Math.ceil(hitPos.x),
+                            yPos,
+                            panelState.isBottom() ? Math.floor(hitPos.z) : Math.ceil(hitPos.z)),
+                    upDirection.get());
 
         } else {
-            if(face.getAxis() == Direction.Axis.X) {
-                return new Pair<>(new Vec3(
-                        panelState.isBottom() ? Math.floor(hitPos.x) : Math.ceil(hitPos.x),
-                        yPos,
-                        panelState.isLeft() ? Math.floor(hitPos.z) : Math.ceil(hitPos.z)
-                ), horizontalDirection);
+            if (face.getAxis() == Direction.Axis.X) {
+                return new Pair<>(
+                        new Vec3(
+                                panelState.isBottom() ? Math.floor(hitPos.x) : Math.ceil(hitPos.x),
+                                yPos,
+                                panelState.isLeft() ? Math.floor(hitPos.z) : Math.ceil(hitPos.z)),
+                        horizontalDirection);
             }
 
-            return new Pair<>(new Vec3(
-                    !panelState.isLeft() ? Math.floor(hitPos.x) : Math.ceil(hitPos.x),
-                    yPos,
-                    !panelState.isBottom() ? Math.floor(hitPos.z) : Math.ceil(hitPos.z)
-            ), horizontalDirection);
+            return new Pair<>(
+                    new Vec3(
+                            !panelState.isLeft() ? Math.floor(hitPos.x) : Math.ceil(hitPos.x),
+                            yPos,
+                            !panelState.isBottom() ? Math.floor(hitPos.z) : Math.ceil(hitPos.z)),
+                    horizontalDirection);
         }
     }
 }

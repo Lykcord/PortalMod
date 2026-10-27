@@ -8,18 +8,24 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.Dynamic2CommandExceptionType;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
-import net.minecraft.command.ISuggestionProvider;
-import net.minecraft.command.arguments.IArgumentSerializer;
-import net.minecraft.network.PacketBuffer;
-import net.minecraft.util.text.TranslationTextComponent;
+
+import io.netty.handler.codec.DecoderException;
+
+import net.minecraft.commands.CommandBuildContext;
+import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.commands.synchronization.ArgumentTypeInfo;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 public class LowercaseEnumArgument<T extends Enum<T>> implements ArgumentType<T> {
-    private static final Dynamic2CommandExceptionType INVALID_ENUM = new Dynamic2CommandExceptionType(
-            (found, constants) -> new TranslationTextComponent("commands.forge.arguments.enum.invalid", constants, found));
+    private static final Dynamic2CommandExceptionType INVALID_ENUM =
+            new Dynamic2CommandExceptionType(
+                    (found, constants) ->
+                            Component.translatable("argument.enum.invalid", found).append(" " + constants));
 
     private final Class<T> enumClass;
     private final Map<String, T> options;
@@ -31,15 +37,16 @@ public class LowercaseEnumArgument<T extends Enum<T>> implements ArgumentType<T>
     private LowercaseEnumArgument(final Class<T> enumClass) {
         this.enumClass = enumClass;
         this.options = new HashMap<>();
-        this.options.putAll(Arrays.stream(enumClass.getEnumConstants())
-                .collect(Collectors.toMap(option -> option.name().toLowerCase(), option -> option)));
+        this.options.putAll(
+                Arrays.stream(enumClass.getEnumConstants())
+                        .collect(Collectors.toMap(option -> option.name().toLowerCase(Locale.ROOT), option -> option)));
     }
 
     @Override
     public T parse(final StringReader reader) throws CommandSyntaxException {
         String argument = reader.readUnquotedString();
 
-        if(this.options.containsKey(argument)) {
+        if (this.options.containsKey(argument)) {
             return this.options.get(argument);
         } else {
             throw INVALID_ENUM.createWithContext(reader, argument, Arrays.toString(this.options.keySet().toArray()));
@@ -47,8 +54,9 @@ public class LowercaseEnumArgument<T extends Enum<T>> implements ArgumentType<T>
     }
 
     @Override
-    public <S> CompletableFuture<Suggestions> listSuggestions(final CommandContext<S> context, final SuggestionsBuilder builder) {
-        return ISuggestionProvider.suggest(this.options.keySet(), builder);
+    public <S> CompletableFuture<Suggestions> listSuggestions(
+            final CommandContext<S> context, final SuggestionsBuilder builder) {
+        return SharedSuggestionProvider.suggest(this.options.keySet(), builder);
     }
 
     @Override
@@ -56,26 +64,64 @@ public class LowercaseEnumArgument<T extends Enum<T>> implements ArgumentType<T>
         return this.options.keySet();
     }
 
-    public static class Serializer implements IArgumentSerializer<LowercaseEnumArgument<?>> {
-        @Override
-        public void serializeToNetwork(LowercaseEnumArgument<?> argument, PacketBuffer buffer) {
-            buffer.writeUtf(argument.enumClass.getName());
-        }
+    public static final class Serializer implements ArgumentTypeInfo<LowercaseEnumArgument<?>, Serializer.Template> {
+        private final Map<String, Class<? extends Enum<?>>> enums;
 
-        @SuppressWarnings({"unchecked", "rawtypes"})
-        @Override
-        public LowercaseEnumArgument<?> deserializeFromNetwork(PacketBuffer buffer) {
-            try {
-                String name = buffer.readUtf();
-                return new LowercaseEnumArgument(Class.forName(name));
-            } catch (ClassNotFoundException e) {
-                return null;
+        @SafeVarargs
+        public Serializer(Class<? extends Enum<?>>... enumClasses) {
+            Map<String, Class<? extends Enum<?>>> registered = new HashMap<>();
+            for (Class<? extends Enum<?>> enumClass : enumClasses) {
+                registered.put(enumClass.getName(), enumClass);
             }
+            enums = Map.copyOf(registered);
         }
 
         @Override
-        public void serializeToJson(LowercaseEnumArgument<?> argument, JsonObject json) {
-            json.addProperty("enum", argument.enumClass.getName());
+        public void serializeToNetwork(Template template, FriendlyByteBuf buffer) {
+            buffer.writeUtf(template.enumClass.getName(), 256);
+        }
+
+        @Override
+        public Template deserializeFromNetwork(FriendlyByteBuf buffer) {
+            String name = buffer.readUtf(256);
+            Class<? extends Enum<?>> enumClass = enums.get(name);
+            if (enumClass == null) {
+                throw new DecoderException("Unknown PortalMod command enum: " + name);
+            }
+            return new Template(enumClass);
+        }
+
+        @Override
+        public void serializeToJson(Template template, JsonObject json) {
+            json.addProperty("enum", template.enumClass.getName());
+        }
+
+        @Override
+        public Template unpack(LowercaseEnumArgument<?> argument) {
+            if (enums.get(argument.enumClass.getName()) != argument.enumClass) {
+                throw new IllegalArgumentException(
+                        "Unregistered PortalMod command enum: " + argument.enumClass.getName());
+            }
+            return new Template(argument.enumClass);
+        }
+
+        public final class Template implements ArgumentTypeInfo.Template<LowercaseEnumArgument<?>> {
+            private final Class<? extends Enum<?>> enumClass;
+
+            private Template(Class<? extends Enum<?>> enumClass) {
+                this.enumClass = enumClass;
+            }
+
+            @Override
+            @SuppressWarnings({"unchecked", "rawtypes"})
+            public LowercaseEnumArgument<?> instantiate(CommandBuildContext context) {
+                return enumArgument((Class) enumClass);
+            }
+
+            @Override
+            public ArgumentTypeInfo<LowercaseEnumArgument<?>, ?> type() {
+                return Serializer.this;
+            }
         }
     }
 }

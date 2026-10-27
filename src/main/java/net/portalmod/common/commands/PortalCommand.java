@@ -6,135 +6,224 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
-import net.minecraft.command.CommandSource;
-import net.minecraft.command.Commands;
-import net.minecraft.command.ISuggestionProvider;
-import net.minecraft.command.arguments.UUIDArgument;
-import net.minecraft.command.arguments.Vec3Argument;
-import net.minecraft.state.properties.AttachFace;
-import net.minecraft.util.Direction;
-import net.minecraft.util.math.vector.Vector3d;
-import net.minecraft.util.text.TranslationTextComponent;
+
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.commands.arguments.UuidArgument;
+import net.minecraft.commands.arguments.coordinates.Vec3Argument;
+import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.block.state.properties.AttachFace;
 import net.portalmod.PortalMod;
 import net.portalmod.common.sorted.portal.*;
 import net.portalmod.core.math.Vec3;
 
 import java.util.*;
+import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 
 public class PortalCommand {
-    public static void register(CommandDispatcher<CommandSource> dispatcher) {
-        dispatcher.register(Commands.literal("portal")
-            .requires(source -> source.hasPermission(2))
-            .then(Commands.literal("open")
-                .then(Commands.argument("uuid", UUIDArgument.uuid()).suggests(PortalCommand::suggestUUIDs)
-                .then(Commands.argument("end", LowercaseEnumArgument.enumArgument(PortalEnd.Safe.class))
-                .then(Commands.argument("color", LowercaseEnumArgument.enumArgument(PortalColors.class))
-                .then(Commands.argument("pos", Vec3Argument.vec3())
-                .then(Commands.argument("face", LowercaseEnumArgument.enumArgument(AttachFace.class))
-                .then(Commands.argument("direction", LowercaseEnumArgument.enumArgument(HorizontalDirection.class))
-                .executes(command -> openPortal(
-                        command.getSource(),
-                        UUIDArgument.getUuid(command, "uuid"),
-                        command.getArgument("end", PortalEnd.Safe.class).getOriginal(),
-                        command.getArgument("color", PortalColors.class),
-                        Vec3Argument.getVec3(command, "pos"),
-                        command.getArgument("face", AttachFace.class),
-                        command.getArgument("direction", HorizontalDirection.class)
-                ))))))))
-            )
-            .then(Commands.literal("close")
-                .then(Commands.literal("all")
-                .executes(command -> closeAllPortals(command.getSource()))
-            ))
-            .then(Commands.literal("close")
-                .then(Commands.argument("uuid", UUIDArgument.uuid()).suggests(PortalCommand::suggestUUIDs)
-                .executes(command -> closePortal(
-                        command.getSource(),
-                        UUIDArgument.getUuid(command, "uuid"),
-                        PortalEnd.NONE
-                ))
-            ))
-            .then(Commands.literal("close")
-                .then(Commands.argument("uuid", UUIDArgument.uuid()).suggests(PortalCommand::suggestUUIDs)
-                .then(Commands.argument("end", LowercaseEnumArgument.enumArgument(PortalEnd.Safe.class))
-                .executes(command -> closePortal(
-                        command.getSource(),
-                        UUIDArgument.getUuid(command, "uuid"),
-                        command.getArgument("end", PortalEnd.Safe.class).getOriginal()
-                ))))
-            )
-        );
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(
+                Commands.literal("portal")
+                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                        .then(
+                                Commands.literal("open")
+                                        .then(
+                                                Commands.argument("uuid", UuidArgument.uuid())
+                                                        .suggests(PortalCommand::suggestUUIDs)
+                                                        .then(
+                                                                Commands.argument(
+                                                                                "end",
+                                                                                LowercaseEnumArgument.enumArgument(
+                                                                                        PortalEnd.Safe.class))
+                                                                        .then(
+                                                                                Commands.argument(
+                                                                                                "color",
+                                                                                                LowercaseEnumArgument
+                                                                                                        .enumArgument(
+                                                                                                                PortalColors
+                                                                                                                        .class))
+                                                                                        .then(
+                                                                                                Commands.argument(
+                                                                                                                "pos",
+                                                                                                                Vec3Argument
+                                                                                                                        .vec3())
+                                                                                                        .then(
+                                                                                                                Commands
+                                                                                                                        .argument(
+                                                                                                                                "face",
+                                                                                                                                LowercaseEnumArgument
+                                                                                                                                        .enumArgument(
+                                                                                                                                                AttachFace
+                                                                                                                                                        .class))
+                                                                                                                        .then(
+                                                                                                                                Commands
+                                                                                                                                        .argument(
+                                                                                                                                                "direction",
+                                                                                                                                                LowercaseEnumArgument
+                                                                                                                                                        .enumArgument(
+                                                                                                                                                                HorizontalDirection
+                                                                                                                                                                        .class))
+                                                                                                                                        .executes(
+                                                                                                                                                command ->
+                                                                                                                                                        openPortal(
+                                                                                                                                                                command
+                                                                                                                                                                        .getSource(),
+                                                                                                                                                                UuidArgument
+                                                                                                                                                                        .getUuid(
+                                                                                                                                                                                command,
+                                                                                                                                                                                "uuid"),
+                                                                                                                                                                command.getArgument(
+                                                                                                                                                                                "end",
+                                                                                                                                                                                PortalEnd
+                                                                                                                                                                                        .Safe
+                                                                                                                                                                                        .class)
+                                                                                                                                                                        .getOriginal(),
+                                                                                                                                                                command
+                                                                                                                                                                        .getArgument(
+                                                                                                                                                                                "color",
+                                                                                                                                                                                PortalColors
+                                                                                                                                                                                        .class),
+                                                                                                                                                                Vec3Argument
+                                                                                                                                                                        .getVec3(
+                                                                                                                                                                                command,
+                                                                                                                                                                                "pos"),
+                                                                                                                                                                command
+                                                                                                                                                                        .getArgument(
+                                                                                                                                                                                "face",
+                                                                                                                                                                                AttachFace
+                                                                                                                                                                                        .class),
+                                                                                                                                                                command
+                                                                                                                                                                        .getArgument(
+                                                                                                                                                                                "direction",
+                                                                                                                                                                                HorizontalDirection
+                                                                                                                                                                                        .class))))))))))
+                        .then(
+                                Commands.literal("close")
+                                        .then(
+                                                Commands.literal("all")
+                                                        .executes(command -> closeAllPortals(command.getSource()))))
+                        .then(
+                                Commands.literal("close")
+                                        .then(
+                                                Commands.argument("uuid", UuidArgument.uuid())
+                                                        .suggests(PortalCommand::suggestUUIDs)
+                                                        .executes(
+                                                                command ->
+                                                                        closePortal(
+                                                                                command.getSource(),
+                                                                                UuidArgument.getUuid(command, "uuid"),
+                                                                                PortalEnd.NONE))))
+                        .then(
+                                Commands.literal("close")
+                                        .then(
+                                                Commands.argument("uuid", UuidArgument.uuid())
+                                                        .suggests(PortalCommand::suggestUUIDs)
+                                                        .then(
+                                                                Commands.argument(
+                                                                                "end",
+                                                                                LowercaseEnumArgument.enumArgument(
+                                                                                        PortalEnd.Safe.class))
+                                                                        .executes(
+                                                                                command ->
+                                                                                        closePortal(
+                                                                                                command.getSource(),
+                                                                                                UuidArgument.getUuid(
+                                                                                                        command,
+                                                                                                        "uuid"),
+                                                                                                command.getArgument(
+                                                                                                                "end",
+                                                                                                                PortalEnd
+                                                                                                                        .Safe
+                                                                                                                        .class)
+                                                                                                        .getOriginal()))))));
     }
 
-    private static CompletableFuture<Suggestions> suggestUUIDs(CommandContext<CommandSource> context, SuggestionsBuilder builder) {
+    private static CompletableFuture<Suggestions> suggestUUIDs(
+            CommandContext<CommandSourceStack> context, SuggestionsBuilder builder) {
         List<UUID> uuids = new ArrayList<>();
         uuids.add(new UUID(0, 0));
         uuids.addAll(PortalManager.getInstance().getPortalMap().keySet());
-        return ISuggestionProvider.suggest(uuids.stream().map(UUID::toString), builder);
+        return SharedSuggestionProvider.suggest(uuids.stream().map(UUID::toString), builder);
     }
 
-    private static int openPortal(CommandSource source, UUID uuid, PortalEnd end, PortalColors color, Vector3d position, AttachFace face, HorizontalDirection direction) throws CommandSyntaxException {
+    private static int openPortal(
+            CommandSourceStack source,
+            UUID uuid,
+            PortalEnd end,
+            PortalColors color,
+            net.minecraft.world.phys.Vec3 position,
+            AttachFace face,
+            HorizontalDirection direction)
+            throws CommandSyntaxException {
         boolean wall = face == AttachFace.WALL;
 
-        PortalEntity result = PortalPlacer.placePortal(
-                source.getLevel(),
-                end,
-                color.name().toLowerCase(),
-                uuid,
-                new Vec3(position),
-                wall ? direction.toDirection() : face == AttachFace.FLOOR ? Direction.UP : Direction.DOWN,
-                wall ? Direction.UP : direction.toDirection(),
-                false,
-                null,
-                null
-        );
+        PortalEntity result =
+                PortalPlacer.placePortal(
+                        source.getLevel(),
+                        end,
+                        color.name().toLowerCase(Locale.ROOT),
+                        uuid,
+                        new Vec3(position),
+                        wall ? direction.toDirection() : face == AttachFace.FLOOR ? Direction.UP : Direction.DOWN,
+                        wall ? Direction.UP : direction.toDirection(),
+                        false,
+                        null,
+                        null);
 
-        if(result == null) {
+        if (result == null) {
             throw new SimpleCommandExceptionType(getText("open.failed")).create();
         }
 
-        source.sendSuccess(getText("open.success"), true);
+        source.sendSuccess(() -> getText("open.success"), true);
         return 1;
     }
 
-    private static int closeAllPortals(CommandSource source) throws CommandSyntaxException {
+    private static int closeAllPortals(CommandSourceStack source) throws CommandSyntaxException {
         Map<UUID, PortalPair> portalMap = new HashMap<>(PortalManager.getInstance().getPortalMap());
 
-        if(portalMap.isEmpty()) {
+        if (portalMap.isEmpty()) {
             throw new SimpleCommandExceptionType(getText("close.double.failed.null")).create();
         }
 
-        for(Map.Entry<UUID, PortalPair> entry : portalMap.entrySet()) {
+        for (Map.Entry<UUID, PortalPair> entry : portalMap.entrySet()) {
             PortalPair pair = entry.getValue();
 
-            if(pair.has(PortalEnd.PRIMARY))
-                pair.get(PortalEnd.PRIMARY).remove();
-            if(pair.has(PortalEnd.SECONDARY))
-                pair.get(PortalEnd.SECONDARY).remove();
+            if (pair.has(PortalEnd.PRIMARY)) {
+                pair.get(PortalEnd.PRIMARY).discard();
+            }
+            if (pair.has(PortalEnd.SECONDARY)) {
+                pair.get(PortalEnd.SECONDARY).discard();
+            }
         }
 
-        source.sendSuccess(getText("close.double.success"), true);
+        source.sendSuccess(() -> getText("close.double.success"), true);
         return 1;
     }
 
-    private static int closePortal(CommandSource source, UUID uuid, PortalEnd end) throws CommandSyntaxException {
+    private static int closePortal(CommandSourceStack source, UUID uuid, PortalEnd end) throws CommandSyntaxException {
         PortalPair pair = PortalManager.getInstance().getPair(uuid);
 
-        if(pair == null) {
-            throw new SimpleCommandExceptionType(getText("close." + (end == PortalEnd.NONE ? "double" : "single") + ".failed.null")).create();
+        if (pair == null) {
+            throw new SimpleCommandExceptionType(
+                            getText("close." + (end == PortalEnd.NONE ? "double" : "single") + ".failed.null"))
+                    .create();
         }
 
-        if(end == PortalEnd.NONE) {
-            if(pair.has(PortalEnd.PRIMARY))
-                pair.get(PortalEnd.PRIMARY).remove();
-            if(pair.has(PortalEnd.SECONDARY))
-                pair.get(PortalEnd.SECONDARY).remove();
-            source.sendSuccess(getText("close.double.success"), true);
+        if (end == PortalEnd.NONE) {
+            if (pair.has(PortalEnd.PRIMARY)) {
+                pair.get(PortalEnd.PRIMARY).discard();
+            }
+            if (pair.has(PortalEnd.SECONDARY)) {
+                pair.get(PortalEnd.SECONDARY).discard();
+            }
+            source.sendSuccess(() -> getText("close.double.success"), true);
         } else {
-            if(pair.has(end)) {
-                pair.get(end).remove();
-                source.sendSuccess(getText("close.single.success"), true);
+            if (pair.has(end)) {
+                pair.get(end).discard();
+                source.sendSuccess(() -> getText("close.single.success"), true);
             } else {
                 throw new SimpleCommandExceptionType(getText("close.single.failed.null")).create();
             }
@@ -143,8 +232,8 @@ public class PortalCommand {
         return 1;
     }
 
-    private static TranslationTextComponent getText(String key) {
-        return new TranslationTextComponent("commands." + PortalMod.MODID + ".portal." + key);
+    private static Component getText(String key) {
+        return Component.translatable("commands." + PortalMod.MODID + ".portal." + key);
     }
 
     public enum HorizontalDirection {
@@ -155,10 +244,14 @@ public class PortalCommand {
 
         public Direction toDirection() {
             switch (this) {
-                case NORTH: return Direction.NORTH;
-                case EAST: return Direction.EAST;
-                case SOUTH: return Direction.SOUTH;
-                default: return Direction.WEST;
+                case NORTH:
+                    return Direction.NORTH;
+                case EAST:
+                    return Direction.EAST;
+                case SOUTH:
+                    return Direction.SOUTH;
+                default:
+                    return Direction.WEST;
             }
         }
     }

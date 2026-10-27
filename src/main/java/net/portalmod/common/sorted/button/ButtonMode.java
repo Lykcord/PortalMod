@@ -1,16 +1,17 @@
 package net.portalmod.common.sorted.button;
 
+import net.minecraft.util.StringRepresentable;
 
-import net.minecraft.util.IStringSerializable;
+import java.util.Locale;
 
-public enum ButtonMode implements IStringSerializable {
+public enum ButtonMode implements StringRepresentable {
     NORMAL,
     PERSISTENT,
     TOGGLE;
 
     @Override
     public String getSerializedName() {
-        return this.name().toLowerCase();
+        return this.name().toLowerCase(Locale.ROOT);
     }
 
     public ButtonMode cycle() {

@@ -1,30 +1,34 @@
 package net.portalmod.common.sorted.antline.indicator;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.client.util.ITooltipFlag;
-import net.minecraft.item.ItemStack;
-import net.minecraft.state.properties.AttachFace;
-import net.minecraft.util.Direction;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.text.ITextComponent;
-import net.minecraft.world.IBlockReader;
-import net.minecraft.world.World;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.AttachFace;
+import net.portalmod.common.blocks.BlockTooltip;
 import net.portalmod.common.sorted.antline.AntlineActivated;
 import net.portalmod.core.util.ModUtil;
 
-import javax.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
+
 import java.util.List;
 
-public class AntlineIndicatorBlock extends AntlineOutput implements AntlineActivated, TestElementActivator {
+public class AntlineIndicatorBlock extends AntlineOutput
+        implements AntlineActivated, TestElementActivator, BlockTooltip {
 
     public AntlineIndicatorBlock(Properties properties) {
         super(properties);
-        this.registerDefaultState(stateDefinition.any()
-                .setValue(FACE, AttachFace.FLOOR)
-                .setValue(FACING, Direction.NORTH)
-                .setValue(ACTIVATED, false)
-                .setValue(REVERSED, false)
-        );
+        this.registerDefaultState(
+                stateDefinition
+                        .any()
+                        .setValue(FACE, AttachFace.FLOOR)
+                        .setValue(FACING, Direction.NORTH)
+                        .setValue(ACTIVATED, false)
+                        .setValue(REVERSED, false));
     }
 
     @Override
@@ -35,9 +39,11 @@ public class AntlineIndicatorBlock extends AntlineOutput implements AntlineActiv
     }
 
     @Override
-    public void onAntlineActivation(boolean active, BlockState state, World world, BlockPos pos) {
+    public void onAntlineActivation(boolean active, BlockState state, Level world, BlockPos pos) {
         BlockState current = world.getBlockState(pos);
-        if (current.getValue(ACTIVATED) == active) return;
+        if (current.getValue(ACTIVATED) == active) {
+            return;
+        }
 
         world.setBlockAndUpdate(pos, current.setValue(ACTIVATED, active));
 
@@ -45,7 +51,8 @@ public class AntlineIndicatorBlock extends AntlineOutput implements AntlineActiv
     }
 
     @Override
-    public void appendHoverText(ItemStack itemStack, @Nullable IBlockReader blockReader, List<ITextComponent> list, ITooltipFlag flag) {
+    public void appendHoverText(
+            ItemStack itemStack, @Nullable BlockGetter blockReader, List<Component> list, TooltipFlag flag) {
         ModUtil.addTooltip("antline_indicator", list);
     }
 }

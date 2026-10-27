@@ -1,9 +1,9 @@
 package net.portalmod.common.sorted.trigger;
 
-import net.minecraft.util.Direction;
-import net.minecraft.util.math.AxisAlignedBB;
-import net.minecraft.util.math.BlockPos;
-import net.portalmod.core.init.PacketInit;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.AABB;
+import net.portalmod.core.packet.ClientNetworking;
 
 public class TriggerSelectionClient {
     public static final int MAX_FIELD_SIZE = 32;
@@ -37,20 +37,20 @@ public class TriggerSelectionClient {
 
     public static void confirmSelection() {
         if (isSelectingStart()) {
-            selectingEnd = new BlockPos(selectingStart);
+            selectingEnd = selectingStart.immutable();
         } else if (isSelectingEnd()) {
-            PacketInit.INSTANCE.sendToServer(new CTriggerEndConfigPacket(
-                    TriggerSelectionClient.selected.getBlockPos(),
-                    TriggerSelectionClient.selectingStart,
-                    TriggerSelectionClient.selectingEnd
-            ));
+            ClientNetworking.sendToServer(
+                    new CTriggerEndConfigPacket(
+                            TriggerSelectionClient.selected.getBlockPos(),
+                            TriggerSelectionClient.selectingStart,
+                            TriggerSelectionClient.selectingEnd));
 
             stopSelecting();
         }
     }
 
     public static void abort() {
-        PacketInit.INSTANCE.sendToServer(new CTriggerAbortConfigPacket(TriggerSelectionClient.selected.getBlockPos()));
+        ClientNetworking.sendToServer(new CTriggerAbortConfigPacket(TriggerSelectionClient.selected.getBlockPos()));
         stopSelecting();
     }
 
@@ -69,13 +69,15 @@ public class TriggerSelectionClient {
         BlockPos blockEntityPos = selected.getBlockPos();
 
         if (isSelectingEnd()) {
-            selectingEnd = limitPosToDistance(
-                    limitPosToDistance(pos, selectingStart.offset(blockEntityPos), MAX_FIELD_SIZE - 1),
-                    blockEntityPos,
-                    MAX_DISTANCE_FROM_BLOCK - 1
-            ).subtract(blockEntityPos);
+            selectingEnd =
+                    limitPosToDistance(
+                                    limitPosToDistance(pos, selectingStart.offset(blockEntityPos), MAX_FIELD_SIZE - 1),
+                                    blockEntityPos,
+                                    MAX_DISTANCE_FROM_BLOCK - 1)
+                            .subtract(blockEntityPos);
         } else {
-            selectingStart = limitPosToDistance(pos, blockEntityPos, MAX_DISTANCE_FROM_BLOCK - 1).subtract(blockEntityPos);
+            selectingStart =
+                    limitPosToDistance(pos, blockEntityPos, MAX_DISTANCE_FROM_BLOCK - 1).subtract(blockEntityPos);
         }
     }
 
@@ -83,20 +85,27 @@ public class TriggerSelectionClient {
         BlockPos min = origin.offset(-distance, -distance, -distance);
         BlockPos max = origin.offset(distance, distance, distance);
 
-        BlockPos.Mutable result = pos.mutable();
+        BlockPos.MutableBlockPos result = pos.mutable();
         result.clamp(Direction.Axis.X, min.getX(), max.getX());
         result.clamp(Direction.Axis.Y, min.getY(), max.getY());
         result.clamp(Direction.Axis.Z, min.getZ(), max.getZ());
         return result.immutable();
     }
 
-    public static AxisAlignedBB getBox() {
+    public static AABB getBox() {
         if (isSelectingStart()) {
-            return new AxisAlignedBB(selectingStart);
+            return new AABB(selectingStart);
         }
 
         if (isSelectingEnd()) {
-            return new AxisAlignedBB(selectingStart, selectingEnd).expandTowards(1, 1, 1);
+            return new AABB(
+                            selectingStart.getX(),
+                            selectingStart.getY(),
+                            selectingStart.getZ(),
+                            selectingEnd.getX(),
+                            selectingEnd.getY(),
+                            selectingEnd.getZ())
+                    .expandTowards(1, 1, 1);
         }
 
         return null;

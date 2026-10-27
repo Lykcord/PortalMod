@@ -1,25 +1,36 @@
 package net.portalmod.common.sorted.door;
 
-import net.minecraft.block.AbstractBlock;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.HorizontalBlock;
-import net.minecraft.client.util.ITooltipFlag;
-import net.minecraft.item.BlockItemUseContext;
-import net.minecraft.item.ItemStack;
-import net.minecraft.state.*;
-import net.minecraft.state.properties.BlockStateProperties;
-import net.minecraft.state.properties.DoubleBlockHalf;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.*;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.shapes.ISelectionContext;
-import net.minecraft.util.math.shapes.VoxelShape;
-import net.minecraft.util.math.vector.Vector3d;
-import net.minecraft.util.math.vector.Vector3f;
-import net.minecraft.util.text.ITextComponent;
-import net.minecraft.world.IBlockReader;
-import net.minecraft.world.World;
+import com.mojang.datafixers.util.Pair;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.StringRepresentable;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.EntityBlock;
+import net.minecraft.world.level.block.HorizontalDirectionalBlock;
+import net.minecraft.world.level.block.Mirror;
+import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityTicker;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.block.state.BlockBehaviour;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.level.block.state.properties.EnumProperty;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.VoxelShape;
+import net.portalmod.common.blocks.BlockTooltip;
 import net.portalmod.common.blocks.MultiBlock;
 import net.portalmod.core.init.SoundInit;
 import net.portalmod.core.init.TileEntityTypeInit;
@@ -28,38 +39,44 @@ import net.portalmod.core.math.Vec3;
 import net.portalmod.core.math.VoxelShapeGroup;
 import net.portalmod.core.util.ModUtil;
 
-import javax.annotation.Nullable;
+import org.joml.Vector3f;
+import org.jspecify.annotations.Nullable;
+
 import java.util.*;
 
-public class ChamberDoorBlock extends MultiBlock {
-    public static final DirectionProperty FACING = HorizontalBlock.FACING;
+public class ChamberDoorBlock extends MultiBlock implements EntityBlock, BlockTooltip {
+    public static final EnumProperty<Direction> FACING = HorizontalDirectionalBlock.FACING;
     public static final BooleanProperty OPEN = BlockStateProperties.OPEN;
     public static final EnumProperty<DoubleBlockHalf> HALF = BlockStateProperties.DOUBLE_BLOCK_HALF;
     public static final EnumProperty<Side> SIDE = EnumProperty.create("side", Side.class);
 
-    private static final VoxelShapeGroup UPPER = new VoxelShapeGroup.Builder()
-            .add(0, 0, 3, 2, 16, 13)
-            .add(0, 14, 3, 16, 16, 13)
-            .addPart("closed", 2, 0, 5, 16, 14, 11)
-            .addPart("open", 2, 0, 5, 5, 14, 11)
-            .build();
+    private static final VoxelShapeGroup UPPER =
+            new VoxelShapeGroup.Builder()
+                    .add(0, 0, 3, 2, 16, 13)
+                    .add(0, 14, 3, 16, 16, 13)
+                    .addPart("closed", 2, 0, 5, 16, 14, 11)
+                    .addPart("open", 2, 0, 5, 5, 14, 11)
+                    .build();
 
-    private static final VoxelShapeGroup LOWER = new VoxelShapeGroup.Builder()
-            .add(0, 0, 3, 2, 16, 13)
-            .addPart("closed", 0, 0, 5, 16, 16, 11)
-            .addPart("open", 0, 0, 5, 5, 16, 11)
-            .build();
+    private static final VoxelShapeGroup LOWER =
+            new VoxelShapeGroup.Builder()
+                    .add(0, 0, 3, 2, 16, 13)
+                    .addPart("closed", 0, 0, 5, 16, 16, 11)
+                    .addPart("open", 0, 0, 5, 5, 16, 11)
+                    .build();
 
-    public ChamberDoorBlock(AbstractBlock.Properties properties) {
+    public ChamberDoorBlock(BlockBehaviour.Properties properties) {
         super(properties);
-        this.registerDefaultState(stateDefinition.any()
-                .setValue(FACING, Direction.NORTH)
-                .setValue(OPEN, false)
-                .setValue(HALF, DoubleBlockHalf.LOWER)
-                .setValue(SIDE, Side.LEFT));
+        this.registerDefaultState(
+                stateDefinition
+                        .any()
+                        .setValue(FACING, Direction.NORTH)
+                        .setValue(OPEN, false)
+                        .setValue(HALF, DoubleBlockHalf.LOWER)
+                        .setValue(SIDE, Side.LEFT));
     }
 
-    public enum Side implements IStringSerializable {
+    public enum Side implements StringRepresentable {
         LEFT,
         RIGHT;
 
@@ -90,11 +107,8 @@ public class ChamberDoorBlock extends MultiBlock {
     @Override
     public List<BlockPos> getConnectedPositions(BlockState mainState, BlockPos mainPos) {
         Direction horizontal = mainState.getValue(FACING).getCounterClockWise();
-        return new ArrayList<>(Arrays.asList(
-                mainPos.above(),
-                mainPos.above().relative(horizontal),
-                mainPos.relative(horizontal)
-        ));
+        return new ArrayList<>(
+                Arrays.asList(mainPos.above(), mainPos.above().relative(horizontal), mainPos.relative(horizontal)));
     }
 
     @Override
@@ -117,7 +131,9 @@ public class ChamberDoorBlock extends MultiBlock {
         map.put(pos.relative(horizontal), blockState.setValue(SIDE, oppositeSide));
 
         // diagonal to placed block
-        map.put(pos.relative(horizontal).relative(vertical), blockState.setValue(SIDE, oppositeSide).setValue(HALF, oppositeHalf));
+        map.put(
+                pos.relative(horizontal).relative(vertical),
+                blockState.setValue(SIDE, oppositeSide).setValue(HALF, oppositeHalf));
 
         return map;
     }
@@ -141,68 +157,74 @@ public class ChamberDoorBlock extends MultiBlock {
     }
 
     @Override
-    protected void createBlockStateDefinition(StateContainer.Builder<Block, BlockState> builder) {
+    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
         builder.add(FACING, OPEN, HALF, SIDE);
     }
 
     @Override
-    public VoxelShape getShape(BlockState state, IBlockReader level, BlockPos pos, ISelectionContext context) {
+    public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
         int facing = state.getValue(FACING).get2DDataValue() * 90;
         int side = state.getValue(SIDE) == Side.LEFT ? 0 : 180;
         VoxelShapeGroup shapeGroup = state.getValue(HALF) == DoubleBlockHalf.UPPER ? UPPER : LOWER;
 
         Mat4 matrix = Mat4.identity();
         matrix.translate(new Vec3(.5));
-        matrix.rotateDeg(Vector3f.YN, facing + side);
+        matrix.rotateDeg(new Vector3f(0, -1, 0), facing + side);
         matrix.translate(new Vec3(-.5));
 
-        return shapeGroup.clone()
-                .transform(matrix)
-                .getVariant(state.getValue(OPEN) ? "open" : "closed");
+        return shapeGroup.clone().transform(matrix).getVariant(state.getValue(OPEN) ? "open" : "closed");
     }
 
     @Nullable
     @Override
-    public BlockState getStateForPlacement(BlockItemUseContext context) {
-        World world = context.getLevel();
+    public BlockState getStateForPlacement(BlockPlaceContext context) {
+        Level world = context.getLevel();
         BlockPos pos = context.getClickedPos();
         Direction facing = context.getHorizontalDirection();
         Direction clickedFace = context.getClickedFace();
 
         BlockState rotated = this.defaultBlockState().setValue(FACING, facing.getOpposite());
 
-        List<Tuple<DoubleBlockHalf, Side>> possibleStates = new ArrayList<>();
+        List<Pair<DoubleBlockHalf, Side>> possibleStates = new ArrayList<>();
 
-        if (canPlace(new BlockPos[]{
-                pos.above(),
-                pos.relative(facing.getClockWise()),
-                pos.relative(facing.getClockWise()).above()
-        }, context, world)) {
-            possibleStates.add(new Tuple<>(DoubleBlockHalf.LOWER, Side.LEFT));
+        if (canPlace(
+                new BlockPos[] {
+                    pos.above(), pos.relative(facing.getClockWise()), pos.relative(facing.getClockWise()).above()
+                },
+                context,
+                world)) {
+            possibleStates.add(Pair.of(DoubleBlockHalf.LOWER, Side.LEFT));
         }
 
-        if (canPlace(new BlockPos[]{
-                pos.below(),
-                pos.relative(facing.getClockWise()),
-                pos.relative(facing.getClockWise()).below()
-        }, context, world)) {
-            possibleStates.add(new Tuple<>(DoubleBlockHalf.UPPER, Side.LEFT));
+        if (canPlace(
+                new BlockPos[] {
+                    pos.below(), pos.relative(facing.getClockWise()), pos.relative(facing.getClockWise()).below()
+                },
+                context,
+                world)) {
+            possibleStates.add(Pair.of(DoubleBlockHalf.UPPER, Side.LEFT));
         }
 
-        if (canPlace(new BlockPos[]{
-                pos.above(),
-                pos.relative(facing.getCounterClockWise()),
-                pos.relative(facing.getCounterClockWise()).above()
-        }, context, world)) {
-            possibleStates.add(new Tuple<>(DoubleBlockHalf.LOWER, Side.RIGHT));
+        if (canPlace(
+                new BlockPos[] {
+                    pos.above(),
+                    pos.relative(facing.getCounterClockWise()),
+                    pos.relative(facing.getCounterClockWise()).above()
+                },
+                context,
+                world)) {
+            possibleStates.add(Pair.of(DoubleBlockHalf.LOWER, Side.RIGHT));
         }
 
-        if (canPlace(new BlockPos[]{
-                pos.below(),
-                pos.relative(facing.getCounterClockWise()),
-                pos.relative(facing.getCounterClockWise()).below()
-        }, context, world)) {
-            possibleStates.add(new Tuple<>(DoubleBlockHalf.UPPER, Side.RIGHT));
+        if (canPlace(
+                new BlockPos[] {
+                    pos.below(),
+                    pos.relative(facing.getCounterClockWise()),
+                    pos.relative(facing.getCounterClockWise()).below()
+                },
+                context,
+                world)) {
+            possibleStates.add(Pair.of(DoubleBlockHalf.UPPER, Side.RIGHT));
         }
 
         if (possibleStates.isEmpty()) {
@@ -210,22 +232,28 @@ public class ChamberDoorBlock extends MultiBlock {
         }
 
         if (clickedFace == Direction.UP) {
-            Vector3d clickOffset = context.getClickLocation().subtract(Vector3d.atCenterOf(pos));
-            double perpendicular = facing.getAxis() == Direction.Axis.X ?
-                    facing.getAxisDirection() == Direction.AxisDirection.POSITIVE ?
-                            clickOffset.z : -clickOffset.z :
-                    facing.getAxisDirection() == Direction.AxisDirection.POSITIVE ?
-                            -clickOffset.x : clickOffset.x;
-            Tuple<DoubleBlockHalf, Side> preferredState = new Tuple<>(DoubleBlockHalf.LOWER, perpendicular > 0 ? Side.LEFT : Side.RIGHT);
-            if (possibleStates.stream().anyMatch(tuple -> tuple.getA() == preferredState.getA() && tuple.getB() == preferredState.getB())) {
-                return rotated.setValue(HALF, preferredState.getA()).setValue(SIDE, preferredState.getB());
+            net.minecraft.world.phys.Vec3 clickOffset =
+                    context.getClickLocation().subtract(net.minecraft.world.phys.Vec3.atCenterOf(pos));
+            double perpendicular =
+                    facing.getAxis() == Direction.Axis.X
+                            ? facing.getAxisDirection() == Direction.AxisDirection.POSITIVE
+                                    ? clickOffset.z
+                                    : -clickOffset.z
+                            : facing.getAxisDirection() == Direction.AxisDirection.POSITIVE
+                                    ? -clickOffset.x
+                                    : clickOffset.x;
+            Pair<DoubleBlockHalf, Side> preferredState =
+                    Pair.of(DoubleBlockHalf.LOWER, perpendicular > 0 ? Side.LEFT : Side.RIGHT);
+            if (possibleStates.contains(preferredState)) {
+                return rotated.setValue(HALF, preferredState.getFirst()).setValue(SIDE, preferredState.getSecond());
             }
         }
 
-        return rotated.setValue(HALF, possibleStates.get(0).getA()).setValue(SIDE, possibleStates.get(0).getB());
+        return rotated.setValue(HALF, possibleStates.get(0).getFirst())
+                .setValue(SIDE, possibleStates.get(0).getSecond());
     }
 
-    public static boolean canPlace(BlockPos[] posArray, BlockItemUseContext context, World world) {
+    public static boolean canPlace(BlockPos[] posArray, BlockPlaceContext context, Level world) {
         for (BlockPos pos : posArray) {
             if (!ModUtil.canPlaceAt(context, pos)) {
                 return false;
@@ -234,20 +262,29 @@ public class ChamberDoorBlock extends MultiBlock {
         return true;
     }
 
-    public void setOpen(boolean open, BlockState blockState, World world, BlockPos pos) {
+    public void setOpen(boolean open, BlockState blockState, Level world, BlockPos pos) {
         this.setBlockStateValue(OPEN, open, blockState, world, pos);
         this.updateAllNeighbors(world, pos, blockState);
         playSound(open, blockState, world, pos);
     }
 
-    public static void playSound(boolean open, BlockState blockState, World world, BlockPos pos) {
-        Vector3d middlePos = getExactMiddlePos(blockState, pos);
-        world.playSound(null, middlePos.x, middlePos.y, middlePos.z, open ? SoundInit.CHAMBER_DOOR_OPEN.get() : SoundInit.CHAMBER_DOOR_CLOSE.get(), SoundCategory.BLOCKS, 1, ModUtil.randomSoundPitch());
+    public static void playSound(boolean open, BlockState blockState, Level world, BlockPos pos) {
+        net.minecraft.world.phys.Vec3 middlePos = getExactMiddlePos(blockState, pos);
+        world.playSound(
+                null,
+                middlePos.x,
+                middlePos.y,
+                middlePos.z,
+                open ? SoundInit.CHAMBER_DOOR_OPEN.get() : SoundInit.CHAMBER_DOOR_CLOSE.get(),
+                SoundSource.BLOCKS,
+                1,
+                ModUtil.randomSoundPitch());
     }
 
-    public static Vector3d getExactMiddlePos(BlockState state, BlockPos pos) {
+    public static net.minecraft.world.phys.Vec3 getExactMiddlePos(BlockState state, BlockPos pos) {
         Direction facing = state.getValue(FACING);
-        return Vector3d.atBottomCenterOf(pos).add(new Vec3(facing.getCounterClockWise().getNormal()).mul(0.5).add(0, 1, 0).to3d());
+        return net.minecraft.world.phys.Vec3.atBottomCenterOf(pos)
+                .add(new Vec3(facing.getCounterClockWise().getStep()).mul(0.5).add(0, 1, 0).to3d());
     }
 
     @Override
@@ -256,23 +293,26 @@ public class ChamberDoorBlock extends MultiBlock {
     }
 
     @Override
-    public int getAnalogOutputSignal(BlockState state, World world, BlockPos pos) {
-        TileEntity blockEntity = world.getBlockEntity(this.getMainPosition(state, pos));
+    public int getAnalogOutputSignal(BlockState state, Level world, BlockPos pos, Direction direction) {
+        BlockEntity blockEntity = world.getBlockEntity(this.getMainPosition(state, pos));
         if (state.getValue(OPEN) && blockEntity instanceof ChamberDoorTileEntity) {
             return ((ChamberDoorTileEntity) blockEntity).isAutomatic() ? 15 : 0;
         }
         return 0;
     }
 
-    @Override
-    public boolean hasTileEntity(BlockState state) {
-        return isMainBlock(state);
-    }
-
     @Nullable
     @Override
-    public TileEntity createTileEntity(BlockState state, IBlockReader world) {
-        return isMainBlock(state) ? TileEntityTypeInit.CHAMBER_DOOR.get().create() : null;
+    public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
+        return isMainBlock(state) ? TileEntityTypeInit.CHAMBER_DOOR.get().create(pos, state) : null;
+    }
+
+    @Override
+    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(
+            Level level, BlockState state, BlockEntityType<T> type) {
+        return type == TileEntityTypeInit.CHAMBER_DOOR.get()
+                ? (world, pos, blockState, entity) -> ((ChamberDoorTileEntity) entity).tick()
+                : null;
     }
 
     @Override
@@ -298,7 +338,8 @@ public class ChamberDoorBlock extends MultiBlock {
     }
 
     @Override
-    public void appendHoverText(ItemStack itemStack, @Nullable IBlockReader blockReader, List<ITextComponent> list, ITooltipFlag flag) {
+    public void appendHoverText(
+            ItemStack itemStack, @Nullable BlockGetter blockReader, List<Component> list, TooltipFlag flag) {
         ModUtil.addTooltip("chamber_door", list);
     }
 }

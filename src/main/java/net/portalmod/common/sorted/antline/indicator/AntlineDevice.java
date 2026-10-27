@@ -1,52 +1,51 @@
 package net.portalmod.common.sorted.antline.indicator;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.HorizontalFaceBlock;
-import net.minecraft.block.material.PushReaction;
-import net.minecraft.state.StateContainer;
-import net.minecraft.state.properties.AttachFace;
-import net.minecraft.util.Direction;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.shapes.ISelectionContext;
-import net.minecraft.util.math.shapes.VoxelShape;
-import net.minecraft.util.math.vector.Vector3f;
-import net.minecraft.world.IBlockReader;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.FaceAttachedHorizontalDirectionalBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.level.block.state.properties.AttachFace;
+import net.minecraft.world.level.material.PushReaction;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import net.portalmod.common.sorted.antline.AntlineConnector;
 import net.portalmod.core.math.BiHashMap;
 import net.portalmod.core.math.Mat4;
 import net.portalmod.core.math.Vec3;
 import net.portalmod.core.math.VoxelShapeGroup;
 
+import org.joml.Vector3f;
+
 /**
  * The parent of all antline indicator things.
- * <p>
- * Handles the shape and rotation blockstates.
+ *
+ * <p>Handles the shape and rotation blockstates.
  */
-public class AntlineDevice extends HorizontalFaceBlock implements AntlineConnector {
+public class AntlineDevice extends FaceAttachedHorizontalDirectionalBlock implements AntlineConnector {
     private static final BiHashMap<Direction, AttachFace, VoxelShapeGroup> SHAPE = new BiHashMap<>();
 
     public AntlineDevice(Properties properties) {
-        super(properties);
+        super(properties.pushReaction(PushReaction.POPPED));
         this.initAABBs();
     }
 
     protected void initAABBs() {
-        VoxelShapeGroup shape = new VoxelShapeGroup.Builder()
-                .add(0, 3, 3, 2, 13, 13)
-                .build();
+        VoxelShapeGroup shape = new VoxelShapeGroup.Builder().add(0, 3, 3, 2, 13, 13).build();
 
-        for(Direction facing : Direction.values()) {
-            for(AttachFace attachFace : AttachFace.values()) {
+        for (Direction facing : Direction.values()) {
+            for (AttachFace attachFace : AttachFace.values()) {
                 Mat4 matrix = Mat4.identity();
                 matrix.translate(new Vec3(.5));
 
-                if(attachFace != AttachFace.WALL) {
+                if (attachFace != AttachFace.WALL) {
                     int angle = (attachFace == AttachFace.FLOOR) ? 90 : -90;
-                    matrix.rotateDeg(Vector3f.ZP, angle);
+                    matrix.rotateDeg(new Vector3f(0, 0, 1), angle);
                 } else {
                     int angle = facing.get2DDataValue() * -90 - 90;
-                    matrix.rotateDeg(Vector3f.YP, angle);
+                    matrix.rotateDeg(new Vector3f(0, 1, 0), angle);
                 }
                 matrix.translate(new Vec3(-.5));
 
@@ -56,18 +55,13 @@ public class AntlineDevice extends HorizontalFaceBlock implements AntlineConnect
     }
 
     @Override
-    public VoxelShape getShape(BlockState state, IBlockReader level, BlockPos pos, ISelectionContext context) {
+    public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
         return SHAPE.get(state.getValue(FACING), state.getValue(FACE)).getShape();
     }
 
     @Override
-    protected void createBlockStateDefinition(StateContainer.Builder<Block, BlockState> builder) {
+    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
         builder.add(FACING, FACE);
-    }
-
-    @Override
-    public PushReaction getPistonPushReaction(BlockState p_149656_1_) {
-        return PushReaction.DESTROY;
     }
 
     @Override
