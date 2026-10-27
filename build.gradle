@@ -87,7 +87,7 @@ modrinth {
     uploadFile = jar
     gameVersions = [minecraft_version]
     loaders = ['fabric']
-    changelog = rootProject.file('CHANGELOG_LATEST.md').text
+    changelog = rootProject.file('CHANGELOG.md').text
     dependencies {
         required.project 'fabric-api'
     }
@@ -102,7 +102,7 @@ curseforge {
                 displayName = mod_version
                 changelog {
                     format = ChangelogFormat.MARKDOWN
-                    from(file('CHANGELOG_LATEST.md'))
+                    from(file('CHANGELOG.md'))
                 }
                 from(tasks.named('jar'))
             }

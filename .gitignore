@@ -12,5 +12,7 @@ build
 
 # other
 run
+run-*
 logs
 /src/generated/resources/.cache/
+*.md

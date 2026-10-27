@@ -1,3 +1,37 @@
+# Version 1.3.1+26.3-fabric.3
+
+- Fixed the walking-bob and auto-jump measurements counting portal displacement as physical walking, which caused the screen to shake during traversal.
+- Kept the distant local body visible when the camera crossed before the body; refreshed asynchronous culling during side changes so nearby entities do not blink out.
+- Rejected recursive views entirely behind an exit clip plane without discarding visible portal slivers.
+- Restored the original turret damage cadence using the current damage-cooldown tag; retained the original 60-percent roll, damage, ammo, and difficulty behavior.
+- Put the PortalMod options button into Minecraft's options grid and kept the configuration controls within small windows.
+- Verified original fizzle-item drops, including dropper-cube and turret exceptions, and retained that behavior.
+- Added real Survival-player turret checks, sustained-fire cooldown coverage, and menu layout checks at several GUI sizes.
+- Verified the Sodium performance profile with Minecraft's native Vulkan backend.
+
+# Version 1.3.1+26.3-fabric.2
+
+- Fixed the portal aperture disappearing during angled crossings by preserving per-fragment depth while clipping its projected silhouette.
+- Matched camera handoff to the portal's exact transform and hid the local avatar when a portal camera is inside its interpolated head.
+- Removed the redundant portal box-frustum rejection that could hide an opening at a screen edge.
+- Reused texture-size buckets during portal approach instead of reallocating render targets for tiny aperture changes.
+- Build Sodium's visible section lists for the current portal or restored main camera instead of reusing an asynchronous result from another view.
+- Fixed unintended white glowing outlines on cube emissive layers and chamber signs.
+- Snapshot entity teleport history before asynchronous packet encoding, replay it once per entity tick, and reset rotation interpolation at crossings.
+- Kept local held-object prediction separate from delayed server echoes and remote interpolation; sized the carry offset to avoid catching on portal headroom.
+- Restored block-item translation prefixes, including Radio, panel variants, test elements, and gel containers.
+- Added rendered-pixel checks for crossing angles, screen-edge openings, main-world terrain, ordinary wall occlusion, cube rendering and split geometry, plus native and TCP cube traversal.
+- Added opt-in per-rendered-frame recordings for straight, angled, loop, separate-room, and carried-cube traversal and turning.
+
+# Version 1.3.1+26.3-fabric.1
+
+- Integrated the complete Fabric 26.3 source port.
+- Fixed black portal skies by initializing destination environment probes and rendering the sky with an unclipped projection and the active scene target.
+- Preserved full terrain distance through recursive portals and added conservative screen-edge bounds and aperture frusta.
+- Added Sodium camera, terrain-list, and projection integration; retained Entity Culling visibility decisions separately for portal views.
+- Fixed the Lithium collision-mixin startup conflict and dedicated-server loading of client-only portal methods.
+- Added visual regressions for distant terrain, angled portal edges, destination sky, and main-camera-occluded entities, plus ordinary swimming and antline branch coverage.
+
 # Version 1.3.1
 ### Changes
 - Added stonecutter recipes for Lunecast and Blackplate
