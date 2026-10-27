@@ -65,7 +65,7 @@ public class ChamberSignRenderer extends EntityRenderer<ChamberSignEntity, Chamb
                 RenderTypes.entityCutout(state.enabled ? TEXTURE_ON : TEXTURE_OFF),
                 state.lightCoords,
                 OverlayTexture.NO_OVERLAY,
-                -1);
+                state.outlineColor);
         poses.popPose();
         super.submit(state, poses, collector, camera);
     }

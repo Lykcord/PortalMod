@@ -40,6 +40,6 @@ public class CompanionCubeGlowLayer extends RenderLayer<CubeRenderState, CubeMod
                 state.active ? ACTIVE_GLOW : GLOW,
                 glowLight,
                 OverlayTexture.NO_OVERLAY,
-                -1);
+                state.outlineColor);
     }
 }
