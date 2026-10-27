@@ -1,8 +1,16 @@
+# Version 1.3.1+26.3-fabric.5
+
+- Replaced recursive antline signal propagation with a connected-network scan that reads all inputs before changing wires or outputs.
+- Fixed encoder/decoder feedback producing repeated intermediate signal changes and exhausting the heap when another input, such as a standing button, shares the loop.
+- Kept inverted indicator feedback running as a clock on server ticks, while stable powered circuits stop sending redundant wire updates.
+- Kept shared indicators powered when another connected network still has an active input.
+- Added packet-count regressions and opt-in client/server memory profiles for the button circuit and running clock, including Sodium with native Vulkan.
+
 # Version 1.3.1+26.3-fabric.4
 
 - Kept the first-person body hidden during crouching and swimming pose transitions.
 - Fixed breaking one antline face discarding the other faces on the client, including wall/floor combinations.
-- Moved encoder input changes to scheduled ticks so indicator/decoder feedback cannot flood the same neighbor-update chain.
+- Moved encoder input changes to scheduled ticks to separate feedback across server ticks.
 - Fixed Vulkan's same-submission cloud fence crash by keeping cloud buffers separate for each portal view.
 - Restored the original portal texture orientation, with the bright border at the bottom.
 - Stopped back-face portal highlights drawing over visible portal openings while keeping highlights through solid walls.
