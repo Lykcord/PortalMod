@@ -9,6 +9,7 @@
     ],
     "fabric-client-gametest": [
       "net.portalmod.PortalBoundaryVisibilityClientTest",
+      "net.portalmod.PortalOptionsLayoutClientTest",
       "net.portalmod.FaithPlateConfigurationClientTest",
       "net.portalmod.PortalNetworkClientTest",
       "net.portalmod.LegacyChunkClientTest",

@@ -15,6 +15,7 @@ import net.portalmod.core.config.PortalModConfigManager;
 public class PortalModOptionsScreen extends Screen {
     private static final int BUTTON_WIDTH = 200;
     private static final int BUTTON_HEIGHT = 20;
+    private int buttonWidth = BUTTON_WIDTH;
 
     private final Screen lastScreen;
     private ToggleButton CROSSHAIR_BUTTON;
@@ -36,17 +37,18 @@ public class PortalModOptionsScreen extends Screen {
         return Button.builder(
                         Component.translatable("options." + PortalMod.MODID + ".button"),
                         button -> Minecraft.getInstance().gui.setScreen(new PortalModOptionsScreen(screen)))
-                .bounds(screen.width / 2 - 75, screen.height / 6 + 144 - 6, 150, 20)
+                .width(308)
                 .build();
     }
 
     @Override
     protected void init() {
+        buttonWidth = Math.min(BUTTON_WIDTH, (this.width - 30) / 2);
         int baseY = 50;
         int stepY = BUTTON_HEIGHT + 5;
         int x, y;
 
-        x = this.width / 2 - BUTTON_WIDTH - 5;
+        x = this.width / 2 - buttonWidth - 5;
         y = baseY;
         CROSSHAIR_BUTTON = this.createToggleButton(x, y, "crosshair", PortalModConfigManager.CROSSHAIR.get());
         RECURSION_SLIDER = this.createRecursionSlider(x, y += stepY);
@@ -87,11 +89,13 @@ public class PortalModOptionsScreen extends Screen {
     }
 
     private ToggleButton createToggleButton(int x, int y, String id, boolean value) {
-        return new ToggleButton(x, y, BUTTON_WIDTH, BUTTON_HEIGHT, this.getText(id), $1 -> {}, value);
+        return new ToggleButton(x, y, buttonWidth, BUTTON_HEIGHT, this.getText(id), $1 -> {}, value);
     }
 
     private RecursionSlider createRecursionSlider(int x, int y) {
-        return new RecursionSlider(x, y, this.getText("recursion"), PortalModConfigManager.RECURSION.get());
+        var slider = new RecursionSlider(x, y, this.getText("recursion"), PortalModConfigManager.RECURSION.get());
+        slider.setWidth(buttonWidth);
+        return slider;
     }
 
     private Button createSkinPageButton(int x, int y) {
@@ -101,7 +105,7 @@ public class PortalModOptionsScreen extends Screen {
                             this.save();
                             Minecraft.getInstance().gui.setScreen(SkinSelectorScreen.getInstance(this));
                         })
-                .bounds(x, y, BUTTON_WIDTH, BUTTON_HEIGHT)
+                .bounds(x, y, buttonWidth, BUTTON_HEIGHT)
                 .build();
     }
 
