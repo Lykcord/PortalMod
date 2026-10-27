@@ -1,6 +1,7 @@
 package net.portalmod.common.sorted.portal;
 
-import javax.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -10,11 +11,12 @@ public class ClientPortalManager {
     private final Map<UUID, PortalPair> PORTAL_MAP = new HashMap<>();
     private final Map<UUID, PartialPortalPair> PARTIAL_MAP = new HashMap<>();
 
-    private ClientPortalManager() { }
+    private ClientPortalManager() {}
 
     public static ClientPortalManager getInstance() {
-        if(instance == null)
+        if (instance == null) {
             instance = new ClientPortalManager();
+        }
         return instance;
     }
 
@@ -30,10 +32,12 @@ public class ClientPortalManager {
     }
 
     public void remove(UUID gunUUID, PortalEntity portal) {
-        PORTAL_MAP.computeIfPresent(gunUUID, (uuid, pair) -> {
-            pair.remove(portal);
-            return !pair.isEmpty() ? pair : null;
-        });
+        PORTAL_MAP.computeIfPresent(
+                gunUUID,
+                (uuid, pair) -> {
+                    pair.remove(portal);
+                    return !pair.isEmpty() ? pair : null;
+                });
     }
 
     public boolean has(UUID gunUUID, PortalEnd end) {
@@ -59,10 +63,12 @@ public class ClientPortalManager {
     }
 
     public void forgetPortal(UUID gunUUID, PortalEnd end) {
-        if(PORTAL_MAP.containsKey(gunUUID))
+        if (PORTAL_MAP.containsKey(gunUUID)) {
             PORTAL_MAP.get(gunUUID).set(end, null);
-        if(PARTIAL_MAP.containsKey(gunUUID))
+        }
+        if (PARTIAL_MAP.containsKey(gunUUID)) {
             PARTIAL_MAP.get(gunUUID).set(end, null);
+        }
     }
 
     public Map<UUID, PortalPair> getPortalMap() {

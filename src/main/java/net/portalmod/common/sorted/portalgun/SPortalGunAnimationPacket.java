@@ -1,10 +1,12 @@
 package net.portalmod.common.sorted.portalgun;
 
-import net.minecraft.network.PacketBuffer;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
-import net.minecraftforge.fml.network.NetworkEvent;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
+import net.minecraft.client.Minecraft;
+import net.minecraft.network.FriendlyByteBuf;
 import net.portalmod.core.packet.AbstractPacket;
+import net.portalmod.core.packet.PacketContext;
+import net.portalmod.core.util.ClientExecution;
 
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -21,24 +23,28 @@ public class SPortalGunAnimationPacket implements AbstractPacket<SPortalGunAnima
     }
 
     @Override
-    public void encode(PacketBuffer buffer) {
+    public void encode(FriendlyByteBuf buffer) {
         buffer.writeUUID(gunUUID);
         buffer.writeEnum(animation);
     }
 
     @Override
-    public SPortalGunAnimationPacket decode(PacketBuffer buffer) {
-        return new SPortalGunAnimationPacket(
-                buffer.readUUID(),
-                buffer.readEnum(PortalGunAnimation.class));
+    public SPortalGunAnimationPacket decode(FriendlyByteBuf buffer) {
+        return new SPortalGunAnimationPacket(buffer.readUUID(), buffer.readEnum(PortalGunAnimation.class));
     }
 
     @Override
-    public boolean handle(Supplier<NetworkEvent.Context> context) {
-        context.get().enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> {
-            switch(this.animation) {
+    public boolean handle(Supplier<PacketContext> context) {
+        context.get().enqueueWork(() -> ClientExecution.run(() -> () -> ClientHandler.handle(this)));
+        return true;
+    }
+
+    @Environment(EnvType.CLIENT)
+    private static final class ClientHandler {
+        private static void handle(SPortalGunAnimationPacket packet) {
+            switch (packet.animation) {
                 case SHOOT:
-                    PortalGunISTER.startShootAnimation(this.gunUUID);
+                    PortalGunISTER.startShootAnimation(packet.gunUUID);
                     break;
 
                 case FIZZLE:
@@ -46,16 +52,19 @@ public class SPortalGunAnimationPacket implements AbstractPacket<SPortalGunAnima
                     break;
 
                 case DROP:
-                    PortalGunISTER.stopLiftAnimation(this.gunUUID);
+                    PortalGunISTER.stopLiftAnimation(packet.gunUUID);
+                    if (Minecraft.getInstance().player != null) {
+                        PortalGunGrabSoundClient.handlePacket(Minecraft.getInstance().player, false);
+                    }
                     break;
 
                 case LIFT:
-                    PortalGunISTER.startLiftAnimation(this.gunUUID);
+                    PortalGunISTER.startLiftAnimation(packet.gunUUID);
+                    if (Minecraft.getInstance().player != null) {
+                        PortalGunGrabSoundClient.handlePacket(Minecraft.getInstance().player, true);
+                    }
                     break;
             }
-        }));
-
-        context.get().setPacketHandled(true);
-        return true;
+        }
     }
 }

@@ -1,25 +1,22 @@
 package net.portalmod.common.sorted.portalgun.skins;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
-import com.mojang.blaze3d.platform.GlStateManager;
-import com.mojang.blaze3d.systems.RenderSystem;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.widget.Widget;
-import net.minecraft.client.renderer.IRenderTypeBuffer;
-import net.minecraft.client.renderer.RenderHelper;
-import net.minecraft.client.renderer.texture.AtlasTexture;
-import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.vector.Vector3f;
-import net.minecraft.util.text.StringTextComponent;
-import net.portalmod.common.sorted.portalgun.PortalGunISTER;
-import net.portalmod.common.sorted.portalgun.PortalGunModel;
-import net.portalmod.common.sorted.portalgun.PortalGunModelManager;
+import com.mojang.blaze3d.platform.InputConstants;
+
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.narration.NarrationElementOutput;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.CustomData;
+import net.portalmod.core.init.ItemInit;
 import net.portalmod.core.util.Colour;
 
 import java.util.Optional;
 
-public class SkinPreviewWidget extends Widget {
+public class SkinPreviewWidget extends AbstractWidget {
     private final SkinSelectorScreen parent;
 
     private boolean dragging;
@@ -44,7 +41,7 @@ public class SkinPreviewWidget extends Widget {
     private String nextSelectedSkin;
 
     public SkinPreviewWidget(int x, int y, int width, int height, SkinSelectorScreen parent) {
-        super(x, y, width, height, StringTextComponent.EMPTY);
+        super(x, y, width, height, Component.empty());
         this.parent = parent;
 
         this.xRot = 30;
@@ -55,53 +52,40 @@ public class SkinPreviewWidget extends Widget {
         this.yRotMomentum = 0;
     }
 
-    public void render(MatrixStack matrixStack, int mouseX, int mouseY, float partialTicks) {
-        partialTicks = Minecraft.getInstance().getFrameTime();
-        IRenderTypeBuffer.Impl irendertypebuffer$impl = Minecraft.getInstance().renderBuffers().bufferSource();
-        Colour lastPortalColor = new Colour(64, 59, 75, 255);
-        Colour stripeColour = new Colour(255, 255, 255, 0);
+    private final ItemStack preview = new ItemStack(ItemInit.PORTALGUN.get());
+
+    @Override
+    protected void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTicks) {
+        computeAnimation();
         Colour tint = Optional.ofNullable(parent.getSkinTint()).orElse(Colour.WHITE);
+        CustomData.update(
+                DataComponents.CUSTOM_DATA,
+                preview,
+                data -> {
+                    data.putString("PreviewSkin", selectedSkin == null ? "default" : selectedSkin);
+                    data.putInt(
+                            "PreviewTint", 0xFF000000 | tint.getIntR() << 16 | tint.getIntG() << 8 | tint.getIntB());
+                    data.putFloat("PreviewX", Mth.lerp(partialTicks, xRotOld, xRot));
+                    data.putFloat("PreviewY", Mth.lerp(partialTicks, yRotOld, yRot));
+                    data.putFloat("PreviewZ", zRot);
+                });
+        graphics.pose().pushMatrix();
+        graphics.pose().translate(getX() + width / 2f, getY() + width / 2f);
+        graphics.pose().scale(5);
+        graphics.fakeItem(preview, -8, -8);
+        graphics.pose().popMatrix();
+    }
 
-        Minecraft.getInstance().textureManager.bind(AtlasTexture.LOCATION_BLOCKS);
-        Minecraft.getInstance().textureManager.getTexture(AtlasTexture.LOCATION_BLOCKS).setFilter(false, false);
-
-        RenderSystem.pushMatrix();
-        RenderSystem.enableRescaleNormal();
-        RenderSystem.enableAlphaTest();
-        RenderSystem.defaultAlphaFunc();
-        RenderSystem.enableBlend();
-        RenderSystem.blendFunc(GlStateManager.SourceFactor.SRC_ALPHA, GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA);
-        RenderSystem.color4f(1.0F, 1.0F, 1.0F, 1.0F);
-        RenderSystem.translatef((float)this.x + this.width / 2f, (float)this.y + this.width / 2f, 100.0F);
-        RenderSystem.scalef(5, 5, 5);
-        RenderSystem.scalef(16.0F, -16.0F, 16.0F);
-        RenderHelper.setupFor3DItems();
-
-        matrixStack.pushPose();
-
-        this.computeAnimation();
-        matrixStack.mulPose(Vector3f.XP.rotationDegrees(MathHelper.lerp(partialTicks, this.xRotOld, this.xRot)));
-        matrixStack.mulPose(Vector3f.YP.rotationDegrees(MathHelper.lerp(partialTicks, this.yRotOld, this.yRot)));
-        matrixStack.mulPose(Vector3f.ZP.rotationDegrees(this.zRot));
-        matrixStack.translate(0, -.2, 0);
-
-        PortalGunISTER.renderGun(matrixStack, null, this.getModel(), irendertypebuffer$impl,
-                ClientSkinManager.getInstance().getSkinTexture(selectedSkin),
-                stripeColour, lastPortalColor, tint, false, false, 15728880, OverlayTexture.NO_OVERLAY);
-
-        matrixStack.popPose();
-
-        RenderSystem.enableDepthTest();
-        RenderSystem.disableAlphaTest();
-        RenderSystem.disableRescaleNormal();
-        RenderSystem.popMatrix();
+    @Override
+    protected void updateWidgetNarration(NarrationElementOutput output) {
+        defaultButtonNarrationText(output);
     }
 
     public void tick() {
         this.xRotOld = this.xRot;
         this.yRotOld = this.yRot;
 
-        if(this.dragging) {
+        if (this.dragging) {
             this.stopRotation();
         } else {
             this.xRot += this.xRotMomentum;
@@ -118,8 +102,8 @@ public class SkinPreviewWidget extends Widget {
     }
 
     private void setPrevInput(double x, double y) {
-        this.mousePrevX = (float)x;
-        this.mousePrevY = (float)y;
+        this.mousePrevX = (float) x;
+        this.mousePrevY = (float) y;
         this.mousePrevTime = System.currentTimeMillis();
     }
 
@@ -129,54 +113,51 @@ public class SkinPreviewWidget extends Widget {
     }
 
     private void wrapYRot() {
-        while(this.yRot >= 360) {
+        while (this.yRot >= 360) {
             this.yRot -= 360;
             this.yRotOld -= 360;
         }
 
-        while(this.yRot < 0) {
+        while (this.yRot < 0) {
             this.yRot += 360;
             this.yRotOld += 360;
         }
     }
 
     private void clampXRot() {
-        this.xRot = MathHelper.clamp(this.xRot, -90, 90);
+        this.xRot = Mth.clamp(this.xRot, -90, 90);
     }
 
     private float getDeltaTicks() {
         return Math.max((System.currentTimeMillis() - this.mousePrevTime) / 50f, 0.001f);
     }
 
-    private PortalGunModel getModel() {
-        return PortalGunModelManager.getInstance().getModel(null);
-    }
-
     private void computeAnimation() {
-        if(this.animationStart == -1)
+        if (this.animationStart == -1) {
             return;
+        }
 
         float delta = (System.currentTimeMillis() - this.animationStart) / 1000f;
 
-        if(delta > 1) {
+        if (delta > 1) {
             this.zRot = 0;
             this.selectedSkin = this.nextSelectedSkin;
             return;
         }
 
-        if(delta > 0.15 && !this.animationHalfLifePassed) {
+        if (delta > 0.15 && !this.animationHalfLifePassed) {
             this.selectedSkin = this.nextSelectedSkin;
             this.animationHalfLifePassed = true;
         }
 
-        float factor = (float)(1 - Math.exp(-10 * delta));
+        float factor = (float) (1 - Math.exp(-10 * delta));
         this.zRot = 360 * factor * factor;
     }
 
     public void setSelectedSkin(String skin, boolean animate) {
         this.nextSelectedSkin = skin;
 
-        if(animate) {
+        if (animate) {
             this.animationStart = System.currentTimeMillis();
             this.animationHalfLifePassed = false;
         } else {
@@ -185,14 +166,14 @@ public class SkinPreviewWidget extends Widget {
     }
 
     @Override
-    public void onClick(double x, double y) {
+    public void onClick(MouseButtonEvent event, boolean doubleClick) {
         this.dragging = true;
-        this.setPrevInput(x, y);
+        this.setPrevInput(event.x(), event.y());
         this.stopRotation();
     }
 
     public void mouseReleasedAnywhere(int button) {
-        if(this.isValidClickButton(button)) {
+        if (button == InputConstants.MOUSE_BUTTON_LEFT) {
             this.dragging = false;
         }
     }
@@ -201,11 +182,12 @@ public class SkinPreviewWidget extends Widget {
     public void mouseMoved(double x, double y) {
         super.mouseMoved(x, y);
 
-        if(!this.dragging)
+        if (!this.dragging) {
             return;
+        }
 
-        float deltaXRot = (float)(y - this.mousePrevY);
-        float deltaYRot = (float)(x - this.mousePrevX);
+        float deltaXRot = (float) (y - this.mousePrevY);
+        float deltaYRot = (float) (x - this.mousePrevX);
 
         this.xRotOld = this.xRot += deltaXRot;
         this.yRotOld = this.yRot += deltaYRot;
@@ -213,10 +195,10 @@ public class SkinPreviewWidget extends Widget {
         this.clampXRot();
 
         float delta = this.getDeltaTicks();
-        this.xRotMomentum = MathHelper.clamp(deltaXRot / delta, -MOMENTUM_LIMIT, MOMENTUM_LIMIT);
-        this.yRotMomentum = MathHelper.clamp(deltaYRot / delta, -MOMENTUM_LIMIT, MOMENTUM_LIMIT);
+        this.xRotMomentum = Mth.clamp(deltaXRot / delta, -MOMENTUM_LIMIT, MOMENTUM_LIMIT);
+        this.yRotMomentum = Mth.clamp(deltaYRot / delta, -MOMENTUM_LIMIT, MOMENTUM_LIMIT);
 
-        if(this.yRotMomentum != 0) {
+        if (this.yRotMomentum != 0) {
             this.clockwise = this.yRotMomentum < 0;
         }
 

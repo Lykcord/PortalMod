@@ -1,27 +1,26 @@
 package net.portalmod.common.sorted.faithplate;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.entity.player.ServerPlayerEntity;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.network.NetworkManager;
-import net.minecraft.network.play.server.SUpdateTileEntityPacket;
-import net.minecraft.state.properties.DoubleBlockHalf;
-import net.minecraft.tileentity.ITickableTileEntity;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.tileentity.TileEntityType;
-import net.minecraft.util.Direction;
-import net.minecraft.util.Mirror;
-import net.minecraft.util.Rotation;
-import net.minecraft.util.math.AxisAlignedBB;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.shapes.VoxelShapes;
-import net.minecraft.util.math.vector.Vector3d;
-import net.minecraft.util.math.vector.Vector3f;
-import net.minecraft.world.World;
-import net.minecraftforge.fml.network.PacketDistributor;
+import static net.portalmod.common.sorted.faithplate.FaithPlateBlock.*;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Mirror;
+import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.shapes.Shapes;
 import net.portalmod.common.sorted.antline.indicator.IndicatorActivated;
 import net.portalmod.common.sorted.antline.indicator.IndicatorInfo;
 import net.portalmod.common.sorted.portal.VolatilePortalHelperManager;
@@ -30,48 +29,45 @@ import net.portalmod.core.init.TileEntityTypeInit;
 import net.portalmod.core.math.Mat4;
 import net.portalmod.core.math.Vec3;
 import net.portalmod.core.math.VoxelShapeGroup;
+import net.portalmod.core.packet.ClientNetworking;
+
+import org.joml.Vector3f;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 
-import static net.portalmod.common.sorted.faithplate.FaithPlateBlock.*;
-
-public class FaithPlateTileEntity extends TileEntity implements ITickableTileEntity, IndicatorActivated {
+public class FaithPlateTileEntity extends BlockEntity implements IndicatorActivated {
     private boolean enabled = false;
     private boolean indicatorControlled = false;
     private boolean override = false;
-    private Vector3d targetPos;
+    private net.minecraft.world.phys.Vec3 targetPos;
     private Direction targetFace;
     private Float height;
     private int cooldown = 0;
     public static int COOLDOWN_DURATION = 10;
 
-    private static final HashMap<PlayerEntity, FaithPlateTileEntity> PLATE_PER_PLAYER = new HashMap<>();
-    private PlayerEntity configuringPlayer;
+    private static final HashMap<Player, FaithPlateTileEntity> PLATE_PER_PLAYER = new HashMap<>();
+    private Player configuringPlayer;
 
-    private static final VoxelShapeGroup TRIGGER = new VoxelShapeGroup.Builder()
-            .add(3, 16, 3, 13, 17, 13)
-            .build();
+    private static final VoxelShapeGroup TRIGGER = new VoxelShapeGroup.Builder().add(3, 16, 3, 13, 17, 13).build();
 
-    public FaithPlateTileEntity(TileEntityType<?> type) {
-        super(type);
+    public FaithPlateTileEntity(BlockPos pos, BlockState state) {
+        super(TileEntityTypeInit.FAITHPLATE.get(), pos, state);
     }
-    
-    public FaithPlateTileEntity() {
-        this(TileEntityTypeInit.FAITHPLATE.get());
-    }
-    
-    @Override
+
     public void tick() {
-        if(this.level == null)
+        if (this.level == null) {
             return;
+        }
 
         // Add target portal helper
-        if(!this.level.isClientSide && targetPos != null) {
-            Vec3 helperPosition = new Vec3(targetPos).add(this.worldPosition).add(.5).add(new Vec3(this.targetFace).mul(.5));
-            VolatilePortalHelperManager.getInstance().addVolatilePortalHelper(this.level, helperPosition, this.targetFace, 1);
+        if (!this.level.isClientSide() && targetPos != null) {
+            Vec3 helperPosition =
+                    new Vec3(targetPos).add(this.worldPosition).add(.5).add(new Vec3(this.targetFace).mul(.5));
+            VolatilePortalHelperManager.getInstance()
+                    .addVolatilePortalHelper(this.level, helperPosition, this.targetFace, 1);
         }
 
         // Check for indicators
@@ -85,18 +81,26 @@ public class FaithPlateTileEntity extends TileEntity implements ITickableTileEnt
         }
 
         // Keep track of how long it's been since the last launch
-        if (cooldown > 0) cooldown--;
-        if (targetPos == null || targetFace == null || !override) return;
-        if (cooldown > 0) return;
+        if (cooldown > 0) {
+            cooldown--;
+        }
+        if (targetPos == null || targetFace == null || !override) {
+            return;
+        }
+        if (cooldown > 0) {
+            return;
+        }
 
-        for(Entity entity : level.getEntitiesOfClass(LivingEntity.class, this.getTrigger())) {
-            if(entity.isPassenger())
+        for (Entity entity : level.getEntitiesOfClass(LivingEntity.class, this.getTrigger())) {
+            if (entity.isPassenger()) {
                 continue;
+            }
 
-            if(entity instanceof PlayerEntity) {
-                PlayerEntity player = (PlayerEntity)entity;
-                if(player.abilities.flying)
+            if (entity instanceof Player) {
+                Player player = (Player) entity;
+                if (player.getAbilities().flying) {
                     continue;
+                }
             }
 
             this.launchEntity(entity);
@@ -104,63 +108,72 @@ public class FaithPlateTileEntity extends TileEntity implements ITickableTileEnt
     }
 
     private void launchEntity(Entity entity) {
-        if(this.level == null)
+        if (this.level == null) {
             return;
+        }
 
-        Vector3d targetPos = getTargetPos();
+        net.minecraft.world.phys.Vec3 targetPos = getTargetPos();
 
-        double offset = getTargetFace().getAxis().isHorizontal() || getTargetFace() == Direction.DOWN
-                ? -0.25 - 0.5 * entity.getBbHeight()
-                : 0;
+        double offset =
+                getTargetFace().getAxis().isHorizontal() || getTargetFace() == Direction.DOWN
+                        ? -0.25 - 0.5 * entity.getBbHeight()
+                        : 0;
 
-        Vec3 target = new Vec3(targetPos).add(.5).add(new Vec3(getTargetFace().getNormal()).mul(.5));
+        Vec3 target = new Vec3(targetPos).add(.5).add(new Vec3(getTargetFace().getStep()).mul(.5));
         Vec3 relativeTarget = target.clone().add(getBlockPos()).sub(entity.position()).add(0, offset, 0);
 
-        if(targetPos.x() == 0 && targetPos.z() == 0)
+        if (targetPos.x() == 0 && targetPos.z() == 0) {
             relativeTarget = new Vec3(getBlockPos()).add(.5, 1, .5).sub(entity.position());
+        }
 
         FaithPlateParabola parabola = new FaithPlateParabola(relativeTarget.to3d(), height);
         double angle = parabola.getAngle();
         double velocity = parabola.getVelocity();
         double rotation = parabola.getRotation();
 
-        entity.setDeltaMovement(new Vector3d(
-                velocity * Math.cos(angle) * Math.cos(rotation),
-                velocity * Math.sin(angle),
-                velocity * Math.cos(angle) * Math.sin(rotation)
-        ));
+        entity.setDeltaMovement(
+                new net.minecraft.world.phys.Vec3(
+                        velocity * Math.cos(angle) * Math.cos(rotation),
+                        velocity * Math.sin(angle),
+                        velocity * Math.cos(angle) * Math.sin(rotation)));
 
         entity.setShiftKeyDown(false);
-        ((Flingable)entity).setFlinging(true);
+        ((Flingable) entity).setFlinging(true);
         this.cooldown = COOLDOWN_DURATION;
 
-        if(!this.level.isClientSide) {
-            if(entity.isControlledByLocalInstance() && !(entity instanceof PlayerEntity)) {
-                PacketInit.INSTANCE.send(PacketDistributor.TRACKING_ENTITY.with(
-                        () -> entity), new SFaithPlateLaunchPacket(getBlockPos()));
+        if (!this.level.isClientSide()) {
+            if (entity.isLocalInstanceAuthoritative() && !(entity instanceof Player)) {
+                PacketInit.sendToTrackingEntity(entity, new SFaithPlateLaunchPacket(getBlockPos()));
             }
         } else {
-            PacketInit.INSTANCE.sendToServer(new CFaithPlateLaunchPacket(getBlockPos()));
+            ClientNetworking.sendToServer(new CFaithPlateLaunchPacket(getBlockPos()));
         }
     }
 
-    public void startConfiguration(ServerPlayerEntity player) {
+    public void startConfiguration(ServerPlayer player) {
         this.configuringPlayer = player;
         PLATE_PER_PLAYER.put(player, this);
-        PacketInit.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player), new SFaithPlateStartConfigPacket(this.getBlockPos()));
+        PacketInit.sendToPlayer(player, new SFaithPlateStartConfigPacket(this.getBlockPos()));
     }
 
     public void endConfiguration() {
         endConfigurationForPlayer(this.configuringPlayer);
     }
 
-    public static void endConfigurationForPlayer(PlayerEntity player) {
-        if(PLATE_PER_PLAYER.containsKey(player))
+    @Override
+    public void preRemoveSideEffects(BlockPos pos, BlockState state) {
+        endConfiguration();
+        super.preRemoveSideEffects(pos, state);
+    }
+
+    public static void endConfigurationForPlayer(Player player) {
+        if (PLATE_PER_PLAYER.containsKey(player)) {
             PLATE_PER_PLAYER.get(player).configuringPlayer = null;
+        }
         PLATE_PER_PLAYER.remove(player);
     }
 
-    public static boolean isPlayerConfiguring(PlayerEntity player) {
+    public static boolean isPlayerConfiguring(Player player) {
         return PLATE_PER_PLAYER.containsKey(player);
     }
 
@@ -169,189 +182,185 @@ public class FaithPlateTileEntity extends TileEntity implements ITickableTileEnt
         return this.configuringPlayer != null;
     }
 
-    public AxisAlignedBB getTrigger() {
+    public AABB getTrigger() {
         BlockState state = this.getBlockState();
         VoxelShapeGroup triggerTransformed = TRIGGER.clone();
 
-        if(state.getValue(FACE) == Face.WALL) {
-            Mat4 matrix = Mat4.identity()
-            .translate(new Vec3(.5))
-            .rotateDeg(Vector3f.YP, -state.getValue(FACING).toYRot())
-            .rotateDeg(Vector3f.XP, 90)
-            .translate(new Vec3(-.5));
+        if (state.getValue(FACE) == Face.WALL) {
+            Mat4 matrix =
+                    Mat4.identity()
+                            .translate(new Vec3(.5))
+                            .rotateDeg(new Vector3f(0, 1, 0), -state.getValue(FACING).toYRot())
+                            .rotateDeg(new Vector3f(1, 0, 0), 90)
+                            .translate(new Vec3(-.5));
 
             triggerTransformed.transform(matrix);
         }
 
-        AxisAlignedBB aabb = triggerTransformed.getShape().bounds();
+        AABB aabb = triggerTransformed.getShape().bounds();
 
         FaithPlateBlock block = (FaithPlateBlock) state.getBlock();
         BlockPos mainPosition = block.getMainPosition(state, this.getBlockPos());
 
-        return VoxelShapes.or(
-                VoxelShapes.create(aabb.move(mainPosition)),
-                VoxelShapes.create(aabb.move(mainPosition.relative(block.getUpperDirection(state))))
-        ).bounds();
+        return Shapes.or(
+                        Shapes.create(aabb.move(mainPosition)),
+                        Shapes.create(aabb.move(mainPosition.relative(block.getUpperDirection(state)))))
+                .bounds();
     }
-    
+
     @Override
-    public CompoundNBT save(CompoundNBT nbt) {
-        if(targetPos != null && targetFace != null) {
-            CompoundNBT target = new CompoundNBT();
+    protected void saveAdditional(ValueOutput nbt) {
+        super.saveAdditional(nbt);
+        if (targetPos != null && targetFace != null) {
+            CompoundTag target = new CompoundTag();
             target.putDouble("x", targetPos.x());
             target.putDouble("y", targetPos.y());
             target.putDouble("z", targetPos.z());
             target.putByte("side", (byte) targetFace.get3DDataValue());
             target.putFloat("height", height);
-            nbt.put("target", target);
+            nbt.store("target", CompoundTag.CODEC, target);
         }
-        
+
         nbt.putBoolean("enabled", enabled);
-        return super.save(nbt);
     }
-    
+
     @Override
-    public void load(BlockState state, CompoundNBT nbt) {
-        super.load(state, nbt);
-        load(nbt);
-    }
-    
-    public void load(CompoundNBT nbt) {
-        enabled = false;
-        
-        if(nbt.contains("enabled"))
-            enabled = nbt.getBoolean("enabled");
-        
-        if(nbt.contains("target")) {
-            CompoundNBT target = nbt.getCompound("target");
-            if(target.contains("x")
+    protected void loadAdditional(ValueInput nbt) {
+        super.loadAdditional(nbt);
+        enabled = nbt.getBooleanOr("enabled", false);
+        targetPos = null;
+        targetFace = null;
+        height = null;
+
+        CompoundTag target = nbt.read("target", CompoundTag.CODEC).orElse(null);
+        if (target != null) {
+            if (target.contains("x")
                     && target.contains("y")
                     && target.contains("z")
                     && target.contains("side")
                     && target.contains("height")) {
-                
-                double x = target.getDouble("x");
-                double y = target.getDouble("y");
-                double z = target.getDouble("z");
-                targetPos = new Vector3d(x, y, z);
-                targetFace = Direction.from3DDataValue(target.getByte("side"));
-                height = target.getFloat("height");
+
+                double x = target.getDoubleOr("x", 0D);
+                double y = target.getDoubleOr("y", 0D);
+                double z = target.getDoubleOr("z", 0D);
+                targetPos = new net.minecraft.world.phys.Vec3(x, y, z);
+                targetFace = Direction.from3DDataValue(target.getByteOr("side", (byte) 0));
+                height = target.getFloatOr("height", 0F);
             }
         }
     }
-    
+
     public boolean isEnabled() {
         return override;
     }
-    
-    public Vector3d getTargetPos() {
+
+    public net.minecraft.world.phys.Vec3 getTargetPos() {
         return targetPos;
     }
-    
+
     public Direction getTargetFace() {
         return targetFace;
     }
-    
+
     public float getHeight() {
         return height;
     }
 
-    public float getPredictedHeight(Vector3d absoluteTargetPos) {
-        if (height != null) return height;
-        return Math.max(1, (float) (new BlockPos(absoluteTargetPos).distManhattan(this.getBlockPos()) / 4.0));
+    public float getPredictedHeight(net.minecraft.world.phys.Vec3 absoluteTargetPos) {
+        if (height != null) {
+            return height;
+        }
+        return Math.max(1, (float) (BlockPos.containing(absoluteTargetPos).distManhattan(this.getBlockPos()) / 4.0));
     }
 
     public int getCooldown() {
         return cooldown;
     }
 
-    @Override
     public void rotate(Rotation rotation) {
-        Vector3d newTarget = this.targetPos;
-        switch(rotation) {
+        if (this.targetPos == null || this.targetFace == null) {
+            return;
+        }
+        net.minecraft.world.phys.Vec3 newTarget = this.targetPos;
+        switch (rotation) {
             case CLOCKWISE_90:
-                newTarget = new Vector3d(-this.targetPos.z, this.targetPos.y, this.targetPos.x); break;
+                newTarget = new net.minecraft.world.phys.Vec3(-this.targetPos.z, this.targetPos.y, this.targetPos.x);
+                break;
             case CLOCKWISE_180:
-                newTarget = new Vector3d(-this.targetPos.x, this.targetPos.y, -this.targetPos.z); break;
+                newTarget = new net.minecraft.world.phys.Vec3(-this.targetPos.x, this.targetPos.y, -this.targetPos.z);
+                break;
             case COUNTERCLOCKWISE_90:
-                newTarget = new Vector3d(this.targetPos.z, this.targetPos.y, -this.targetPos.x); break;
+                newTarget = new net.minecraft.world.phys.Vec3(this.targetPos.z, this.targetPos.y, -this.targetPos.x);
+                break;
         }
         this.targetPos = newTarget;
         this.targetFace = rotation.rotate(this.targetFace);
     }
 
-    @Override
     public void mirror(Mirror mirror) {
-        this.targetPos = new Vec3(this.targetPos).mul(mirror == Mirror.FRONT_BACK ? -1 : 1, 1, mirror == Mirror.LEFT_RIGHT ? -1 : 1).to3d();
+        if (this.targetPos == null || this.targetFace == null) {
+            return;
+        }
+        this.targetPos =
+                new Vec3(this.targetPos)
+                        .mul(mirror == Mirror.FRONT_BACK ? -1 : 1, 1, mirror == Mirror.LEFT_RIGHT ? -1 : 1)
+                        .to3d();
         this.targetFace = mirror.mirror(this.targetFace);
     }
 
     // chunk update
-    
+
     @Override
-    public CompoundNBT getUpdateTag() {
-        return this.save(new CompoundNBT());
+    public CompoundTag getUpdateTag(HolderLookup.Provider lookup) {
+        return saveWithoutMetadata(lookup);
     }
-    
-    @Override
-    public void handleUpdateTag(BlockState state, CompoundNBT tag) {
-        load(state, tag);
-    }
-    
+
     // block update
-    
+
     @Override
-    public SUpdateTileEntityPacket getUpdatePacket() {
-        return new SUpdateTileEntityPacket(this.getBlockPos(), -1, save(new CompoundNBT()));
+    public ClientboundBlockEntityDataPacket getUpdatePacket() {
+        return ClientboundBlockEntityDataPacket.create(this);
     }
-    
-    @Override
-    public void onDataPacket(NetworkManager net, SUpdateTileEntityPacket packet) {
-        this.load(packet.getTag());
+
+    public AABB getRenderBoundingBox() {
+        return new AABB(this.getBlockPos()).inflate(1E30);
     }
-    
-    @Override
-    public AxisAlignedBB getRenderBoundingBox() {
-        return new AxisAlignedBB(this.getBlockPos()).inflate(1E30);
-    }
-    
-    @Override
+
     public double getViewDistance() {
         return 256.0D;
     }
 
     @Override
-    public List<BlockPos> getIndicatorPositions(BlockState blockState, World world, BlockPos pos) {
+    public List<BlockPos> getIndicatorPositions(BlockState blockState, Level world, BlockPos pos) {
         Direction facing = blockState.getValue(FACING);
 
         Direction up = Direction.UP;
         Direction feet = facing;
         Direction side = facing.getClockWise();
         boolean vertical = blockState.getValue(FACE) == Face.WALL;
-        boolean topHalf  = blockState.getValue(HALF) == DoubleBlockHalf.UPPER;
+        boolean topHalf = blockState.getValue(HALF) == DoubleBlockHalf.UPPER;
 
         if (vertical) {
             up = facing;
             feet = Direction.DOWN;
         }
-        if (!topHalf) feet = feet.getOpposite();
+        if (!topHalf) {
+            feet = feet.getOpposite();
+        }
 
         BlockPos above = pos.relative(up);
-        return new ArrayList<>(Arrays.asList(
-                above.relative(feet, 2).relative(side.getOpposite()),
-                above.relative(feet, 2),
-                above.relative(feet, 2).relative(side),
-
-                above.relative(feet).relative(side),
-                above.relative(side),
-
-                above.relative(feet.getOpposite()).relative(side),
-                above.relative(feet.getOpposite()),
-                above.relative(feet.getOpposite()).relative(side.getOpposite()),
-
-                above.relative(side.getOpposite()),
-                above.relative(feet).relative(side.getOpposite())
-        ));
+        return new ArrayList<>(
+                Arrays.asList(
+                        above.relative(feet, 2).relative(side.getOpposite()),
+                        above.relative(feet, 2),
+                        above.relative(feet, 2).relative(side),
+                        above.relative(feet).relative(side),
+                        above.relative(side),
+                        above.relative(feet.getOpposite()).relative(side),
+                        above.relative(feet.getOpposite()),
+                        above.relative(feet.getOpposite()).relative(side.getOpposite()),
+                        above.relative(side.getOpposite()),
+                        above.relative(feet).relative(side.getOpposite())));
     }
 
     public boolean isIndicatorControlled() {

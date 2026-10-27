@@ -1,13 +1,12 @@
 package net.portalmod.common.sorted.portalgun.skins;
 
-import com.mojang.util.UUIDTypeAdapter;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.texture.Texture;
-import net.minecraft.util.ResourceLocation;
+import net.minecraft.client.renderer.texture.AbstractTexture;
+import net.minecraft.resources.Identifier;
 import net.portalmod.PortalMod;
 import net.portalmod.client.animation.PortalGunAnimatedTexture;
 import net.portalmod.core.config.PortalModConfigManager;
-import net.portalmod.core.init.PacketInit;
+import net.portalmod.core.packet.ClientNetworking;
 
 import java.io.File;
 import java.io.IOException;
@@ -23,8 +22,9 @@ public class ClientSkinManager extends SkinManager {
     }
 
     public static ClientSkinManager getInstance() {
-        if(instance == null)
+        if (instance == null) {
             instance = new ClientSkinManager();
+        }
         return instance;
     }
 
@@ -33,12 +33,18 @@ public class ClientSkinManager extends SkinManager {
         return new File(Minecraft.getInstance().gameDirectory, "portalmod");
     }
 
-    public ResourceLocation getSkinLocation(String id) {
-        return new ResourceLocation(PortalMod.MODID, "portalgun/" + id);
+    public Identifier getSkinLocation(String id) {
+        return Identifier.fromNamespaceAndPath(PortalMod.MODID, "portalgun/" + id);
     }
 
     public PortalGunAnimatedTexture getSkinTexture(String id) {
-        return (PortalGunAnimatedTexture)Minecraft.getInstance().textureManager.getTexture(this.getSkinLocation(id));
+        var textures = Minecraft.getInstance().getTextureManager();
+        var texture = textures.getTexture(this.getSkinLocation(id == null ? "default" : id));
+        if (texture instanceof PortalGunAnimatedTexture skin) {
+            return skin;
+        }
+        var fallback = textures.getTexture(this.getSkinLocation("default"));
+        return fallback instanceof PortalGunAnimatedTexture skin ? skin : null;
     }
 
     @Override
@@ -47,51 +53,47 @@ public class ClientSkinManager extends SkinManager {
     }
 
     protected void uploadSkin(PortalGunSkin skin, boolean overwrite) {
-        Texture currentTexture = Minecraft.getInstance().textureManager.getTexture(this.getSkinLocation(skin.skin_id));
-        if(!(currentTexture instanceof PortalGunAnimatedTexture) || overwrite) {
-            PortalGunAnimatedTexture skinTexture = new PortalGunAnimatedTexture(skin.skin_id, skin.getFilename(), skin.framerate);
-            Minecraft.getInstance().textureManager.register(this.getSkinLocation(skin.skin_id), skinTexture);
+        AbstractTexture currentTexture =
+                Minecraft.getInstance().getTextureManager().getTexture(this.getSkinLocation(skin.skin_id));
+        if (!(currentTexture instanceof PortalGunAnimatedTexture) || overwrite) {
+            PortalGunAnimatedTexture skinTexture =
+                    new PortalGunAnimatedTexture(skin.skin_id, skin.getFilename(), skin.framerate);
+            Minecraft.getInstance()
+                    .getTextureManager()
+                    .registerAndLoad(this.getSkinLocation(skin.skin_id), skinTexture);
         }
     }
 
     public boolean hasUUID() {
-        return !Minecraft.getInstance().getUser().getUuid().isEmpty();
+        return getOwnUUID().isPresent();
     }
 
     @Override
     public Optional<UUID> getOwnUUID() {
-        String playerUUIDString = Minecraft.getInstance().getUser().getUuid();
-
-        UUID playerUUID;
-        try {
-            playerUUID = UUIDTypeAdapter.fromString(playerUUIDString);
-        } catch(IllegalArgumentException e) {
-            PortalMod.LOGGER.error("Failed to get own UUID");
-            return Optional.empty();
-        }
-
-        return Optional.of(playerUUID);
+        return Optional.ofNullable(Minecraft.getInstance().getUser().getProfileId());
     }
 
     public void onClientStartup() {
-        if(!this.clientSide)
+        if (!this.clientSide) {
             return;
+        }
 
         try {
             this.loadSkinCatalog();
             this.uploadAllSkins(true);
-        } catch(IOException e) {
-            PortalMod.LOGGER.error(e.getMessage());
+        } catch (IOException error) {
+            PortalMod.LOGGER.error(error.getMessage());
         }
 
         String selectedSkin = PortalModConfigManager.PORTALGUN_SKIN.get();
         int tint = PortalModConfigManager.SKIN_TINT.get();
 
-        if(selectedSkin.equals("default") && !PortalModConfigManager.HAS_SKINS.get())
+        if (selectedSkin.equals("default") && !PortalModConfigManager.HAS_SKINS.get()) {
             return;
+        }
 
         Optional<UUID> optionalUUID = this.getOwnUUID();
-        if(optionalUUID.isPresent()) {
+        if (optionalUUID.isPresent()) {
             UUID uuid = optionalUUID.get();
 
             try {
@@ -104,82 +106,91 @@ public class ClientSkinManager extends SkinManager {
                 this.setConfigSelectedSkin(selectedSkin);
                 this.setSelectedSkinForPlayer(null, selectedSkin);
 
-                if(this.getSkinDefinition(selectedSkin).tintable) {
+                if (this.getSkinDefinition(selectedSkin).tintable) {
                     tint = this.adjustTint(tint);
                     this.setTintForPlayer(uuid, tint);
                 }
 
-            } catch(IOException e) {
-                PortalMod.LOGGER.error(e.getMessage());
+            } catch (IOException error) {
+                PortalMod.LOGGER.error(error.getMessage());
             }
         }
     }
 
     public void onClientLogin() {
-        if(!this.clientSide)
+        if (!this.clientSide) {
             return;
+        }
 
         this.clearSelectedSkinMapExceptSelf();
         this.clearTintMapExceptSelf();
         String selectedSkin = this.getSelectedSkinForPlayer(null);
         int tint = this.getTintForPlayerOnSkin(null, selectedSkin);
-        PacketInit.INSTANCE.sendToServer(new CSetPlayerSkinPacket(selectedSkin, tint));
+        ClientNetworking.sendToServer(new CSetPlayerSkinPacket(selectedSkin, tint));
     }
 
     public void onClientReceivedPacket(SSetPlayerSkinPacket packet) {
-        if(!this.clientSide)
+        if (!this.clientSide) {
             return;
+        }
 
-        this.enqueueTask(() -> CompletableFuture.runAsync(() -> {
-            UUID uuid = packet.getPlayer();
-            String skin = packet.getSkin();
-            int tint = this.isSkinTintable(skin) ? packet.getTint() : 0;
+        this.enqueueTask(
+                () ->
+                        CompletableFuture.runAsync(
+                                () -> {
+                                    UUID uuid = packet.getPlayer();
+                                    String skin = packet.getSkin();
+                                    int tint = this.isSkinTintable(skin) ? packet.getTint() : 0;
 
-            this.setSkinAndTintForPlayer(uuid, skin, tint);
-        }));
+                                    this.setSkinAndTintForPlayer(uuid, skin, tint);
+                                }));
     }
 
     public void onSkinCatalogRefresh() {
-        if(!this.clientSide)
+        if (!this.clientSide) {
             return;
+        }
 
-        this.enqueueTask(() -> {
-            Optional<UUID> ownUUID = this.getOwnUUID();
+        this.enqueueTask(
+                () -> {
+                    Optional<UUID> ownUUID = this.getOwnUUID();
 
-            if(ownUUID.isPresent()) {
-                try {
-                    this.fetchPlayer(ownUUID.get());
-                    if(!PortalModConfigManager.HAS_SKINS.get())
-                        this.applyConfigDefaultTint();
-                    this.updateConfigHasSkinsFlag();
+                    if (ownUUID.isPresent()) {
+                        try {
+                            this.fetchPlayer(ownUUID.get());
+                            if (!PortalModConfigManager.HAS_SKINS.get()) {
+                                this.applyConfigDefaultTint();
+                            }
+                            this.updateConfigHasSkinsFlag();
 
-                } catch(IOException e) {
-                    PortalMod.LOGGER.error(e.getMessage());
-                }
-            }
+                        } catch (IOException error) {
+                            PortalMod.LOGGER.error(error.getMessage());
+                        }
+                    }
 
-            try {
-                Thread.sleep(1000);
-            } catch(InterruptedException e) {
-                return;
-            }
-        });
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException error) {
+                        return;
+                    }
+                });
     }
 
     public void onSkinSelected(String skin, int tint) {
-        if(!this.clientSide)
+        if (!this.clientSide) {
             return;
+        }
 
         tint = this.isSkinTintable(skin) ? tint : 0;
         this.setSkinAndTintForPlayer(null, skin, tint);
 
         this.setConfigSelectedSkin(skin);
-        if(this.isSkinTintable(skin)) {
+        if (this.isSkinTintable(skin)) {
             this.setConfigTint(tint);
         }
 
-        if(Minecraft.getInstance().getConnection() != null) {
-            PacketInit.INSTANCE.sendToServer(new CSetPlayerSkinPacket(skin, tint));
+        if (Minecraft.getInstance().getConnection() != null) {
+            ClientNetworking.sendToServer(new CSetPlayerSkinPacket(skin, tint));
         }
     }
 }

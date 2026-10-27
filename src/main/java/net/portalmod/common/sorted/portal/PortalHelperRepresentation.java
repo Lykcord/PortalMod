@@ -1,10 +1,10 @@
 package net.portalmod.common.sorted.portal;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.util.Direction;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.World;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 import net.portalmod.common.sorted.panel.PortalHelper;
 
 public class PortalHelperRepresentation implements AbstractPortalHelper {
@@ -16,13 +16,13 @@ public class PortalHelperRepresentation implements AbstractPortalHelper {
         this.lastHelpedFace = face;
     }
 
-    public boolean isInside(World level, BlockPos pos, Direction face) {
+    public boolean isInside(Level level, BlockPos pos, Direction face) {
         BlockState state = level.getBlockState(pos);
         Block block = state.getBlock();
         BlockState panelState = level.getBlockState(this.lastHelpedPos);
         Block panelBlock = panelState.getBlock();
 
-        if(block instanceof PortalHelper && panelBlock instanceof PortalHelper) {
+        if (block instanceof PortalHelper && panelBlock instanceof PortalHelper) {
             PortalHelper oldHelper = (PortalHelper) panelBlock;
             boolean samePanel = oldHelper.containsBlock(panelState, this.lastHelpedPos, pos, level);
             boolean sameFace = face.equals(this.lastHelpedFace);
@@ -34,10 +34,11 @@ public class PortalHelperRepresentation implements AbstractPortalHelper {
 
     @Override
     public boolean equals(Object obj) {
-        if(!(obj instanceof PortalHelperRepresentation))
+        if (!(obj instanceof PortalHelperRepresentation)) {
             return false;
+        }
 
-        PortalHelperRepresentation other = (PortalHelperRepresentation)obj;
+        PortalHelperRepresentation other = (PortalHelperRepresentation) obj;
         return this.lastHelpedPos.equals(other.lastHelpedPos) && this.lastHelpedFace.equals(other.lastHelpedFace);
     }
 }

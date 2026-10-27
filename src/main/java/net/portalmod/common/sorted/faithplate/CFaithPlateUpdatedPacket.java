@@ -1,48 +1,55 @@
 package net.portalmod.common.sorted.faithplate;
 
-import java.util.function.Supplier;
-
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.network.PacketBuffer;
-import net.minecraft.util.math.BlockPos;
-import net.minecraftforge.fml.network.NetworkEvent;
-import net.portalmod.core.init.BlockInit;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.util.ProblemReporter;
+import net.minecraft.world.level.storage.TagValueInput;
 import net.portalmod.core.packet.AbstractPacket;
+import net.portalmod.core.packet.PacketContext;
+
+import java.util.function.Supplier;
 
 public class CFaithPlateUpdatedPacket implements AbstractPacket<CFaithPlateUpdatedPacket> {
     private BlockPos pos;
-    private CompoundNBT nbt;
+    private CompoundTag nbt;
 
     public CFaithPlateUpdatedPacket() {}
 
-    public CFaithPlateUpdatedPacket(BlockPos pos, CompoundNBT nbt) {
+    public CFaithPlateUpdatedPacket(BlockPos pos, CompoundTag nbt) {
         this.pos = pos;
         this.nbt = nbt;
     }
 
     @Override
-    public void encode(PacketBuffer buffer) {
-        buffer.writeBlockPos(pos)
-                .writeNbt(nbt);
+    public void encode(FriendlyByteBuf buffer) {
+        buffer.writeBlockPos(pos).writeNbt(nbt);
     }
 
     @Override
-    public CFaithPlateUpdatedPacket decode(PacketBuffer buffer) {
+    public CFaithPlateUpdatedPacket decode(FriendlyByteBuf buffer) {
         return new CFaithPlateUpdatedPacket(buffer.readBlockPos(), buffer.readNbt());
     }
 
     @Override
-    public boolean handle(Supplier<NetworkEvent.Context> context) {
-        context.get().enqueueWork(() -> {
-            FaithPlateTileEntity blockEntity = (FaithPlateTileEntity) context.get().getSender().level.getBlockEntity(pos);
-            if(blockEntity == null)
-                return;
-            blockEntity.load(nbt);
-            context.get().getSender().level.sendBlockUpdated(pos, BlockInit.FAITHPLATE.get().defaultBlockState(),
-                    BlockInit.FAITHPLATE.get().defaultBlockState(), 3);
-        });
-        
-        context.get().setPacketHandled(true);
+    public boolean handle(Supplier<PacketContext> context) {
+        context.get()
+                .enqueueWork(
+                        () -> {
+                            var sender = context.get().getSender();
+                            if (sender == null || nbt == null) {
+                                return;
+                            }
+                            var level = sender.level();
+                            if (!(level.getBlockEntity(pos) instanceof FaithPlateTileEntity blockEntity)) {
+                                return;
+                            }
+                            blockEntity.loadCustomOnly(
+                                    TagValueInput.create(ProblemReporter.DISCARDING, level.registryAccess(), nbt));
+                            blockEntity.setChanged();
+                            var state = blockEntity.getBlockState();
+                            level.sendBlockUpdated(pos, state, state, 3);
+                        });
         return true;
     }
 }

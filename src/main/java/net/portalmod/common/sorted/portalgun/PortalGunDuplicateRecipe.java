@@ -1,26 +1,23 @@
 package net.portalmod.common.sorted.portalgun;
 
-import net.minecraft.inventory.CraftingInventory;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.crafting.IRecipeSerializer;
-import net.minecraft.item.crafting.SpecialRecipe;
-import net.minecraft.util.NonNullList;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.world.World;
+import net.minecraft.core.NonNullList;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.CraftingInput;
+import net.minecraft.world.item.crafting.CustomRecipe;
+import net.minecraft.world.item.crafting.RecipeSerializer;
+import net.minecraft.world.level.Level;
 import net.portalmod.core.init.RecipeInit;
 
-public class PortalGunDuplicateRecipe extends SpecialRecipe {
-    public PortalGunDuplicateRecipe(ResourceLocation resourceLocation) {
-        super(resourceLocation);
-    }
-
+public class PortalGunDuplicateRecipe extends CustomRecipe {
     @Override
-    public boolean matches(CraftingInventory inventory, World world) {
+    public boolean matches(CraftingInput inventory, Level world) {
         int guns = 0;
 
-        for (int i = 0; i < inventory.getContainerSize(); i++) {
+        for (int i = 0; i < inventory.size(); i++) {
             if (inventory.getItem(i).getItem() instanceof PortalGun) {
                 guns++;
+            } else if (!inventory.getItem(i).isEmpty()) {
+                return false;
             }
         }
 
@@ -28,24 +25,24 @@ public class PortalGunDuplicateRecipe extends SpecialRecipe {
     }
 
     @Override
-    public ItemStack assemble(CraftingInventory inventory) {
-        for (int i = 0; i < inventory.getContainerSize(); i++) {
+    public ItemStack assemble(CraftingInput inventory) {
+        for (int i = 0; i < inventory.size(); i++) {
             ItemStack item = inventory.getItem(i);
             if (!item.isEmpty()) {
-                return item.copy();
+                return item.copyWithCount(1);
             }
         }
         return ItemStack.EMPTY;
     }
 
     @Override
-    public NonNullList<ItemStack> getRemainingItems(CraftingInventory inventory) {
-        NonNullList<ItemStack> nonnulllist = NonNullList.withSize(inventory.getContainerSize(), ItemStack.EMPTY);
+    public NonNullList<ItemStack> getRemainingItems(CraftingInput inventory) {
+        NonNullList<ItemStack> nonnulllist = NonNullList.withSize(inventory.size(), ItemStack.EMPTY);
 
-        for (int i = 0; i < inventory.getContainerSize(); i++) {
+        for (int i = 0; i < inventory.size(); i++) {
             ItemStack item = inventory.getItem(i);
             if (!item.isEmpty()) {
-                nonnulllist.set(i, item.copy());
+                nonnulllist.set(i, item.copyWithCount(1));
                 return nonnulllist;
             }
         }
@@ -53,12 +50,7 @@ public class PortalGunDuplicateRecipe extends SpecialRecipe {
     }
 
     @Override
-    public boolean canCraftInDimensions(int width, int height) {
-        return width * height >= 2;
-    }
-
-    @Override
-    public IRecipeSerializer<?> getSerializer() {
+    public RecipeSerializer<PortalGunDuplicateRecipe> getSerializer() {
         return RecipeInit.PORTAL_GUN_DUPLICATE.get();
     }
 }

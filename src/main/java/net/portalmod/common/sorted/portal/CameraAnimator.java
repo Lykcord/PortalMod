@@ -1,6 +1,6 @@
 package net.portalmod.common.sorted.portal;
 
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.Mth;
 import net.portalmod.core.math.Vec3;
 
 import java.util.Optional;
@@ -31,19 +31,21 @@ public class CameraAnimator {
     private CameraAnimator() {}
 
     public static CameraAnimator getInstance() {
-        if(instance == null)
+        if (instance == null) {
             instance = new CameraAnimator();
+        }
         return instance;
     }
 
     public void startPitchAnimation(float pitchStart, float pitchEnd, int animationDuration, boolean shallowestAngle) {
-        if(shallowestAngle) {
+        if (shallowestAngle) {
             pitchStart = normalizeAngle(pitchStart);
             pitchEnd = normalizeAngle(pitchEnd);
 
             float diff = pitchStart - pitchEnd;
-            if(diff > 360 - diff)
+            if (diff > 360 - diff) {
                 pitchStart -= 360;
+            }
         }
 
         this.pitchStart = pitchStart;
@@ -53,13 +55,14 @@ public class CameraAnimator {
     }
 
     public void startYawAnimation(float yawStart, float yawEnd, int animationDuration, boolean shallowestAngle) {
-        if(shallowestAngle) {
+        if (shallowestAngle) {
             yawStart = normalizeAngle(yawStart);
             yawEnd = normalizeAngle(yawEnd);
 
             float diff = yawStart - yawEnd;
-            if(diff > 360 - diff)
+            if (diff > 360 - diff) {
                 yawStart -= 360;
+            }
         }
 
         this.yawStart = yawStart;
@@ -69,13 +72,14 @@ public class CameraAnimator {
     }
 
     public void startRollAnimation(float rollStart, float rollEnd, int animationDuration, boolean shallowestAngle) {
-        if(shallowestAngle) {
+        if (shallowestAngle) {
             rollStart = normalizeAngle(rollStart);
             rollEnd = normalizeAngle(rollEnd);
 
             float diff = rollStart - rollEnd;
-            if(diff > 360 - diff)
+            if (diff > 360 - diff) {
                 rollStart -= 360;
+            }
         }
 
         this.rollStart = rollStart;
@@ -92,11 +96,13 @@ public class CameraAnimator {
     }
 
     public static float normalizeAngle(float angle) {
-        while(angle >= 360)
+        while (angle >= 360) {
             angle -= 360;
+        }
 
-        while(angle < 0)
+        while (angle < 0) {
             angle += 360;
+        }
 
         return angle;
     }
@@ -104,9 +110,9 @@ public class CameraAnimator {
     private Optional<Float> getFactor(long startTime, int duration) {
         long delta = System.currentTimeMillis() - startTime;
 
-        if(startTime > -1 && delta <= duration * 2L) {
-            float factor = (float)delta / duration;
-            float easedFactor = 1 - (float)Math.exp(-factor * 3);
+        if (startTime > -1 && delta <= duration * 2L) {
+            float factor = (float) delta / duration;
+            float easedFactor = 1 - (float) Math.exp(-factor * 3);
             return Optional.of(easedFactor);
         }
 
@@ -115,17 +121,16 @@ public class CameraAnimator {
 
     public Optional<Float> getRelativePitch() {
         return getFactor(this.pitchStartTime, pitchAnimationDuration)
-                .map(x -> MathHelper.lerp(x, this.pitchStart - this.pitchEnd, 0));
+                .map(x -> Mth.lerp(x, this.pitchStart - this.pitchEnd, 0));
     }
 
     public Optional<Float> getRelativeYaw() {
-        return getFactor(this.yawStartTime, yawAnimationDuration)
-                .map(x -> MathHelper.lerp(x, this.yawStart - this.yawEnd, 0));
+        return getFactor(this.yawStartTime, yawAnimationDuration).map(x -> Mth.lerp(x, this.yawStart - this.yawEnd, 0));
     }
 
     public Optional<Float> getRelativeRoll() {
         return getFactor(this.rollStartTime, rollAnimationDuration)
-                .map(x -> MathHelper.lerp(x, this.rollStart - this.rollEnd, 0));
+                .map(x -> Mth.lerp(x, this.rollStart - this.rollEnd, 0));
     }
 
     public Optional<Vec3> getRelativePos() {

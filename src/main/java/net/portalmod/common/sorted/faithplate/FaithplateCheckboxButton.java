@@ -1,53 +1,55 @@
 package net.portalmod.common.sorted.faithplate;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
-import com.mojang.blaze3d.platform.GlStateManager;
-import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.widget.button.AbstractButton;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.text.ITextComponent;
-import net.portalmod.PortalMod;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.input.InputWithModifiers;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 
-public class FaithplateCheckboxButton extends AbstractButton {
-    private static final ResourceLocation TEXTURE = new ResourceLocation(PortalMod.MODID, "textures/gui/checkbox.png");
+public class FaithplateCheckboxButton extends Button.Plain {
+    private static final Identifier TEXTURE = Identifier.fromNamespaceAndPath("portalmod", "textures/gui/checkbox.png");
     private boolean ticked;
-    private boolean unavailable;
 
-    // new CheckboxButton(getX() + 230, getY() + 25 + verticalOffset, 20, 20, new StringTextComponent("Enabled"), be.isEnabled())
-    public FaithplateCheckboxButton(int x, int y, int width, int height, ITextComponent textOn, boolean ticked) {
-        super(x, y, width, height, textOn);
+    public FaithplateCheckboxButton(int x, int y, int width, int height, Component text, boolean ticked) {
+        super(x, y, width, height, text, button -> {}, DEFAULT_NARRATION);
         this.ticked = ticked;
     }
 
-    public void onPress() {
-        if (this.unavailable) return;
-        this.ticked = !this.ticked;
+    @Override
+    public void onPress(InputWithModifiers input) {
+        if (active) {
+            ticked = !ticked;
+        }
     }
 
     public boolean selected() {
-        return this.ticked;
+        return ticked;
     }
 
     public void setUnavailable(boolean unavailable) {
-        this.unavailable = unavailable;
+        active = !unavailable;
     }
 
-    public void renderButton(MatrixStack matrixStack, int mouseX, int mouseY, float partialTicks) {
-        Minecraft minecraft = Minecraft.getInstance();
-        minecraft.getTextureManager().bind(TEXTURE);
-        RenderSystem.enableDepthTest();
-        FontRenderer fontRenderer = minecraft.font;
-        RenderSystem.color4f(1.0F, 1.0F, 1.0F, this.alpha);
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
-        RenderSystem.blendFunc(GlStateManager.SourceFactor.SRC_ALPHA, GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA);
-
-        blit(matrixStack, this.x, this.y, this.unavailable ? 20.0F : 0.0F,
-                this.ticked ? 20.0F : 0.0F, 20, this.height, 64, 64);
-
-        drawString(matrixStack, fontRenderer, this.getMessage(),
-                this.x + 24, this.y + (this.height - 8) / 2, unavailable ? 0x7e7e7e : 0xFFFFFF);
+    @Override
+    protected void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        graphics.blit(
+                RenderPipelines.GUI_TEXTURED,
+                TEXTURE,
+                getX(),
+                getY(),
+                active ? 0 : 20,
+                ticked ? 20 : 0,
+                20,
+                getHeight(),
+                64,
+                64);
+        graphics.text(
+                Minecraft.getInstance().font,
+                getMessage(),
+                getX() + 24,
+                getY() + (getHeight() - 8) / 2,
+                active ? 0xFFFFFFFF : 0xFF7E7E7E);
     }
 }

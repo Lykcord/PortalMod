@@ -1,49 +1,52 @@
 package net.portalmod.common.sorted.portal;
 
-import java.util.function.Supplier;
-
 import net.minecraft.client.Minecraft;
-import net.minecraft.network.PacketBuffer;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
-import net.minecraftforge.fml.network.NetworkEvent;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.world.entity.Entity;
 import net.portalmod.core.packet.AbstractPacket;
+import net.portalmod.core.packet.PacketContext;
+import net.portalmod.core.util.ClientExecution;
+
+import java.util.function.Supplier;
 
 public class PortalPacket {
     public static enum Type {
         REPLACE
     }
-    
+
     public static class Client implements AbstractPacket<Client> {
-        private final Type type;
+        private final PortalPacket.Type type;
         private final int entityId;
 
-        public Client(Type type, int entityId) {
+        public Client(PortalPacket.Type type, int entityId) {
             this.type = type;
             this.entityId = entityId;
         }
 
         @Override
-        public void encode(PacketBuffer buffer) {
-            buffer.writeEnum(type)
-                    .writeInt(entityId);
+        public void encode(FriendlyByteBuf buffer) {
+            buffer.writeEnum(type).writeInt(entityId);
         }
 
         @Override
-        public Client decode(PacketBuffer buffer) {
-            return new Client(buffer.readEnum(Type.class), buffer.readInt());
+        public Client decode(FriendlyByteBuf buffer) {
+            return new Client(buffer.readEnum(PortalPacket.Type.class), buffer.readInt());
         }
 
         @Override
-        public boolean handle(Supplier<NetworkEvent.Context> context) {
-            context.get().enqueueWork(() -> {
-                DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> {
-                    if(type == Type.REPLACE)
-                        Minecraft.getInstance().level.removeEntity(entityId);
-                });
-            });
-
-            context.get().setPacketHandled(true);
+        public boolean handle(Supplier<PacketContext> context) {
+            context.get()
+                    .enqueueWork(
+                            () -> {
+                                ClientExecution.run(
+                                        () ->
+                                                () -> {
+                                                    var level = Minecraft.getInstance().level;
+                                                    if (type == PortalPacket.Type.REPLACE && level != null) {
+                                                        level.removeEntity(entityId, Entity.RemovalReason.DISCARDED);
+                                                    }
+                                                });
+                            });
             return true;
         }
     }

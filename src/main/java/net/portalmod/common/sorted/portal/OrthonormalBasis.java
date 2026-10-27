@@ -21,21 +21,11 @@ public class OrthonormalBasis {
     }
 
     public Mat4 getChangeOfBasisToCanonicalMatrix() {
-        return new Mat4(
-                x.x, x.y, x.z, 0,
-                y.x, y.y, y.z, 0,
-                z.x, z.y, z.z, 0,
-                0,   0,   0, 1
-        );
+        return new Mat4(x.x, x.y, x.z, 0, y.x, y.y, y.z, 0, z.x, z.y, z.z, 0, 0, 0, 0, 1);
     }
 
     public Mat4 getChangeOfBasisFromCanonicalMatrix() {
-        return new Mat4(
-                x.x, y.x, z.x, 0,
-                x.y, y.y, z.y, 0,
-                x.z, y.z, z.z, 0,
-                0,   0,   0, 1
-        );
+        return new Mat4(x.x, y.x, z.x, 0, x.y, y.y, z.y, 0, x.z, y.z, z.z, 0, 0, 0, 0, 1);
     }
 
     public OrthonormalBasis transform(Mat4 matrix) {

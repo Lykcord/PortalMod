@@ -3,7 +3,8 @@ package net.portalmod.common.sorted.portalgun.skins;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
-import net.minecraft.util.math.MathHelper;
+
+import net.minecraft.util.Mth;
 import net.portalmod.PortalMod;
 import net.portalmod.core.config.PortalModConfigManager;
 import net.portalmod.core.math.Vec3;
@@ -69,15 +70,16 @@ public abstract class SkinManager {
         String data;
         try {
             data = DataUtil.makeTextRequest("https://api.portalmod.net/v1/player/" + player);
-        } catch(IOException e) {
+        } catch (IOException error) {
             throw new IOException("Failed to fetch player: " + player);
         }
 
         PortalGunPlayer payload = this.gson.fromJson(data, PortalGunPlayer.class);
         this.fetchTheseNewSkins(new HashSet<>(payload.skins));
 
-        if(player != null)
+        if (player != null) {
             this.players.put(player, payload);
+        }
     }
 
     protected void cachePlayer(UUID player) throws IOException {
@@ -85,7 +87,7 @@ public abstract class SkinManager {
 
         try {
             DataUtil.writeTextFile(playerCache, gson.toJson(this.getPlayerSkins(player)));
-        } catch(IOException e) {
+        } catch (IOException error) {
             throw new IOException("Failed to cache player: " + player);
         }
     }
@@ -93,19 +95,21 @@ public abstract class SkinManager {
     protected void loadPlayer(UUID player) throws IOException {
         File playerCache = DataUtil.tryCreateFolderAndGetFile(this.getPlayersFolder(), player + ".json");
 
-        if(!playerCache.exists())
+        if (!playerCache.exists()) {
             return;
+        }
 
         String data;
         try {
             data = DataUtil.loadTextFile(playerCache);
-        } catch(IOException e) {
+        } catch (IOException error) {
             throw new IOException("Failed to load player: " + player);
         }
 
-        ArrayList<String> skins = this.gson.fromJson(data, new TypeToken<ArrayList<String>>(){}.getType());
-        if(player != null)
+        ArrayList<String> skins = this.gson.fromJson(data, new TypeToken<ArrayList<String>>() {}.getType());
+        if (player != null) {
             this.players.put(player, new PortalGunPlayer(skins));
+        }
     }
 
     // SKIN CATALOG
@@ -114,7 +118,7 @@ public abstract class SkinManager {
         String data;
         try {
             data = DataUtil.makeTextRequest("https://api.portalmod.net/v1/skins");
-        } catch(IOException e) {
+        } catch (IOException error) {
             throw new IOException("Failed to fetch skin catalog");
         }
 
@@ -126,7 +130,7 @@ public abstract class SkinManager {
 
         try {
             DataUtil.writeTextFile(skinCatalog, gson.toJson(this.skinCatalog.values()));
-        } catch(IOException e) {
+        } catch (IOException error) {
             throw new IOException("Failed to cache skin catalog");
         }
     }
@@ -134,13 +138,14 @@ public abstract class SkinManager {
     protected void loadSkinCatalog() throws IOException {
         File skinCatalog = DataUtil.tryCreateFolderAndGetFile(this.getSkinsFolder(), "skin_catalog.json");
 
-        if(!skinCatalog.exists())
+        if (!skinCatalog.exists()) {
             return;
+        }
 
         String data;
         try {
             data = DataUtil.loadTextFile(skinCatalog);
-        } catch(IOException e) {
+        } catch (IOException error) {
             throw new IOException("Failed to load skin catalog");
         }
 
@@ -148,13 +153,9 @@ public abstract class SkinManager {
     }
 
     protected void populateSkinCatalog(String json) {
-        LinkedHashMap<String, PortalGunSkin> map = this.gson.fromJson(json, PortalGunSkin.Deserializer.class).stream()
-                .collect(Collectors.toMap(
-                        skin -> skin.skin_id,
-                        skin -> skin,
-                        (o, n) -> n,
-                        LinkedHashMap::new
-                ));
+        LinkedHashMap<String, PortalGunSkin> map =
+                this.gson.fromJson(json, PortalGunSkin.Deserializer.class).stream()
+                        .collect(Collectors.toMap(skin -> skin.skin_id, skin -> skin, (o, n) -> n, LinkedHashMap::new));
 
         this.skinCatalog.clear();
         this.skinCatalog.putAll(map);
@@ -165,22 +166,24 @@ public abstract class SkinManager {
     protected void uploadAllSkins(boolean overwrite) {}
 
     protected void updateSkin(PortalGunSkin skin, File skinFile) throws IOException {
-        if(this.isSkinUpToDate(skin, skinFile) || skin.getChecksum() == null)
+        if (this.isSkinUpToDate(skin, skinFile) || skin.getChecksum() == null) {
             return;
+        }
 
         byte[] imageData;
 
         try {
             imageData = DataUtil.makeRequest("https://cdn.portalmod.net/skins/" + skin.getFilename() + ".png");
-            if(!this.isSkinChecksumCorrect(skin, imageData))
+            if (!this.isSkinChecksumCorrect(skin, imageData)) {
                 throw new IOException();
-        } catch(IOException e) {
+            }
+        } catch (IOException error) {
             throw new IOException("Failed to download skin: " + skin.getFilename());
         }
 
         try {
             DataUtil.writeFile(skinFile, imageData);
-        } catch(IOException e) {
+        } catch (IOException error) {
             throw new IOException("Failed to cache skin: " + skin.getFilename());
         }
     }
@@ -188,12 +191,12 @@ public abstract class SkinManager {
     protected void updateAllSkins() throws IOException {
         File skinsFolder = DataUtil.tryCreateFolder(new File(this.getSkinsFolder(), "textures"));
 
-        for(PortalGunSkin skin : this.getSkinCatalog().values()) {
-            if(!skin.skin_id.equals("default")) {
+        for (PortalGunSkin skin : this.getSkinCatalog().values()) {
+            if (!skin.skin_id.equals("default")) {
                 try {
                     this.updateSkin(skin, new File(skinsFolder, skin.getFilename() + ".png"));
-                } catch(IOException e) {
-                    PortalMod.LOGGER.error(e.getMessage());
+                } catch (IOException error) {
+                    PortalMod.LOGGER.error(error.getMessage());
                 }
             }
         }
@@ -208,12 +211,13 @@ public abstract class SkinManager {
     }
 
     protected boolean isSkinUpToDate(PortalGunSkin skin, File skinFile) throws IOException {
-        if(!skinFile.exists())
+        if (!skinFile.exists()) {
             return false;
+        }
 
         try {
             return this.isSkinChecksumCorrect(skin, this.loadSkin(skinFile));
-        } catch(IOException e) {
+        } catch (IOException error) {
             throw new IOException("Failed to load skin: " + skin.getFilename());
         }
     }
@@ -223,20 +227,21 @@ public abstract class SkinManager {
             this.fetchSkinCatalog();
             this.cacheSkinCatalog();
 
-            if(this.clientSide) {
+            if (this.clientSide) {
                 this.updateAllSkins();
             }
-        } catch(IOException e) {
-            PortalMod.LOGGER.error(e.getMessage());
+        } catch (IOException error) {
+            PortalMod.LOGGER.error(error.getMessage());
         }
     }
 
     protected void fetchTheseNewSkins(Set<String> skins) {
-        List<String> newSkins = skins.stream()
-                .filter(newSkin -> !this.getSkinCatalog().containsKey(newSkin))
-                .collect(Collectors.toList());
+        List<String> newSkins =
+                skins.stream()
+                        .filter(newSkin -> !this.getSkinCatalog().containsKey(newSkin))
+                        .collect(Collectors.toList());
 
-        if(!newSkins.isEmpty()) {
+        if (!newSkins.isEmpty()) {
             this.fetchNewSkins();
         }
     }
@@ -258,13 +263,15 @@ public abstract class SkinManager {
     }
 
     public PortalGunPlayer getPlayer(UUID player) {
-        if(this.clientSide) {
-            if(player == null && this.getOwnUUID().isPresent())
+        if (this.clientSide) {
+            if (player == null && this.getOwnUUID().isPresent()) {
                 player = this.getOwnUUID().get();
+            }
         }
 
-        if(player == null)
+        if (player == null) {
             return new PortalGunPlayer();
+        }
         return this.players.getOrDefault(player, new PortalGunPlayer());
     }
 
@@ -279,35 +286,41 @@ public abstract class SkinManager {
     }
 
     public String getSelectedSkinForPlayer(UUID player) {
-        if(this.clientSide) {
-            if(player == null && this.getOwnUUID().isPresent())
+        if (this.clientSide) {
+            if (player == null && this.getOwnUUID().isPresent()) {
                 player = this.getOwnUUID().get();
+            }
         }
 
-        if(player == null)
+        if (player == null) {
             return "default";
+        }
         return this.selectedSkinPerPlayer.getOrDefault(player, "default");
     }
 
     public void setSelectedSkinForPlayer(UUID player, String skin) {
-        if(this.clientSide) {
-            if(player == null && this.getOwnUUID().isPresent())
+        if (this.clientSide) {
+            if (player == null && this.getOwnUUID().isPresent()) {
                 player = this.getOwnUUID().get();
+            }
             this.fetchTheseNewSkins(Collections.singleton(skin));
         }
 
-        if(player != null)
+        if (player != null) {
             this.selectedSkinPerPlayer.put(player, skin);
+        }
     }
 
     public int getTintForPlayer(UUID player) {
-        if(this.clientSide) {
-            if(player == null && this.getOwnUUID().isPresent())
+        if (this.clientSide) {
+            if (player == null && this.getOwnUUID().isPresent()) {
                 player = this.getOwnUUID().get();
+            }
         }
 
-        if(player == null)
+        if (player == null) {
             return 0;
+        }
         return this.tintPerPlayer.getOrDefault(player, 0);
     }
 
@@ -316,18 +329,20 @@ public abstract class SkinManager {
     }
 
     public void setTintForPlayer(UUID player, int tint) {
-        if(this.clientSide) {
-            if(player == null && this.getOwnUUID().isPresent())
+        if (this.clientSide) {
+            if (player == null && this.getOwnUUID().isPresent()) {
                 player = this.getOwnUUID().get();
+            }
         }
 
-        if(player != null)
+        if (player != null) {
             this.tintPerPlayer.put(player, tint);
+        }
     }
 
     public void setSkinAndTintForPlayer(UUID player, String skin, int tint) {
         this.setSelectedSkinForPlayer(player, skin);
-        if(tint != 0) {
+        if (tint != 0) {
             this.setTintForPlayer(player, tint);
         }
     }
@@ -337,7 +352,7 @@ public abstract class SkinManager {
     }
 
     public void clearSelectedSkinMapExceptSelf() {
-        if(!this.getOwnUUID().isPresent()) {
+        if (!this.getOwnUUID().isPresent()) {
             this.selectedSkinPerPlayer.clear();
             return;
         }
@@ -346,7 +361,7 @@ public abstract class SkinManager {
     }
 
     public void clearTintMapExceptSelf() {
-        if(!this.getOwnUUID().isPresent()) {
+        if (!this.getOwnUUID().isPresent()) {
             this.tintPerPlayer.clear();
             return;
         }
@@ -366,38 +381,40 @@ public abstract class SkinManager {
     }
 
     protected void startThreadIfNeeded() {
-        if(this.taskThread == null && !this.pendingTasks.isEmpty()) {
+        if (this.taskThread == null && !this.pendingTasks.isEmpty()) {
             this.taskThread = new Thread(this::executeTasks);
             this.taskThread.start();
         }
     }
 
     protected synchronized void executeTasks() {
-        while(!this.pendingTasks.isEmpty()) {
+        while (!this.pendingTasks.isEmpty()) {
             Runnable task = this.pendingTasks.poll();
-            if(task != null)
+            if (task != null) {
                 task.run();
+            }
         }
 
         this.callbackPending = true;
     }
 
     public void tick() {
-        if(!this.callbackPending) {
+        if (!this.callbackPending) {
             this.startThreadIfNeeded();
             return;
         }
 
         this.callbackPending = false;
 
-        if(this.clientSide) {
+        if (this.clientSide) {
             this.uploadAllSkins(false);
         }
 
-        while(!this.pendingCallbacks.isEmpty()) {
+        while (!this.pendingCallbacks.isEmpty()) {
             Runnable callback = this.pendingCallbacks.poll();
-            if(callback != null)
+            if (callback != null) {
                 callback.run();
+            }
         }
 
         this.taskThread = null;
@@ -419,8 +436,9 @@ public abstract class SkinManager {
 
     public void applyConfigDefaultTint() {
         PortalGunPlayer payload = this.getPlayer(null);
-        if(payload.default_color != 0)
+        if (payload.default_color != 0) {
             this.setConfigTint(payload.default_color);
+        }
     }
 
     public void setConfigTint(int tint) {
@@ -432,10 +450,10 @@ public abstract class SkinManager {
         float valueMin = ColorPickerWidget.SV_PICKER_VAL_MIN;
         float valueMax = ColorPickerWidget.SV_PICKER_VAL_MAX;
 
-        hsv.x = MathHelper.clamp(hsv.x, 0, 360);
-        hsv.y = MathHelper.clamp(hsv.y, 0, 1);
-        hsv.z = MathHelper.clamp(hsv.z, valueMin, valueMax);
-        return Colour.fromHSV((float)hsv.x, (float)hsv.y, (float)hsv.z).getRGBValue();
+        hsv.x = Mth.clamp(hsv.x, 0, 360);
+        hsv.y = Mth.clamp(hsv.y, 0, 1);
+        hsv.z = Mth.clamp(hsv.z, valueMin, valueMax);
+        return Colour.fromHSV((float) hsv.x, (float) hsv.y, (float) hsv.z).getRGBValue();
     }
 
     public Optional<UUID> getOwnUUID() {

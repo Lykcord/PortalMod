@@ -1,20 +1,20 @@
 package net.portalmod.common.sorted.portal;
 
-import net.minecraft.client.entity.player.ClientPlayerEntity;
-import net.minecraft.entity.Entity;
-import net.minecraft.util.Direction;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.Direction;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
 import net.portalmod.core.math.Mat4;
 import net.portalmod.core.math.Vec3;
 
 public class CameraRotator {
     public static void rotate(Entity entity, PortalEntity portal, PortalEntity targetPortal) {
-        boolean isLocalPlayer = entity instanceof ClientPlayerEntity;
+        boolean isLocalPlayer = entity instanceof LocalPlayer;
 
-        float xRotOld = entity.xRot;
-        float yRotOld = entity.yRot;
-        float pitch = entity.xRot;
-        float yaw = entity.yRot;
+        float xRotOld = entity.getXRot();
+        float yRotOld = entity.getYRot();
+        float pitch = entity.getXRot();
+        float yaw = entity.getYRot();
 
         OrthonormalBasis portalBasis = portal.getSourceBasis();
         OrthonormalBasis targetPortalBasis = targetPortal.getDestinationBasis();
@@ -26,22 +26,22 @@ public class CameraRotator {
 
         float absPitch = Math.abs(anglesUnbound.getPitch());
 
-        if(absPitch >= 90 && absPitch <= 135) {
-            pitch = MathHelper.clamp(anglesUnbound.getPitch(), -90, 90);
+        if (absPitch >= 90 && absPitch <= 135) {
+            pitch = Mth.clamp(anglesUnbound.getPitch(), -90, 90);
             yaw = anglesUnbound.getYaw();
 
-            if(targetPortal.getDirection().getAxis().isHorizontal()) {
+            if (targetPortal.getDirection().getAxis().isHorizontal()) {
                 Vec3 yawVec = new Vec3(targetPortal.getDirection()).mul(-Math.signum(anglesUnbound.getPitch()));
-                float yawSin = (float)Vec3.zAxis().cross(yawVec).y;
-                float yawCos = (float)Vec3.zAxis().dot(yawVec);
-                yaw = -(float)(Math.atan2(yawSin, yawCos) * 180 / Math.PI);
+                float yawSin = (float) Vec3.zAxis().cross(yawVec).y;
+                float yawCos = (float) Vec3.zAxis().dot(yawVec);
+                yaw = -(float) (Math.atan2(yawSin, yawCos) * 180 / Math.PI);
 
-                if(isLocalPlayer) {
+                if (isLocalPlayer) {
                     CameraAnimator.getInstance().startYawAnimation(anglesUnbound.getYaw(), yaw, 700, true);
                 }
             }
 
-            if(isLocalPlayer) {
+            if (isLocalPlayer) {
                 CameraAnimator.getInstance().startPitchAnimation(anglesUnbound.getPitch(), pitch, 500, true);
                 CameraAnimator.getInstance().startRollAnimation(anglesUnbound.getRoll(), 0, 700, true);
             }
@@ -52,32 +52,32 @@ public class CameraRotator {
             float startRoll = angles.getRoll();
             float endRoll = 0;
 
-            if(portal.getDirection() == Direction.UP && targetPortal.getDirection() == Direction.UP) {
+            if (portal.getDirection() == Direction.UP && targetPortal.getDirection() == Direction.UP) {
                 endRoll = portal.getEnd() == PortalEnd.PRIMARY ? 360 : 0;
                 startRoll = CameraAnimator.normalizeAngle(startRoll);
             }
 
-            if(isLocalPlayer) {
+            if (isLocalPlayer) {
                 CameraAnimator.getInstance().startRollAnimation(startRoll, endRoll, 500, false);
             }
         }
 
-        entity.xRot = entity.xRotO = pitch;
-        entity.yRot = entity.yRotO = yaw;
+        entity.setXRot(entity.xRotO = pitch);
+        entity.setYRot(entity.yRotO = yaw);
 
-        if(isLocalPlayer) {
-            ClientPlayerEntity player = (ClientPlayerEntity)entity;
-            float xRotDelta = player.xRot - xRotOld;
-            float yRotDelta = player.yRot - yRotOld;
+        if (isLocalPlayer) {
+            LocalPlayer player = (LocalPlayer) entity;
+            float xRotDelta = player.getXRot() - xRotOld;
+            float yRotDelta = player.getYRot() - yRotOld;
 
-            player.xBob  += xRotDelta;
+            player.xBob += xRotDelta;
             player.xBobO += xRotDelta;
-            player.yBob  += yRotDelta;
+            player.yBob += yRotDelta;
             player.yBobO += yRotDelta;
 
-            player.yBodyRot  += yRotDelta;
+            player.yBodyRot += yRotDelta;
             player.yBodyRotO += yRotDelta;
-            player.yHeadRot  += yRotDelta;
+            player.yHeadRot += yRotDelta;
             player.yHeadRotO += yRotDelta;
         }
     }

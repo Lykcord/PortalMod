@@ -1,8 +1,8 @@
 package net.portalmod.common.sorted.portal;
 
-import net.minecraft.util.IStringSerializable;
+import net.minecraft.util.StringRepresentable;
 
-public enum PortalEnd implements IStringSerializable {
+public enum PortalEnd implements StringRepresentable {
     NONE("none"),
     PRIMARY("primary"),
     SECONDARY("secondary");
@@ -22,10 +22,12 @@ public enum PortalEnd implements IStringSerializable {
     }
 
     public PortalEnd other() {
-        if(this == PRIMARY)
+        if (this == PRIMARY) {
             return SECONDARY;
-        if(this == SECONDARY)
+        }
+        if (this == SECONDARY) {
             return PRIMARY;
+        }
         return NONE;
     }
 

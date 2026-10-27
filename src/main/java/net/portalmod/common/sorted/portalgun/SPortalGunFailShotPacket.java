@@ -1,12 +1,11 @@
 package net.portalmod.common.sorted.portalgun;
 
-import net.minecraft.network.PacketBuffer;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
-import net.minecraftforge.fml.network.NetworkEvent;
+import net.minecraft.network.FriendlyByteBuf;
 import net.portalmod.core.math.Vec3;
 import net.portalmod.core.packet.AbstractPacket;
 import net.portalmod.core.packet.ClientPacketHandler;
+import net.portalmod.core.packet.PacketContext;
+import net.portalmod.core.util.ClientExecution;
 
 import java.nio.charset.StandardCharsets;
 import java.util.function.Supplier;
@@ -27,22 +26,22 @@ public class SPortalGunFailShotPacket implements AbstractPacket<SPortalGunFailSh
     }
 
     @Override
-    public void encode(PacketBuffer buffer) {
-        buffer.writeFloat((float)this.position.x);
-        buffer.writeFloat((float)this.position.y);
-        buffer.writeFloat((float)this.position.z);
-        buffer.writeFloat((float)this.normal.x);
-        buffer.writeFloat((float)this.normal.y);
-        buffer.writeFloat((float)this.normal.z);
-        buffer.writeFloat((float)this.upVector.x);
-        buffer.writeFloat((float)this.upVector.y);
-        buffer.writeFloat((float)this.upVector.z);
+    public void encode(FriendlyByteBuf buffer) {
+        buffer.writeFloat((float) this.position.x);
+        buffer.writeFloat((float) this.position.y);
+        buffer.writeFloat((float) this.position.z);
+        buffer.writeFloat((float) this.normal.x);
+        buffer.writeFloat((float) this.normal.y);
+        buffer.writeFloat((float) this.normal.z);
+        buffer.writeFloat((float) this.upVector.x);
+        buffer.writeFloat((float) this.upVector.y);
+        buffer.writeFloat((float) this.upVector.z);
         buffer.writeInt(this.dyeColor.length());
         buffer.writeCharSequence(dyeColor, StandardCharsets.UTF_8);
     }
 
     @Override
-    public SPortalGunFailShotPacket decode(PacketBuffer buffer) {
+    public SPortalGunFailShotPacket decode(FriendlyByteBuf buffer) {
         Vec3 position = new Vec3(buffer.readFloat(), buffer.readFloat(), buffer.readFloat());
         Vec3 normal = new Vec3(buffer.readFloat(), buffer.readFloat(), buffer.readFloat());
         Vec3 upVector = new Vec3(buffer.readFloat(), buffer.readFloat(), buffer.readFloat());
@@ -52,11 +51,12 @@ public class SPortalGunFailShotPacket implements AbstractPacket<SPortalGunFailSh
     }
 
     @Override
-    public boolean handle(Supplier<NetworkEvent.Context> context) {
-        context.get().enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
-                () -> () -> ClientPacketHandler.handleSPortalGunFailShotPacket(this)));
-
-        context.get().setPacketHandled(true);
+    public boolean handle(Supplier<PacketContext> context) {
+        context.get()
+                .enqueueWork(
+                        () ->
+                                ClientExecution.run(
+                                        () -> () -> ClientPacketHandler.handleSPortalGunFailShotPacket(this)));
         return true;
     }
 }

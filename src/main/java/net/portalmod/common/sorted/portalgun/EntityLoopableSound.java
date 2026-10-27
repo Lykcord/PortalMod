@@ -1,13 +1,13 @@
 package net.portalmod.common.sorted.portalgun;
 
-import net.minecraft.client.audio.EntityTickableSound;
-import net.minecraft.entity.Entity;
-import net.minecraft.util.SoundCategory;
-import net.minecraft.util.SoundEvent;
+import net.minecraft.client.resources.sounds.EntityBoundSoundInstance;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.entity.Entity;
 
-public class EntityLoopableSound extends EntityTickableSound {
-    public EntityLoopableSound(Entity entity, SoundEvent sound, SoundCategory category) {
-        super(sound, category, entity);
+public class EntityLoopableSound extends EntityBoundSoundInstance {
+    public EntityLoopableSound(Entity entity, SoundEvent sound, SoundSource category) {
+        super(sound, category, 1, 1, entity, entity.level().getRandom().nextLong());
         this.looping = true;
     }
 }

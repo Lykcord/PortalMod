@@ -1,91 +1,98 @@
 package net.portalmod.common.sorted.portalgun;
 
-import net.minecraft.inventory.CraftingInventory;
-import net.minecraft.item.DyeItem;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.item.crafting.IRecipeSerializer;
-import net.minecraft.item.crafting.Ingredient;
-import net.minecraft.item.crafting.SpecialRecipe;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.world.World;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.item.crafting.CraftingInput;
+import net.minecraft.world.item.crafting.CustomRecipe;
+import net.minecraft.world.item.crafting.RecipeSerializer;
+import net.minecraft.world.level.Level;
 import net.portalmod.core.init.RecipeInit;
 
-public class PortalGunModifyRecipe extends SpecialRecipe {
-    public static final Ingredient CHAIN_INGREDIENT = Ingredient.of(Items.CHAIN);
-
-    public PortalGunModifyRecipe(ResourceLocation resourceLocation) {
-        super(resourceLocation);
-    }
-
-    @Override
-    public boolean matches(CraftingInventory inventory, World world) {
-        // Check gun
-        ItemStack gunItem = inventory.getItem(4);
-        if (gunItem.isEmpty() || !(gunItem.getItem() instanceof PortalGun)) {
-            return false;
-        }
-
-        // Whether another item besides the gun is present
-        boolean hasModifier = false;
-        boolean hasChain = false;
-
-        for (int i = 0; i < inventory.getContainerSize(); i++) {
-            ItemStack item = inventory.getItem(i);
-            if (!item.isEmpty() && i != 4) {
-                hasModifier = true;
-
-                if ((i == 1 || i == 3 || i == 5)) {
-                    if (item.getItem() instanceof DyeItem) continue; // Check dyes
-                    if (CHAIN_INGREDIENT.test(item) && !hasChain) { // Check chain
-                        hasChain = true;
-                        continue;
-                    }
-                }
-
-                return false;
+public class PortalGunModifyRecipe extends CustomRecipe {
+    private static int findGun(CraftingInput input) {
+        for (int i = 0; i < input.size(); i++) {
+            if (input.getItem(i).getItem() instanceof PortalGun) {
+                return i;
             }
         }
-
-        return hasModifier;
+        return -1;
     }
 
     @Override
-    public ItemStack assemble(CraftingInventory inventory) {
-        ItemStack newGun = inventory.getItem(4).copy();
-        CompoundNBT newNBT = newGun.getOrCreateTag();
+    public boolean matches(CraftingInput input, Level level) {
+        int gun = findGun(input);
+        if (gun < 0 || input.ingredientCount() < 2) {
+            return false;
+        }
+        boolean hasChain = false;
+        int gunX = gun % input.width();
+        int gunY = gun / input.width();
+        // CraftingInput trims empty outer rows and columns; positions are relative to the gun.
+        for (int i = 0; i < input.size(); i++) {
+            ItemStack item = input.getItem(i);
+            if (item.isEmpty() || i == gun) {
+                continue;
+            }
+            int dx = i % input.width() - gunX;
+            int dy = i / input.width() - gunY;
+            boolean above = dx == 0 && dy == -1;
+            boolean beside = Math.abs(dx) == 1 && dy == 0;
+            if (!(above || beside)) {
+                return false;
+            }
+            if (item.has(DataComponents.DYE)) {
+                continue;
+            }
+            if (beside && item.is(Items.IRON_CHAIN) && !hasChain) {
+                hasChain = true;
+                continue;
+            }
+            return false;
+        }
+        return true;
+    }
 
-        ItemStack accentDye = inventory.getItem(1);
-        ItemStack leftDye = inventory.getItem(3);
-        ItemStack rightDye = inventory.getItem(5);
-
-        if (!accentDye.isEmpty())
-                newNBT.putString("AccentColor", ((DyeItem) accentDye.getItem()).getDyeColor().getName());
-
-        if (!leftDye.isEmpty() && leftDye.getItem() instanceof DyeItem)
-                newNBT.putString("LeftColor", ((DyeItem) leftDye.getItem()).getDyeColor().getName());
-        if (!rightDye.isEmpty() && rightDye.getItem() instanceof DyeItem)
-                newNBT.putString("RightColor", ((DyeItem) rightDye.getItem()).getDyeColor().getName());
-
-        String lock = "None";
-        if (!leftDye.isEmpty() && CHAIN_INGREDIENT.test(leftDye)) lock = "Left";
-        if (!rightDye.isEmpty() && CHAIN_INGREDIENT.test(rightDye)) lock = "Right";
-
-        newNBT.putString("Locked", lock);
-        newNBT.putInt("LastPortal", 0);
-
-        return newGun;
+    private static ItemStack adjacent(CraftingInput input, int gun, int dx, int dy) {
+        int x = gun % input.width() + dx;
+        int y = gun / input.width() + dy;
+        return x >= 0 && x < input.width() && y >= 0 && y < input.height() ? input.getItem(x, y) : ItemStack.EMPTY;
     }
 
     @Override
-    public boolean canCraftInDimensions(int width, int height) {
-        // Only works in 3x3 for now
-        return width == 3 && height == 3;
+    public ItemStack assemble(CraftingInput input) {
+        int gun = findGun(input);
+        if (gun < 0) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack result = input.getItem(gun).copyWithCount(1);
+        ItemStack accent = adjacent(input, gun, 0, -1);
+        ItemStack left = adjacent(input, gun, -1, 0);
+        ItemStack right = adjacent(input, gun, 1, 0);
+        CustomData.update(
+                DataComponents.CUSTOM_DATA,
+                result,
+                tag -> {
+                    if (accent.has(DataComponents.DYE)) {
+                        tag.putString("AccentColor", accent.get(DataComponents.DYE).getName());
+                    }
+                    if (left.has(DataComponents.DYE)) {
+                        tag.putString("LeftColor", left.get(DataComponents.DYE).getName());
+                    }
+                    if (right.has(DataComponents.DYE)) {
+                        tag.putString("RightColor", right.get(DataComponents.DYE).getName());
+                    }
+                    tag.putString(
+                            "Locked",
+                            left.is(Items.IRON_CHAIN) ? "Left" : right.is(Items.IRON_CHAIN) ? "Right" : "None");
+                    tag.putInt("LastPortal", 0);
+                });
+        return result;
     }
 
     @Override
-    public IRecipeSerializer<?> getSerializer() {
+    public RecipeSerializer<PortalGunModifyRecipe> getSerializer() {
         return RecipeInit.PORTAL_GUN_MODIFY.get();
     }
 }

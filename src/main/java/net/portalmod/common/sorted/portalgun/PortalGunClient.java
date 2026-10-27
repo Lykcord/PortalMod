@@ -1,21 +1,23 @@
 package net.portalmod.common.sorted.portalgun;
 
+import com.mojang.blaze3d.platform.InputConstants;
+
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.entity.player.ClientPlayerEntity;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.item.ArmorStandEntity;
-import net.minecraft.entity.item.ItemFrameEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.util.math.BlockRayTraceResult;
-import net.minecraft.util.math.RayTraceContext;
-import net.minecraft.util.math.vector.Vector3d;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.entity.decoration.ItemFrame;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 import net.portalmod.common.entities.TestElementEntity;
 import net.portalmod.common.sorted.portal.PortalEnd;
 import net.portalmod.core.config.PortalModConfigManager;
-import net.portalmod.core.init.PacketInit;
-import org.lwjgl.glfw.GLFW;
+import net.portalmod.core.packet.ClientNetworking;
 
 public class PortalGunClient {
     private static PortalGunClient instance;
@@ -30,67 +32,80 @@ public class PortalGunClient {
     private PortalGunClient() {}
 
     public static PortalGunClient getInstance() {
-        if(instance == null)
+        if (instance == null) {
             instance = new PortalGunClient();
+        }
         return instance;
     }
 
     private void handleLeftClick() {
-        ClientPlayerEntity player = Minecraft.getInstance().player;
+        LocalPlayer player = Minecraft.getInstance().player;
 
-        if (player.hasPassenger(TestElementEntity.class)) {
+        if (player == null) {
+            return;
+        }
+        if (player.getPassengers().stream().anyMatch(TestElementEntity.class::isInstance)) {
             TestElementEntity.dropHeldEntities(player, true, false, player.getMainHandItem());
-            PacketInit.INSTANCE.sendToServer(new CPortalGunInteractionPacket.Builder(PortalGunInteraction.THROW_ENTITY).build());
+            ClientNetworking.sendToServer(
+                    new CPortalGunInteractionPacket.Builder(PortalGunInteraction.THROW_ENTITY).build());
         } else {
             this.shootPortal(PortalEnd.PRIMARY);
         }
     }
 
     private void handleRightClick() {
-        if (!Minecraft.getInstance().player.hasPassenger(TestElementEntity.class)) {
+        var player = Minecraft.getInstance().player;
+        if (player != null && player.getPassengers().stream().noneMatch(TestElementEntity.class::isInstance)) {
             this.shootPortal(PortalEnd.SECONDARY);
         }
     }
 
     private void shootPortal(PortalEnd end) {
-        PlayerEntity player = Minecraft.getInstance().player;
-        if(player == null)
+        Player player = Minecraft.getInstance().player;
+        if (player == null) {
             return;
+        }
 
-        float partialTicks = Minecraft.getInstance().getFrameTime();
-        Vector3d rayPath = player.getViewVector(partialTicks).scale(200);
-        Vector3d from = player.getEyePosition(partialTicks);
-        Vector3d to = from.add(rayPath);
-        RayTraceContext rayCtx = new RayTraceContext(from, to, RayTraceContext.BlockMode.COLLIDER, RayTraceContext.FluidMode.NONE, null);
-        BlockRayTraceResult ray = PortalGun.customClip(player.level, rayCtx);
+        float partialTicks = Minecraft.getInstance().getDeltaTracker().getGameTimeDeltaPartialTick(false);
+        Vec3 rayPath = player.getViewVector(partialTicks).scale(200);
+        Vec3 from = player.getEyePosition(partialTicks);
+        Vec3 to = from.add(rayPath);
+        ClipContext rayCtx = new ClipContext(from, to, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player);
+        BlockHitResult ray = PortalGun.customClip(player.level(), rayCtx);
         ItemStack itemStack = player.getMainHandItem();
 
-        if(itemStack.hasTag()) {
-            CompoundNBT nbt = itemStack.getTag();
+        if (itemStack.has(DataComponents.CUSTOM_DATA)) {
+            CompoundTag nbt = itemStack.get(DataComponents.CUSTOM_DATA).copyTag();
 
-            if(nbt.contains("Locked") && nbt.getString("Locked").equals(end == PortalEnd.PRIMARY ? "Left" : "Right")) {
-                if(PortalModConfigManager.SEPARATE_GUN.get())
+            if (nbt.contains("Locked")
+                    && nbt.getStringOr("Locked", "").equals(end == PortalEnd.PRIMARY ? "Left" : "Right")) {
+                if (PortalModConfigManager.SEPARATE_GUN.get()) {
                     return;
+                }
 
                 end = end.other();
             }
         }
 
-        PacketInit.INSTANCE.sendToServer(new CPortalGunInteractionPacket.Builder(PortalGunInteraction.SHOOT_PORTAL)
-                .end(end).blockHit(ray).build());
+        ClientNetworking.sendToServer(
+                new CPortalGunInteractionPacket.Builder(PortalGunInteraction.SHOOT_PORTAL)
+                        .end(end)
+                        .blockHit(ray)
+                        .build());
     }
 
     public void tick() {
-        if(this.nextShot > 0)
+        if (this.nextShot > 0) {
             this.nextShot--;
+        }
 
-        if(this.canShoot()) {
-            if(this.leftButtonPressed) {
+        if (this.canShoot()) {
+            if (this.leftButtonPressed) {
                 this.handleLeftClick();
                 this.nextShot = SHOOT_DELAY;
             }
 
-            if(rightButtonPressed) {
+            if (rightButtonPressed) {
                 this.handleRightClick();
                 this.nextShot = SHOOT_DELAY;
             }
@@ -103,22 +118,23 @@ public class PortalGunClient {
 
     public boolean handleMouseButtons(int button, int action) {
         Entity crosshairPickEntity = Minecraft.getInstance().getEntityRenderDispatcher().crosshairPickEntity;
-        boolean shouldDeferRightClick = shouldDeferRightClickToVanilla(crosshairPickEntity == null ? null : crosshairPickEntity.getClass());
+        boolean shouldDeferRightClick =
+                shouldDeferRightClickToVanilla(crosshairPickEntity == null ? null : crosshairPickEntity.getClass());
 
-        if(action == GLFW.GLFW_PRESS) {
-            if(!Minecraft.getInstance().mouseHandler.isMouseGrabbed()) {
+        if (action == InputConstants.PRESS) {
+            if (!Minecraft.getInstance().mouseHandler.isMouseGrabbed()) {
                 Minecraft.getInstance().mouseHandler.grabMouse();
                 return true;
             }
         }
 
-        if(button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
-            this.leftButtonPressed = action == GLFW.GLFW_PRESS;
+        if (button == InputConstants.MOUSE_BUTTON_LEFT) {
+            this.leftButtonPressed = action == InputConstants.PRESS;
 
-            if(this.leftButtonPressed) {
+            if (this.leftButtonPressed) {
                 this.rightButtonPressed = false;
 
-                if(canShoot()) {
+                if (canShoot()) {
                     this.handleLeftClick();
                     this.nextShot = SHOOT_DELAY;
                 }
@@ -127,16 +143,16 @@ public class PortalGunClient {
             return true;
         }
 
-        if(button == GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
-            if(shouldDeferRightClick) {
-                if(this.lastUnresolvedPress == PressState.PORTALGUN && action == GLFW.GLFW_RELEASE) {
+        if (button == InputConstants.MOUSE_BUTTON_RIGHT) {
+            if (shouldDeferRightClick) {
+                if (this.lastUnresolvedPress == PressState.PORTALGUN && action == InputConstants.RELEASE) {
                     this.lastUnresolvedPress = PressState.NONE;
                 } else {
                     this.lastUnresolvedPress = PressState.VANILLA_ENTITY;
                     return false;
                 }
             } else {
-                if(this.lastUnresolvedPress == PressState.VANILLA_ENTITY && action == GLFW.GLFW_RELEASE) {
+                if (this.lastUnresolvedPress == PressState.VANILLA_ENTITY && action == InputConstants.RELEASE) {
                     this.lastUnresolvedPress = PressState.NONE;
                     return false;
                 } else {
@@ -144,12 +160,12 @@ public class PortalGunClient {
                 }
             }
 
-            this.rightButtonPressed = action == GLFW.GLFW_PRESS;
+            this.rightButtonPressed = action == InputConstants.PRESS;
 
-            if(this.rightButtonPressed) {
+            if (this.rightButtonPressed) {
                 this.leftButtonPressed = false;
 
-                if(canShoot()) {
+                if (canShoot()) {
                     this.handleRightClick();
                     this.nextShot = SHOOT_DELAY;
                 }
@@ -163,13 +179,13 @@ public class PortalGunClient {
 
     static boolean shouldDeferRightClickToVanilla(Class<? extends Entity> entityClass) {
         return entityClass != null
-                && (ItemFrameEntity.class.isAssignableFrom(entityClass)
-                || ArmorStandEntity.class.isAssignableFrom(entityClass));
+                && (ItemFrame.class.isAssignableFrom(entityClass) || ArmorStand.class.isAssignableFrom(entityClass));
     }
 
     public void resetPresses() {
         this.leftButtonPressed = false;
         this.rightButtonPressed = false;
+        this.lastUnresolvedPress = PressState.NONE;
     }
 
     private enum PressState {

@@ -17,41 +17,48 @@ public class PortalPair {
     }
 
     public PortalEntity get(PortalEnd end) {
-        if(end == PortalEnd.PRIMARY)
+        if (end == PortalEnd.PRIMARY) {
             return blue;
-        if(end == PortalEnd.SECONDARY)
+        }
+        if (end == PortalEnd.SECONDARY) {
             return orange;
+        }
         return null;
     }
 
     public void computeIfPresent(PortalEnd end, Consumer<PortalEntity> procedure) {
-        if(this.get(end) != null)
+        if (this.get(end) != null) {
             procedure.accept(this.get(end));
+        }
     }
-    
+
     public boolean isEmpty() {
         return this.blue == null && this.orange == null;
     }
-    
+
     public boolean isFull() {
         return this.blue != null && this.orange != null;
     }
 
     public boolean areInSameDimension(PortalEnd end, PortalEntity portal) {
-        return !this.has(end) || this.get(end).level.dimension() == portal.level.dimension();
+        return !this.has(end) || this.get(end).level().dimension() == portal.level().dimension();
     }
-    
+
     public void set(PortalEnd end, PortalEntity portal) {
-        if(end == PortalEnd.PRIMARY)
+        if (end == PortalEnd.PRIMARY) {
             this.blue = portal;
-        if(end == PortalEnd.SECONDARY)
+        }
+        if (end == PortalEnd.SECONDARY) {
             this.orange = portal;
+        }
     }
-    
+
     public void remove(PortalEntity portal) {
-        if(this.blue == portal)
+        if (this.blue == portal) {
             this.blue = null;
-        if(this.orange == portal)
+        }
+        if (this.orange == portal) {
             this.orange = null;
+        }
     }
 }

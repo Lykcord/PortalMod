@@ -12,13 +12,13 @@ public class PortalGunModelManager {
     private PortalGunModelManager() {}
 
     public static PortalGunModelManager getInstance() {
-        if(instance == null)
+        if (instance == null) {
             instance = new PortalGunModelManager();
+        }
         return instance;
     }
 
     public PortalGunModel getModel(UUID gunUUID) {
-        PORTALGUN_MODELS.putIfAbsent(gunUUID, new PortalGunModel());
-        return PORTALGUN_MODELS.get(gunUUID);
+        return PORTALGUN_MODELS.computeIfAbsent(gunUUID, ignored -> new PortalGunModel());
     }
 }

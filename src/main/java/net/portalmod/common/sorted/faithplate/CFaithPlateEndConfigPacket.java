@@ -1,10 +1,10 @@
 package net.portalmod.common.sorted.faithplate;
 
-import net.minecraft.entity.player.ServerPlayerEntity;
-import net.minecraft.network.PacketBuffer;
-import net.minecraft.util.math.BlockPos;
-import net.minecraftforge.fml.network.NetworkEvent;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.server.level.ServerPlayer;
 import net.portalmod.core.packet.AbstractPacket;
+import net.portalmod.core.packet.PacketContext;
 
 import java.util.function.Supplier;
 
@@ -18,30 +18,33 @@ public class CFaithPlateEndConfigPacket implements AbstractPacket<CFaithPlateEnd
     }
 
     @Override
-    public void encode(PacketBuffer buffer) {
+    public void encode(FriendlyByteBuf buffer) {
         buffer.writeBlockPos(pos);
     }
 
     @Override
-    public CFaithPlateEndConfigPacket decode(PacketBuffer buffer) {
+    public CFaithPlateEndConfigPacket decode(FriendlyByteBuf buffer) {
         return new CFaithPlateEndConfigPacket(buffer.readBlockPos());
     }
 
     @Override
-    public boolean handle(Supplier<NetworkEvent.Context> context) {
-        context.get().enqueueWork(() -> {
-            ServerPlayerEntity sender = context.get().getSender();
-            if(sender == null)
-                return;
+    public boolean handle(Supplier<PacketContext> context) {
+        context.get()
+                .enqueueWork(
+                        () -> {
+                            ServerPlayer sender = context.get().getSender();
+                            if (sender == null) {
+                                return;
+                            }
 
-            FaithPlateTileEntity blockEntity = (FaithPlateTileEntity)sender.level.getBlockEntity(pos);
-            if(blockEntity == null)
-                return;
+                            FaithPlateTileEntity blockEntity =
+                                    (FaithPlateTileEntity) sender.level().getBlockEntity(pos);
+                            if (blockEntity == null) {
+                                return;
+                            }
 
-            blockEntity.endConfiguration();
-        });
-        
-        context.get().setPacketHandled(true);
+                            blockEntity.endConfiguration();
+                        });
         return true;
     }
 }

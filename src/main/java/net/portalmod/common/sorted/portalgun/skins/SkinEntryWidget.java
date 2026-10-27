@@ -1,24 +1,34 @@
 package net.portalmod.common.sorted.portalgun.skins;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
-import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.widget.Widget;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.text.StringTextComponent;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.narration.NarrationElementOutput;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.portalmod.PortalMod;
 
-public class SkinEntryWidget extends Widget {
-    private static final ResourceLocation TEXTURE = new ResourceLocation(PortalMod.MODID, "textures/gui/skinselector.png");
+public class SkinEntryWidget extends AbstractWidget {
+    private static final Identifier TEXTURE =
+            Identifier.fromNamespaceAndPath(PortalMod.MODID, "textures/gui/skinselector.png");
 
     private final SkinSelectorScreen parent;
     private final SkinPreviewWidget skinPreviewWidget;
     private final PortalGunSkin skin;
     private boolean selected;
 
-    public SkinEntryWidget(int x, int y, int width, int height, SkinSelectorScreen parent, SkinPreviewWidget skinPreviewWidget, PortalGunSkin skin) {
-        super(x, y, width, height, StringTextComponent.EMPTY);
+    public SkinEntryWidget(
+            int x,
+            int y,
+            int width,
+            int height,
+            SkinSelectorScreen parent,
+            SkinPreviewWidget skinPreviewWidget,
+            PortalGunSkin skin) {
+        super(x, y, width, height, Component.literal(skin.name));
         this.parent = parent;
         this.skinPreviewWidget = skinPreviewWidget;
         this.skin = skin;
@@ -31,32 +41,45 @@ public class SkinEntryWidget extends Widget {
     public void setSelected(boolean selected, boolean animate) {
         this.selected = selected;
 
-        if(selected) {
+        if (selected) {
             this.skinPreviewWidget.setSelectedSkin(this.skin.skin_id, animate);
         }
     }
 
-    protected void renderBackground(MatrixStack matrixStack) {
-        if(this.selected) {
-            RenderSystem.color4f(1, 1, 1, 1);
-            Minecraft.getInstance().getTextureManager().bind(TEXTURE);
-            blit(matrixStack, this.x, this.y, 0, 176, this.width, this.height, 512, 512);
+    protected void renderBackground(GuiGraphicsExtractor graphics) {
+        if (this.selected) {
+            graphics.blit(
+                    RenderPipelines.GUI_TEXTURED,
+                    TEXTURE,
+                    this.getX(),
+                    this.getY(),
+                    0,
+                    176,
+                    this.width,
+                    this.height,
+                    512,
+                    512);
         }
     }
 
     @Override
-    public void render(MatrixStack matrixStack, int mouseX, int mouseY, float partialTicks) {
-        this.renderBackground(matrixStack);
-        FontRenderer font = Minecraft.getInstance().font;
+    protected void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTicks) {
+        this.renderBackground(graphics);
+        Font font = Minecraft.getInstance().font;
 
         String credit = (this.skin.artist != null) ? "- by " + this.skin.artist : "";
 
-        drawString(matrixStack, font, "§l" + this.skin.name + " §r" + credit, this.x + 7, this.y + 7, 16777215);
-        drawString(matrixStack, font, this.skin.description, this.x + 7, this.y + 7 + 10, 16777215);
+        graphics.text(font, "§l" + this.skin.name + " §r" + credit, this.getX() + 7, this.getY() + 7, 0xFFFFFFFF);
+        graphics.text(font, this.skin.description, this.getX() + 7, this.getY() + 7 + 10, 0xFFFFFFFF);
     }
 
     @Override
-    public void onClick(double x, double y) {
+    protected void updateWidgetNarration(NarrationElementOutput output) {
+        defaultButtonNarrationText(output);
+    }
+
+    @Override
+    public void onClick(MouseButtonEvent event, boolean doubleClick) {
         this.parent.selectEntry(this, true);
     }
 }

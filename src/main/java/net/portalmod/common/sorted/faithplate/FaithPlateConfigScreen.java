@@ -1,447 +1,394 @@
 package net.portalmod.common.sorted.faithplate;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
-import com.mojang.blaze3d.systems.RenderSystem;
-import net.minecraft.client.MainWindow;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.client.gui.widget.Widget;
-import net.minecraft.client.renderer.*;
-import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
-import net.minecraft.client.renderer.vertex.VertexBuffer;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.util.Direction;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.vector.Vector2f;
-import net.minecraft.util.math.vector.Vector3d;
-import net.minecraft.util.text.ITextComponent;
-import net.minecraft.util.text.StringTextComponent;
-import net.minecraft.util.text.TranslationTextComponent;
-import net.minecraft.world.World;
-import net.minecraftforge.fml.client.gui.widget.ExtendedButton;
-import net.portalmod.PortalMod;
-import net.portalmod.core.init.PacketInit;
-import net.portalmod.core.init.ShaderInit;
-import net.portalmod.core.math.Mat4;
+import com.mojang.blaze3d.platform.cursor.CursorTypes;
+
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.narration.NarrationElementOutput;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.phys.Vec2;
 import net.portalmod.core.math.Vec3;
-import org.lwjgl.glfw.GLFW;
+import net.portalmod.core.packet.ClientNetworking;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static org.lwjgl.opengl.GL11.*;
-import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
-
 public class FaithPlateConfigScreen extends Screen {
-    private static final ResourceLocation TEXTURE = new ResourceLocation(PortalMod.MODID, "textures/gui/faithplate.png");
+    private static final Identifier TEXTURE =
+            Identifier.fromNamespaceAndPath("portalmod", "textures/gui/faithplate.png");
     private static final String WHOLE_FLOAT_REGEX = "[\\d.,+\\-]*";
     private static final Pattern FLOAT_REGEX = Pattern.compile("^0*([+\\-])?(?:0*(\\d+\\.?\\d*).*)?$");
     private static final Pattern DIGIT_REGEX = Pattern.compile("^([+\\-])?((?:\\d\\.|\\d){1,5})?.*$");
-    private static final long VRESIZE_CURSOR = GLFW.glfwCreateStandardCursor(GLFW.GLFW_VRESIZE_CURSOR);
-    private static final int imageWidth = 230;
-    private static final int imageHeight = 239;
-    private int pitch = 18;
-
     public static final int MAX_HEIGHT = 100;
-
+    private static final int IMAGE_WIDTH = 230;
+    private static final int IMAGE_HEIGHT = 239;
+    private final BlockPos selected;
+    private int pitch = 18;
     private RenderWidget panel;
-    private ExtendedButton selector;
-    private ExtendedButton done;
     private NumberInputField heightField;
     private FaithplateCheckboxButton enable;
-
-    private BlockPos selected;
     private FaithPlateParabola parabola;
 
     public FaithPlateConfigScreen(BlockPos selected) {
-        super(new TranslationTextComponent("screen." + PortalMod.MODID + ".faithplate"));
-        this.selected = selected;
+        super(Component.translatable("screen.portalmod.faithplate"));
+        this.selected = selected.immutable();
     }
 
     private int getX() {
-        return (width - imageWidth - 100) / 2;
+        return (width - IMAGE_WIDTH - 100) / 2;
     }
 
     private int getY() {
-        return (height - imageHeight + 55) / 2;
+        return (height - IMAGE_HEIGHT + 55) / 2;
     }
 
     @Override
     protected void init() {
-        FaithPlateTileEntity be = (FaithPlateTileEntity)Minecraft.getInstance().level.getBlockEntity(selected);
-
-        int buttonWidth = 216 / 2 - 1;
-
-        panel = addWidget(new RenderWidget(this, getX() + 10, getY() + 22, 210, 121, new StringTextComponent("Render Panel")));
-        selector = addButton(new ExtendedButton(getX() + 7, getY() + 150, buttonWidth, 20, new TranslationTextComponent("container.faithplate.select"), button -> {
-            FaithPlateTER.selected = selected;
-            this.onClose();
-        }));
-        done = addButton(new ExtendedButton(getX() + 9 + buttonWidth, getY() + 150, buttonWidth, 20, new TranslationTextComponent("gui.done"), button ->
-                this.onClose()
-        ));
-
-        enable = addButton(new FaithplateCheckboxButton(getX() + 230, getY() + 25 + verticalOffset, 20, 20, new TranslationTextComponent("container.faithplate.enabled"), be.isEnabled()));
-        enable.setUnavailable(be.isIndicatorControlled());
-
-        heightField = addWidget(new NumberInputField(this, font, getX() + 230, getY() + 70 + verticalOffset, 85, 20, new StringTextComponent("Height")));
-
-        float middle = 0;
-        float target = 0;
-
-        if (be.getTargetPos() != null && be.getTargetFace() != null) {
-            Vec3 normal = new Vec3(be.getTargetFace().getNormal()).mul(.5);
-            Vec3 pos = new Vec3(be.getTargetPos()).add(0, -.5, 0).add(normal);
-
-            parabola = new FaithPlateParabola(pos);
-            parabola.setHeight(be.getHeight());
-
-            middle = (float)parabola.getMiddlePoint();
-            target = (float)parabola.getProjectedTarget().x;
+        var level = minecraft.level;
+        if (level == null || !(level.getBlockEntity(selected) instanceof FaithPlateTileEntity entity)) {
+            minecraft.gui.setScreen(null);
+            return;
+        }
+        panel = addRenderableWidget(new RenderWidget(this, getX() + 10, getY() + 22, 210, 121));
+        int buttonWidth = 107;
+        addRenderableWidget(
+                Button.builder(
+                                Component.translatable("container.faithplate.select"),
+                                button -> {
+                                    FaithPlateTER.selected = selected;
+                                    onClose();
+                                })
+                        .bounds(getX() + 7, getY() + 150, buttonWidth, 20)
+                        .build());
+        addRenderableWidget(
+                Button.builder(Component.translatable("gui.done"), button -> onClose())
+                        .bounds(getX() + 9 + buttonWidth, getY() + 150, buttonWidth, 20)
+                        .build());
+        enable =
+                addRenderableWidget(
+                        new FaithplateCheckboxButton(
+                                getX() + 230,
+                                getY() + 100,
+                                20,
+                                20,
+                                Component.translatable("container.faithplate.enabled"),
+                                entity.isEnabled()));
+        enable.setUnavailable(entity.isIndicatorControlled());
+        heightField =
+                addRenderableWidget(
+                        new NumberInputField(
+                                this,
+                                font,
+                                getX() + 230,
+                                getY() + 145,
+                                85,
+                                20,
+                                Component.translatable("container.faithplate.height")));
+        heightField.setMaxLength(7);
+        if (entity.getTargetPos() != null && entity.getTargetFace() != null) {
+            Vec3 normal = new Vec3(entity.getTargetFace().getStep()).mul(.5);
+            parabola = new FaithPlateParabola(new Vec3(entity.getTargetPos()).add(0, -.5, 0).add(normal));
+            parabola.setHeight(entity.getHeight());
+            updateField();
         } else {
-            panel.setEnabled(false);
+            panel.enabled = false;
+            panel.active = false;
             heightField.setEditable(false);
         }
-
-        this.updateField();
-
-        ShaderInit.FAITHPLATE_GUI.get().bind()
-            .setMatrix("modelViewProjection", Mat4.createScale(pitch * 2f / (float) panel.getWidth(), pitch * 2f / (float) panel.getHeight(), 1).toBuffer())
-            .unbind();
-
-        ShaderInit.FAITHPLATE_GRID.get().bind()
-            .setMatrix("modelViewProjection", Mat4.identity().toBuffer())
-            .setInt("res", panel.getWidth(), panel.getHeight())
-            .setInt("pitch", pitch)
-            .setFloat("middle", middle)
-            .setFloat("target", target)
-            .setInt("offset", -90, -45)
-            .unbind();
     }
 
     @Override
     public void onClose() {
-        World level = Minecraft.getInstance().level;
-        if(level == null)
-            return;
-
-        FaithPlateTileEntity be = (FaithPlateTileEntity)level.getBlockEntity(selected);
-
-        if(be != null) {
-            Vector3d pos = be.getTargetPos();
-            Direction face = be.getTargetFace();
-            CompoundNBT nbt = new CompoundNBT();
-
-            if(pos != null && face != null) {
-                CompoundNBT target = new CompoundNBT();
-                target.putDouble("x", pos.x());
-                target.putDouble("y", pos.y());
-                target.putDouble("z", pos.z());
+        var level = minecraft.level;
+        if (enable != null && level != null && level.getBlockEntity(selected) instanceof FaithPlateTileEntity entity) {
+            CompoundTag data = new CompoundTag();
+            var pos = entity.getTargetPos();
+            Direction face = entity.getTargetFace();
+            if (pos != null && face != null && parabola != null) {
+                CompoundTag target = new CompoundTag();
+                target.putDouble("x", pos.x);
+                target.putDouble("y", pos.y);
+                target.putDouble("z", pos.z);
                 target.putByte("side", (byte) face.get3DDataValue());
                 target.putFloat("height", (float) parabola.getHeight());
-                nbt.put("target", target);
+                data.put("target", target);
             }
-
-            nbt.putBoolean("enabled", enable.selected());
-            PacketInit.INSTANCE.sendToServer(new CFaithPlateUpdatedPacket(be.getBlockPos(), nbt));
-            if(FaithPlateTER.selected == null)
-                PacketInit.INSTANCE.sendToServer(new CFaithPlateEndConfigPacket(be.getBlockPos()));
+            data.putBoolean("enabled", enable.selected());
+            ClientNetworking.sendToServer(new CFaithPlateUpdatedPacket(selected, data));
+            if (FaithPlateTER.selected == null) {
+                ClientNetworking.sendToServer(new CFaithPlateEndConfigPacket(selected));
+            }
         }
-
-        Minecraft.getInstance().setScreen(null);
-        this.setCursor(0);
+        minecraft.gui.setScreen(null);
     }
 
     private void updateField() {
-        if (!panel.enabled) return;
-
-        String text = "";
-        Matcher matcher = DIGIT_REGEX.matcher(parabola.getHeight() + "");
-        if(parabola.getHeight() == (int)parabola.getHeight())
-            matcher = DIGIT_REGEX.matcher((int)parabola.getHeight() + "");
-        
-        if(matcher.matches()) {
-            text += matcher.group(1) != null ? matcher.group(1) : "";
-            text += matcher.group(2) != null ? matcher.group(2) : "";
-        } else {
-            text = "0";
+        if (!panel.enabled || parabola == null) {
+            return;
         }
-        heightField.setValue(text);
+        double height = parabola.getHeight();
+        Matcher matcher =
+                DIGIT_REGEX.matcher(height == (int) height ? Integer.toString((int) height) : Double.toString(height));
+        heightField.setValue(
+                matcher.matches()
+                        ? (matcher.group(1) == null ? "" : matcher.group(1))
+                                + (matcher.group(2) == null ? "" : matcher.group(2))
+                        : "0");
     }
-    
+
     private void updateParabola() {
-        if (!panel.enabled) return;
-
-        double height;
-        
+        if (!panel.enabled || parabola == null) {
+            return;
+        }
         try {
-            height = Double.parseDouble(heightField.getValue());
-        } catch(NumberFormatException e) {
-            height = 0;
+            parabola.setHeight(Double.parseDouble(heightField.getValue()));
+        } catch (NumberFormatException error) {
+            parabola.setHeight(0);
         }
-        
-        parabola.setHeight(height);
     }
-    
-    private void setCursor(long cursor) {
-        GLFW.glfwSetCursor(Minecraft.getInstance().getWindow().getWindow(), cursor);
-    }
-    
-    @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int action) {
-        this.setCursor(0);
-        return super.mouseReleased(mouseX, mouseY, action);
-    }
-    
-    @Override
-    public void renderBackground(MatrixStack matrixStack, int i) {
-        super.renderBackground(matrixStack, i);
-        
-        RenderSystem.color4f(1, 1, 1, 1);
-        this.minecraft.getTextureManager().bind(TEXTURE);
-
-        glEnable(GL_BLEND);
-        blit(matrixStack, getX(), getY(), 0, 0, 330, 179, 512, 512);
-        glDisable(GL_BLEND);
-    }
-
-    int verticalOffset = 75;
 
     @Override
-    public void render(MatrixStack matrixStack, int mouseX, int mouseY, float partialTicks) {
-        renderBackground(matrixStack);
-        panel.render(matrixStack, mouseX, mouseY, partialTicks);
-        selector.render(matrixStack, mouseX, mouseY, partialTicks);
-        done.render(matrixStack, mouseX, mouseY, partialTicks);
-        enable.render(matrixStack, mouseX, mouseY, partialTicks);
-        heightField.render(matrixStack, mouseX, mouseY, partialTicks);
-        
-        FontRenderer fontRenderer = Minecraft.getInstance().font;
-
-        fontRenderer.draw(matrixStack, new TranslationTextComponent("container.faithplate"), getX() + 11, getY() + 8, 0xFFFFFF);
-        drawString(matrixStack, fontRenderer, new TranslationTextComponent("container.faithplate.height"), getX() + 230, getY() + 53 + verticalOffset, 16777215 | 0xFF << 24);
-
-        if (!panel.enabled)
-            drawCenteredString(matrixStack, fontRenderer, new TranslationTextComponent("container.faithplate.noTarget"), (width - 100) / 2, (getY() + panel.y + panel.getHeight()) / 2, 0xFFFF5555);
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        graphics.blit(RenderPipelines.GUI_TEXTURED, TEXTURE, getX(), getY(), 0, 0, 330, 179, 512, 512);
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
+        graphics.text(font, Component.translatable("container.faithplate"), getX() + 11, getY() + 8, -1);
+        graphics.text(font, Component.translatable("container.faithplate.height"), getX() + 230, getY() + 128, -1);
+        if (panel != null && !panel.enabled) {
+            graphics.centeredText(
+                    font,
+                    Component.translatable("container.faithplate.noTarget"),
+                    (width - 100) / 2,
+                    (getY() + panel.getY() + panel.getHeight()) / 2,
+                    0xFFFF5555);
+        }
     }
-    
-    private static class RenderWidget extends Widget {
+
+    private static class RenderWidget extends AbstractWidget {
         private final FaithPlateConfigScreen parent;
-        private boolean handleClicked = false;
+        private boolean handleClicked;
         private boolean enabled = true;
-        private Vector2f offset = new Vector2f(0, 0);
-        private Vector2f baseOffset = new Vector2f(-90, 45); // TODO replace
-        private static VertexBuffer vbo;
-        
-        public RenderWidget(FaithPlateConfigScreen parent, int x, int y, int width, int height, ITextComponent text) {
-            super(x, y, width, height, text);
+        private Vec2 offset = new Vec2(0, 0);
+
+        RenderWidget(FaithPlateConfigScreen parent, int x, int y, int width, int height) {
+            super(x, y, width, height, Component.translatable("container.faithplate.height"));
             this.parent = parent;
-
-            MainWindow window = Minecraft.getInstance().getWindow();
-            double guiScale = window.getGuiScale();
-
-            if (vbo != null) vbo.close();
-
-            vbo = new VertexBuffer(DefaultVertexFormats.POSITION_TEX);
-            float fbx = (float)((parent.width - getWidth() - 100) / 2f * guiScale);
-            float fby = (float)((parent.height - (y + getHeight())) * guiScale);
-            float fbw = fbx + (int)(getWidth() * guiScale);
-            float fbh = fby + (int)(getHeight() * guiScale);
-
-            BufferBuilder bufferbuilder = Tessellator.getInstance().getBuilder();
-            bufferbuilder.begin(GL_QUADS, DefaultVertexFormats.POSITION_TEX);
-            bufferbuilder.vertex(fbx, fby, 0).uv(0.0F, 1).endVertex();
-            bufferbuilder.vertex(fbw, fby, 0).uv(1, 1).endVertex();
-            bufferbuilder.vertex(fbw, fbh, 0).uv(1, 0.0F).endVertex();
-            bufferbuilder.vertex(fbx, fbh, 0).uv(0.0F, 0.0F).endVertex();
-            bufferbuilder.end();
-            vbo.upload(bufferbuilder);
-        }
-        
-        public void setEnabled(boolean enabled) {
-            this.enabled = enabled;
         }
 
-        // Hours wasted here: 6
+        private double originX() {
+            return getX() + width / 2.0 - 90 + offset.x;
+        }
+
+        private double originY() {
+            return getY() + height / 2.0 + 45 - offset.y;
+        }
+
+        private double handleX() {
+            return originX() + parent.pitch * parent.parabola.getMiddlePoint();
+        }
+
+        private double handleY() {
+            return originY() - parent.pitch * parent.parabola.getHeight();
+        }
+
         @Override
-        public void render(MatrixStack matrixStack, int mouseX, int mouseY, float partialTicks) {
-            if (!this.enabled) return;
-
-            double a = 0;
-            double b = 0;
-            if (parent.parabola != null) {
-                a = parent.parabola.getA();
-                b = parent.parabola.getB();
+        protected void extractWidgetRenderState(
+                GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+            if (!enabled) {
+                return;
             }
-
-            Minecraft mc = Minecraft.getInstance();
-            MainWindow window = mc.getWindow();
-            double guiScale = window.getGuiScale();
-
-            int fbX = (int) ((parent.width - getWidth() - 100) / 2f * guiScale);
-            int fbY = (int) ((parent.height - (y + getHeight())) * guiScale);
-            int fbW = (int) (getWidth() * guiScale);
-            int fbH = (int) (getHeight() * guiScale);
-
-            glViewport(fbX, fbY, fbW, fbH);
-            RenderSystem.activeTexture(GL_TEXTURE0);
-            mc.getTextureManager().bind(TEXTURE);
-
-            RenderSystem.enableBlend();
-            ShaderInit.FAITHPLATE_GRID.get().bind()
-                    .setInt("sprite", 0)
-                    .setInt("offset",  (int) offset.x - 90, (int) offset.y - 45)
-                    .setInt("guisize", (int) guiScale)
-                    .setFloat("a", (float) a)
-                    .setFloat("b", (float) b)
-                    .setFloat("atlasSize", 512, 512)
-                    .setFloat("height", (float) parent.parabola.getHeight());
-
-            glBegin(GL_QUADS);
-                glVertex2f(-1, -1);
-                glVertex2f( 1, -1);
-                glVertex2f( 1,  1);
-                glVertex2f(-1,  1);
-            glEnd();
-
-            ShaderInit.FAITHPLATE_GRID.get().unbind();
-            RenderSystem.disableBlend();
-            glViewport(0, 0, window.getWidth(), window.getHeight());
+            graphics.enableScissor(getX(), getY(), getRight(), getBottom());
+            graphics.fill(getX(), getY(), getRight(), getBottom(), 0xF0000000);
+            int ox = (int) Math.round(originX()), oy = (int) Math.round(originY());
+            int pitch = parent.pitch;
+            for (int x = getX() + Math.floorMod(ox - getX(), pitch); x < getRight(); x += pitch) {
+                graphics.fill(x, getY(), x + 1, getBottom(), 0xFF333333);
+            }
+            for (int y = getY() + Math.floorMod(oy - getY(), pitch); y < getBottom(); y += pitch) {
+                graphics.fill(getX(), y, getRight(), y + 1, 0xFF333333);
+            }
+            graphics.fill(ox, getY(), ox + 1, getBottom(), 0xFF338033);
+            graphics.fill(getX(), oy, getRight(), oy + 1, 0xFF803333);
+            var curve = parent.parabola;
+            if (curve.isVertical()) {
+                graphics.fill(ox, (int) handleY(), ox + 1, oy, -1);
+            } else {
+                for (int x = Math.max(getX(), ox); x < getRight(); x++) {
+                    double t0 = (x - originX()) / pitch, t1 = (x + 1 - originX()) / pitch;
+                    double y0 = originY() - pitch * (curve.getA() * t0 * t0 + curve.getB() * t0);
+                    double y1 = originY() - pitch * (curve.getA() * t1 * t1 + curve.getB() * t1);
+                    if (Math.min(y0, y1) > getBottom() || Math.max(y0, y1) < getY()) {
+                        continue;
+                    }
+                    int min = (int) Math.clamp(Math.min(y0, y1), getY() - 1.0, getBottom() + 1.0);
+                    int max = (int) Math.clamp(Math.max(y0, y1), getY() - 1.0, getBottom() + 1.0);
+                    graphics.fill(x, min, x + 1, max + 1, t0 < curve.getProjectedTarget().x ? -1 : 0xFF808080);
+                }
+            }
+            double targetX = originX() + pitch * curve.getProjectedTarget().x;
+            double targetY =
+                    originY() - pitch * (curve.isVertical() ? curve.getHeight() : curve.getProjectedTarget().y);
+            graphics.blit(
+                    RenderPipelines.GUI_TEXTURED,
+                    TEXTURE,
+                    (int) targetX - 5,
+                    (int) targetY - 5,
+                    14,
+                    180,
+                    10,
+                    10,
+                    512,
+                    512);
+            graphics.blit(
+                    RenderPipelines.GUI_TEXTURED,
+                    TEXTURE,
+                    (int) handleX() - 6,
+                    (int) handleY() - 6,
+                    0,
+                    179,
+                    12,
+                    12,
+                    512,
+                    512);
+            graphics.disableScissor();
         }
-        
-        @Override
-        protected boolean clicked(double mouseX, double mouseY) {
-            if (this.enabled)
-                return super.clicked(mouseX, mouseY);
-            return false;
-        }
-        
-        @Override
-        public void onClick(double mouseX, double mouseY) {
-            if (!this.enabled) return;
 
-            int offsetX = (int) (baseOffset.x + offset.x) + width  / 2;
-            int offsetY = (int) (baseOffset.y - offset.y) + height / 2;
-            int x = (int) (mouseX - this.x - offsetX - parent.pitch * parent.parabola.getMiddlePoint());
-            int y = (int) (mouseY - this.y - offsetY + parent.pitch * parent.parabola.getHeight());
-
+        @Override
+        public void onClick(MouseButtonEvent event, boolean doubleClick) {
+            double x = event.x() - handleX(), y = event.y() - handleY();
             handleClicked = x * x + y * y < 25;
-
-            if (handleClicked) parent.setCursor(VRESIZE_CURSOR);
         }
-        
+
         @Override
-        public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
-            if (!this.enabled) return false;
+        public void onRelease(MouseButtonEvent event) {
+            handleClicked = false;
+        }
 
+        @Override
+        protected void handleCursor(GuiGraphicsExtractor graphics) {
+            if (handleClicked) {
+                graphics.requestCursor(CursorTypes.RESIZE_NS);
+            }
+        }
+
+        @Override
+        public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {
+            if (!enabled) {
+                return false;
+            }
             int oldPitch = parent.pitch;
-            parent.pitch += amount;
-            parent.pitch = MathHelper.clamp(parent.pitch, 5, 50);
-            ShaderInit.FAITHPLATE_GRID.get().bind().setInt("pitch", parent.pitch).unbind();
-
-            int offsetX = (int) (baseOffset.x + offset.x) + width  / 2;
-            int offsetY = (int) (baseOffset.y - offset.y) + height / 2;
-            float xMouseRelative = (float)(mouseX - this.x - offsetX);
-            float yMouseRelative = (float)(mouseY - this.y - offsetY);
-            float xOld = xMouseRelative / (float)oldPitch;
-            float yOld = yMouseRelative / (float)oldPitch;
-            float xNew = xMouseRelative / (float)parent.pitch;
-            float yNew = yMouseRelative / (float)parent.pitch;
-
-            offset = new Vector2f(
-                    offset.x + (xNew - xOld) * parent.pitch,
-                    offset.y - (yNew - yOld) * parent.pitch
-            );
-
+            parent.pitch = Math.clamp(parent.pitch + (int) vertical, 5, 50);
+            double x = mouseX - originX(), y = mouseY - originY();
+            offset =
+                    new Vec2(
+                            offset.x + (float) (x / parent.pitch - x / oldPitch) * parent.pitch,
+                            offset.y - (float) (y / parent.pitch - y / oldPitch) * parent.pitch);
             return true;
         }
 
         @Override
-        protected void onDrag(double mouseX, double mouseY, double deltaX, double deltaY) {
-            if (!this.enabled) return;
-
-            if (handleClicked) {
-                if (Screen.hasAltDown() || Screen.hasControlDown() || Screen.hasShiftDown()) {
-                    parent.parabola.setHeight(-Math.round((mouseY - this.y - baseOffset.y - this.height / 2 + offset.y) / parent.pitch));
-                } else {
-                    parent.parabola.setHeight(-(mouseY - this.y - baseOffset.y - this.height / 2 + offset.y) / parent.pitch);
-                }
-            } else {
-                offset = new Vector2f(offset.x + (float) deltaX, offset.y - (float)deltaY);
+        protected void onDrag(MouseButtonEvent event, double deltaX, double deltaY) {
+            if (!enabled) {
+                return;
             }
-            
+            if (handleClicked) {
+                double height = -(event.y() - originY()) / parent.pitch;
+                if (event.hasAltDown() || event.hasControlDown() || event.hasShiftDown()) {
+                    height = Math.round(height);
+                }
+                parent.parabola.setHeight(height);
+            } else {
+                offset = new Vec2(offset.x + (float) deltaX, offset.y - (float) deltaY);
+            }
             parent.updateField();
         }
+
+        @Override
+        protected void updateWidgetNarration(NarrationElementOutput output) {
+            defaultButtonNarrationText(output);
+        }
     }
-    
-    private static class NumberInputField extends TextFieldWidget {
+
+    private static class NumberInputField extends EditBox {
         private final FaithPlateConfigScreen parent;
-        
-        public NumberInputField(FaithPlateConfigScreen parent, FontRenderer font, int x, int y, int width, int height, ITextComponent text) {
+
+        public NumberInputField(
+                FaithPlateConfigScreen parent, Font font, int x, int y, int width, int height, Component text) {
             super(font, x, y, width, height, text);
             this.parent = parent;
         }
-        
+
         @Override
         public void deleteChars(int len) {
-            if(!parent.panel.enabled)
+            if (!parent.panel.enabled) {
                 return;
-            
+            }
+
             super.deleteChars(len);
-            if(this.getValue().isEmpty())
+            if (this.getValue().isEmpty()) {
                 this.setValue("0");
+            }
             parent.updateParabola();
         }
-        
+
         @Override
         public void insertText(String text) {
-            if(!parent.panel.enabled
+            if (!parent.panel.enabled
                     || !text.matches(WHOLE_FLOAT_REGEX)
-                    || this.getValue().replace(".", "").replace("+", "").replace("-", "").length() >= 5)
+                    || this.getValue().replace(".", "").replace("+", "").replace("-", "").length() >= 5) {
                 return;
-            
+            }
+
             final String recovery = this.getValue();
             text = text.replaceAll(",", ".");
-            
-            if(text.contains(".") && this.getValue().contains("."))
+
+            if (text.contains(".") && this.getValue().contains(".")) {
                 text = text.replaceAll(".", "");
+            }
             super.insertText(text);
-            
+
             Matcher matcher;
-            
+
             matcher = FLOAT_REGEX.matcher(this.getValue());
-            if(matcher.matches()) {
+            if (matcher.matches()) {
                 text = "";
                 text += matcher.group(1) != null ? matcher.group(1) : "";
                 text += matcher.group(2) != null ? matcher.group(2) : "";
             } else {
                 text = recovery;
             }
-            
+
             matcher = DIGIT_REGEX.matcher(text);
-            if(matcher.matches()) {
+            if (matcher.matches()) {
                 text = "";
                 text += matcher.group(1) != null ? matcher.group(1) : "";
                 text += matcher.group(2) != null ? matcher.group(2) : "";
             } else {
                 text = recovery;
             }
-            
-            if(text.isEmpty())
+
+            if (text.isEmpty()) {
                 text = "0";
-            
+            }
+
             this.setValue(text);
             parent.updateParabola();
         }
-        
+
         @Override
         public boolean isFocused() {
-            if(!parent.panel.enabled)
+            if (!parent.panel.enabled) {
                 return false;
+            }
             return super.isFocused();
         }
     }
