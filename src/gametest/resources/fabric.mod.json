@@ -8,6 +8,7 @@
       "net.portalmod.PortalServerTest"
     ],
     "fabric-client-gametest": [
+      "net.portalmod.FirstPersonPoseClientTest",
       "net.portalmod.PortalBoundaryVisibilityClientTest",
       "net.portalmod.PortalOptionsLayoutClientTest",
       "net.portalmod.TurretDamageClientTest",
@@ -24,7 +25,12 @@
       "net.portalmod.PortalReviewWorldCreator"
     ]
   },
-  "mixins": [{"config": "portalmod-test.mixins.json", "environment": "client"}],
+  "mixins": [
+    {
+      "config": "portalmod-test.mixins.json",
+      "environment": "client"
+    }
+  ],
   "depends": {
     "portalmod": "*"
   }

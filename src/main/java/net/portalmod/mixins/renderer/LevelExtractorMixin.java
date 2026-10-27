@@ -12,6 +12,7 @@ import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
+import net.portalmod.client.compat.PortalRendererCompatibility;
 import net.portalmod.client.render.PortalCamera;
 import net.portalmod.common.sorted.portal.PortalEntity;
 import net.portalmod.core.config.PortalModConfigManager;
@@ -42,9 +43,11 @@ public class LevelExtractorMixin {
         if (camera instanceof PortalCamera) {
             return detached && !insideBody;
         }
-        // A first-person main camera can also be visually through the portal before
-        // its body crosses. That distant body is part of the visible world.
-        return detached || PortalModConfigManager.RENDER_SELF.get() && !insideBody;
+        // Only a portal handoff should reveal the local body in first person.
+        return detached
+                || PortalModConfigManager.RENDER_SELF.get()
+                        && PortalRendererCompatibility.isMainCameraWarped()
+                        && !insideBody;
     }
 
     @WrapOperation(

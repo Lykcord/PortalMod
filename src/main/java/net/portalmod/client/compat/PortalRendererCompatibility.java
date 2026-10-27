@@ -67,6 +67,10 @@ public final class PortalRendererCompatibility {
         return rootCameraWarped || System.nanoTime() < refreshVisibilityUntil;
     }
 
+    public static boolean isMainCameraWarped() {
+        return rootCameraWarped;
+    }
+
     public static void prepareTerrain(Camera camera, LevelRenderState state, boolean portal) {
         if (!SODIUM) {
             return;
